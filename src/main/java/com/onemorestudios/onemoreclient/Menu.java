@@ -1,0 +1,108 @@
+package com.onemorestudios.onemoreclient;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.mojang.serialization.JsonOps;
+
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.util.GsonHelper;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.neoforged.fml.loading.FMLPaths;
+
+/** The orderable items, read from config/onemoreclient/menu.json. */
+public class Menu {
+    /** Exactly one of stack and tag is set. */
+    public record Entry(String id, ItemStack stack, TagKey<Item> tag, int price, boolean exact, int day, int cost) {
+        ItemStack pick(RandomSource random) {
+            if (tag == null) return stack.copy();
+            return BuiltInRegistries.ITEM.getTag(tag).flatMap(set -> set.getRandomElement(random))
+                    .map(ItemStack::new).orElse(ItemStack.EMPTY);
+        }
+    }
+
+    public static List<Entry> entries = List.of();
+
+    private static final String DEFAULT = """
+            [
+              {"id": "bread", "item": "minecraft:bread", "price": 2},
+              {"id": "baked_potato", "item": "minecraft:baked_potato", "price": 2},
+              {"id": "cooked_beef", "item": "minecraft:cooked_beef", "price": 4, "unlock": {"day": 2}},
+              {"id": "pumpkin_pie", "item": "minecraft:pumpkin_pie", "price": 6, "unlock": {"day": 3, "cost": 10}},
+              {"id": "cake", "item": "minecraft:cake", "price": 10, "unlock": {"cost": 20}}
+            ]
+            """;
+
+    public static Entry byId(String id) {
+        for (Entry e : entries) if (e.id.equals(id)) return e;
+        return null;
+    }
+
+    static void load(HolderLookup.Provider registries) {
+        Path path = FMLPaths.CONFIGDIR.get().resolve(OneMoreClient.MODID).resolve("menu.json");
+        try {
+            if (Files.notExists(path)) {
+                Files.createDirectories(path.getParent());
+                Files.writeString(path, DEFAULT);
+            }
+            entries = parse(Files.readString(path), registries);
+        } catch (Exception e) {
+            OneMoreClient.LOGGER.error("Could not read {}. The menu is empty.", path, e);
+            entries = List.of();
+        }
+    }
+
+    /**
+     * "item" is an item id, a "#tag", or a full item stack object ({"id": ..., "components": {...}}).
+     * A bad entry is logged and skipped.
+     */
+    static List<Entry> parse(String json, HolderLookup.Provider registries) {
+        List<Entry> out = new ArrayList<>();
+        for (JsonElement el : JsonParser.parseString(json).getAsJsonArray()) {
+            try {
+                JsonObject o = el.getAsJsonObject();
+                String id = GsonHelper.getAsString(o, "id");
+                JsonElement item = o.get("item");
+                ItemStack stack = null;
+                TagKey<Item> tag = null;
+                if (item != null && item.isJsonObject()) {
+                    stack = ItemStack.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, registries), item).getOrThrow();
+                } else if (GsonHelper.getAsString(o, "item").startsWith("#")) {
+                    tag = TagKey.create(Registries.ITEM, ResourceLocation.parse(item.getAsString().substring(1)));
+                } else {
+                    stack = new ItemStack(BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(item.getAsString()))
+                            .orElseThrow(() -> new IllegalArgumentException("unknown item " + item.getAsString())));
+                }
+                JsonObject unlock = GsonHelper.getAsJsonObject(o, "unlock", new JsonObject());
+                String match = GsonHelper.getAsString(o, "match", "ignore");
+                if (!match.equals("ignore") && !match.equals("exact"))
+                    throw new IllegalArgumentException("match must be \"ignore\" or \"exact\"");
+                if (byIdIn(out, id)) throw new IllegalArgumentException("duplicate id");
+                out.add(new Entry(id, stack, tag,
+                        Math.max(0, GsonHelper.getAsInt(o, "price")),
+                        match.equals("exact"),
+                        Math.max(1, GsonHelper.getAsInt(unlock, "day", 1)),
+                        Math.max(0, GsonHelper.getAsInt(unlock, "cost", 0))));
+            } catch (Exception e) {
+                OneMoreClient.LOGGER.error("Skipped bad menu entry {}: {}", el, e.getMessage());
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    private static boolean byIdIn(List<Entry> list, String id) {
+        return list.stream().anyMatch(e -> e.id.equals(id));
+    }
+}
