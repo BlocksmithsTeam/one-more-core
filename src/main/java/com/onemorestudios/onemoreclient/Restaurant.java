@@ -259,7 +259,11 @@ public class Restaurant {
         open = false;
         if (failed) {
             toSpawn = 0;
-            for (Customer c : List.copyOf(customers)) c.discard();
+            // A customer whose removal failed the day is removed already; a second discard sends a second leave event.
+            for (Customer c : List.copyOf(customers)) {
+                if (c.isRemoved()) c.removeFromRestaurant();
+                else c.discard();
+            }
         }
         var message = Component.translatable(failed ? "onemoreclient.day.failed" : "onemoreclient.day.end", day, served, lost, earned);
         if (penalties > 0) message.append(Component.translatable("onemoreclient.day.penalty", penalties));
