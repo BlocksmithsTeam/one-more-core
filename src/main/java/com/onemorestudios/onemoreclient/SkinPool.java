@@ -54,9 +54,8 @@ public class SkinPool {
     /** Starts the chat reader if the config names a channel. The server owner configures it; it runs on the server. */
     static void start(MinecraftServer server) {
         String platform = Config.CHAT_PLATFORM.get(), channel = Config.CHAT_CHANNEL.get().strip().toLowerCase(Locale.ROOT);
-        if (platform.equals("none") || channel.isEmpty()) return;
+        if (!platform.equals("twitch") || channel.isEmpty()) return;
         try {
-            if (!platform.equals("twitch")) throw new IllegalArgumentException("unsupported chatPlatform: " + platform);
             reader = new TwitchChat(channel, m -> {
                 String name = commandName(m.text(), Config.CHAT_COMMAND.get());
                 if (name != null) server.execute(() -> addChat(m.user(), m.displayName(), name, Config.SKIN_POOL_SIZE.get()));

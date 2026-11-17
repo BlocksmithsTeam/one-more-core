@@ -61,7 +61,7 @@ public class Config {
             .comment("Stream chat that viewers use to become customers: \"none\" or \"twitch\". The chat is only read.",
                     "A viewer writes the chat command and a Minecraft account name, for example: !omc Notch",
                     "The customer gets the skin of that account and the chat name of the viewer. A restart applies changes.")
-            .defineInList("chatPlatform", "none", List.of("none", "twitch"));
+            .define("chatPlatform", "none", o -> "none".equals(o) || "twitch".equals(o));
     static final ModConfigSpec.ConfigValue<String> CHAT_CHANNEL = B.define("chatChannel", "");
     static final ModConfigSpec.ConfigValue<String> CHAT_COMMAND = B.define("chatCommand", "!omc");
     static final ModConfigSpec.IntValue SKIN_POOL_SIZE = B

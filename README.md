@@ -29,6 +29,17 @@ The mod does not add food. It works with the items of any mod.
 `item` is an item id, a `#tag`, or a full item stack with components. `match` is `ignore` (default) or `exact` (components must be equal).
 An entry with `cost` is bought with `/onemoreclient unlock <id>`; the money comes from the register.
 
+## Customer skins and names
+
+Without setup, customers use the default skins and have no name.
+
+- `skinNames` in `config/onemoreclient-common.toml` is a list of Minecraft account names, for example `["Notch", "jeb_"]`. A customer gets the skin of one account. The account name is shown above the customer.
+- Streamers: set `chatPlatform = "twitch"` and `chatChannel` to the channel name. A viewer writes `!omc <Minecraft name>` in the chat. A customer gets the skin of that account and the chat name of the viewer. Each viewer has one entry; a new command replaces it. `skinPoolSize` limits the number of viewers, and `chatCommand` changes the command.
+
+The mod only reads the chat. It needs no login and no token, and it sends nothing. Restart the world or the server after you change the chat settings.
+In multiplayer the chat reader runs on the server. The server owner sets it in the config of the server.
+Each client downloads the skins from the Minecraft skin servers. Only Twitch is supported.
+
 ## Compatibility
 
 Seats and serving surfaces are block tags: `onemoreclient:seats` and `onemoreclient:serving_surfaces`.
