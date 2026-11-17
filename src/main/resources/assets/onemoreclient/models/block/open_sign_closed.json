@@ -1,1 +1,1 @@
-{"parent":"minecraft:block/cube_all","textures":{"all":"onemoreclient:block/open_sign_closed"}}
+{"parent":"minecraft:block/cube_column","textures":{"end":"onemoreclient:block/open_sign_end","side":"onemoreclient:block/open_sign_closed"}}
