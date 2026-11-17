@@ -42,6 +42,18 @@ public class Config {
     static final ModConfigSpec.IntValue WRONG_PENALTY = B
             .comment("Patience ticks a customer loses when a player offers a wrong item. 0 disables the penalty.")
             .defineInRange("wrongItemPenaltyTicks", 100, 0, 72000);
+    static final ModConfigSpec.IntValue MAX_GROUP = B
+            .comment("Largest group of customers that sit together at one table. 1 disables groups.")
+            .defineInRange("maxGroupSize", 4, 1, 16);
+    static final ModConfigSpec.DoubleValue GROUP_CHANCE = B
+            .comment("Chance that the next customers come as a group of 2 to maxGroupSize.")
+            .defineInRange("groupChance", 0.4, 0, 1);
+    static final ModConfigSpec.BooleanValue DIRT_ENABLED = B
+            .comment("Customers leave a dirty spot on the serving surface. A dirty spot gets no customer until a player wipes it.")
+            .define("dirtEnabled", true);
+    static final ModConfigSpec.DoubleValue DIRT_CLEAN_FRACTION = B
+            .comment("A dirty spot becomes fully clean when this fraction of it is wiped.")
+            .defineInRange("dirtCleanFraction", 0.8, 0, 1);
     static final ModConfigSpec.DoubleValue SEAT_HEIGHT = B
             .comment("Default height of the sitting surface above the bottom of a seat block.")
             .defineInRange("seatHeight", 0.5, 0, 2);

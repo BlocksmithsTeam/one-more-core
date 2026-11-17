@@ -10,8 +10,11 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /** All restaurants of one dimension. This is the entry point for other mods. */
 public class Restaurants extends SavedData {
@@ -44,6 +47,14 @@ public class Restaurants extends SavedData {
     Restaurant remove(BlockPos sign) {
         setDirty();
         return bySign.remove(sign);
+    }
+
+    /** Sends the dirt of a chunk to a player that starts to see the chunk. */
+    void sendDirt(ServerPlayer player, ChunkPos chunk) {
+        for (Restaurant r : bySign.values())
+            r.dirt.forEach((pos, cells) -> {
+                if (chunk.equals(new ChunkPos(pos))) PacketDistributor.sendToPlayer(player, new Dirt(pos, cells));
+            });
     }
 
     void tick(ServerLevel level) {

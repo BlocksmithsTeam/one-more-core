@@ -19,6 +19,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
@@ -38,8 +39,10 @@ import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.level.ChunkWatchEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
@@ -86,6 +89,8 @@ public class OneMoreClient {
         NeoForge.EVENT_BUS.addListener((LevelTickEvent.Post e) -> {
             if (e.getLevel() instanceof ServerLevel level) Restaurants.get(level).tick(level);
         });
+        bus.addListener((RegisterPayloadHandlersEvent e) -> e.registrar("1").playToClient(Dirt.TYPE, Dirt.CODEC, (dirt, context) -> Dirt.receive(dirt)));
+        NeoForge.EVENT_BUS.addListener((ChunkWatchEvent.Sent e) -> Restaurants.get(e.getLevel()).sendDirt(e.getPlayer(), e.getPos()));
         NeoForge.EVENT_BUS.addListener(OneMoreClient::onRightClickBlock);
         NeoForge.EVENT_BUS.addListener(OneMoreClient::registerCommands);
     }
@@ -93,6 +98,21 @@ public class OneMoreClient {
     /** Food delivery: a player clicks the serving surface of a waiting customer with an ordered item. */
     private static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         ItemStack held = event.getItemStack();
+        // Wiping: an empty main hand on a dirty surface. Vanilla sends the click again every 4 ticks while the button is down,
+        // with the hit position, and checks the reach. No own packet is necessary.
+        if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND) {
+            boolean wiped;
+            if (event.getLevel() instanceof ServerLevel level) {
+                Restaurant r = Restaurants.get(level).containing(event.getPos());
+                wiped = r != null && r.wipe(level, event.getEntity(), event.getPos(), event.getHitVec().getLocation());
+            } else {
+                wiped = Dirt.CLIENT.containsKey(event.getPos());
+            }
+            if (!wiped) return;
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return;
+        }
         if (held.isEmpty() || !event.getLevel().getBlockState(event.getPos()).is(SURFACES)) return;
         Customer customer = Customer.waitingAt(event.getLevel(), event.getPos(), held);
         if (customer == null) return;

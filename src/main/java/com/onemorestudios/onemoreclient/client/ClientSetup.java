@@ -34,6 +34,7 @@ public class ClientSetup {
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerEntityRenderer(OneMoreClient.CUSTOMER.get(), CustomerRenderer::new));
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderOrderTooltip);
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderArea);
+        DirtRenderer.register();
     }
 
     /** Shows the normal item tooltips of the order while the player looks at a customer. */
