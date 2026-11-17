@@ -55,6 +55,7 @@ public class ClientSetup {
         ItemStack stack = mc.player.getMainHandItem();
         if (!stack.is(OneMoreClient.AREA_TOOL)) return;
         CompoundTag data = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+        if (!data.getString("dimension").equals(mc.player.level().dimension().location().toString())) return;
         PoseStack pose = event.getPoseStack();
         Vec3 cam = event.getCamera().getPosition();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();

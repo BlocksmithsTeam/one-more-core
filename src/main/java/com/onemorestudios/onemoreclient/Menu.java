@@ -88,10 +88,10 @@ public class Menu {
                     throw new IllegalArgumentException("match must be \"ignore\" or \"exact\"");
                 if (byIdIn(out, id)) throw new IllegalArgumentException("duplicate id");
                 out.add(new Entry(id, stack, tag,
-                        Math.max(0, GsonHelper.getAsInt(o, "price")),
+                        money(GsonHelper.getAsInt(o, "price")),
                         match.equals("exact"),
                         Math.max(1, GsonHelper.getAsInt(unlock, "day", 1)),
-                        Math.max(0, GsonHelper.getAsInt(unlock, "cost", 0))));
+                        money(GsonHelper.getAsInt(unlock, "cost", 0))));
             } catch (Exception e) {
                 OneMoreClient.LOGGER.error("Skipped bad menu entry {}: {}", el, e.getMessage());
             }
@@ -102,9 +102,19 @@ public class Menu {
     /** An item id or a full item stack object ({"id": ..., "components": {...}}). */
     static ItemStack stack(JsonElement item, HolderLookup.Provider registries) {
         if (item == null) throw new IllegalArgumentException("missing item");
-        if (item.isJsonObject()) return ItemStack.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, registries), item).getOrThrow();
-        return new ItemStack(BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(item.getAsString()))
-                .orElseThrow(() -> new IllegalArgumentException("unknown item " + item.getAsString())));
+        // The vanilla codec silently replaces an invalid count with 1.
+        if (item.isJsonObject() && GsonHelper.getAsInt(item.getAsJsonObject(), "count", 1) <= 0)
+            throw new IllegalArgumentException("empty item stack");
+        ItemStack stack = item.isJsonObject() ? ItemStack.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, registries), item).getOrThrow()
+                : new ItemStack(BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(item.getAsString()))
+                        .orElseThrow(() -> new IllegalArgumentException("unknown item " + item.getAsString())));
+        if (stack.isEmpty()) throw new IllegalArgumentException("empty item stack");
+        return stack;
+    }
+
+    static int money(int value) {
+        if (value > 1_000_000) OneMoreClient.LOGGER.warn("Capped money value {} at 1000000", value);
+        return Math.max(0, Math.min(1_000_000, value));
     }
 
     private static boolean byIdIn(List<Entry> list, String id) {

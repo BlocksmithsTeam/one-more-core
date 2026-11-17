@@ -53,7 +53,8 @@ public class Customer extends PathfinderMob {
     private Restaurant restaurant;
     BlockPos seat;
     private final List<Line> wanted = new ArrayList<>();
-    private int timer, stuck, bill;
+    private int timer, stuck;
+    private long bill;
     private Party party;
     private Vec3 standPos;
     SkinPool.Entry identity;
@@ -66,6 +67,17 @@ public class Customer extends PathfinderMob {
         final List<Customer> members = new ArrayList<>();
         // patience 0: the party does not wait yet (a member still walks).
         int patience, patienceMax = 1, bill;
+        boolean settled;
+
+        void settle(Restaurant restaurant, boolean paid) {
+            if (settled) return;
+            settled = true;
+            if (paid) {
+                restaurant.served += members.size();
+                restaurant.earned = (int) Math.min(Integer.MAX_VALUE, (long) restaurant.earned + bill);
+                restaurant.addMoney(bill);
+            } else restaurant.lost += members.size();
+        }
 
         void start(int ticks) {
             patience = patienceMax = ticks;
@@ -73,6 +85,7 @@ public class Customer extends PathfinderMob {
         }
 
         void tick(Restaurant restaurant) {
+            if (settled) return;
             State state = members.get(0).getState();
             boolean same = members.stream().allMatch(m -> m.getState() == state);
             if (!same) return;
@@ -80,15 +93,13 @@ public class Customer extends PathfinderMob {
                 start(Config.ORDER_PATIENCE.get());
             } else if (state == State.WAITING_ORDER || state == State.WAITING_FOOD) {
                 if (--patience <= 0) {
-                    restaurant.lost += members.size();
+                    settle(restaurant, false);
                     List.copyOf(members).forEach(Customer::leave);
                 } else if (patience % 10 == 0) {
                     members.forEach(m -> m.entityData.set(PATIENCE, patience / (float) patienceMax));
                 }
             } else if (state == State.EATING && members.get(0).timer > Config.EAT_TICKS.get()) {
-                restaurant.served += members.size();
-                restaurant.earned += bill;
-                restaurant.addMoney(bill);
+                settle(restaurant, true);
                 for (Customer m : List.copyOf(members)) {
                     if (Config.DIRT_ENABLED.get()) restaurant.setDirt((ServerLevel) m.level(), m.getSurface(), Dirt.FULL);
                     m.leave();
@@ -272,7 +283,7 @@ public class Customer extends PathfinderMob {
         syncOrder();
         // A member that has all its food waits until every member is served.
         if (party.members.stream().allMatch(m -> m.wanted.isEmpty())) {
-            int price = party.members.stream().mapToInt(m -> m.bill).sum();
+            long price = party.members.stream().mapToLong(m -> m.bill).sum();
             party.bill = payment(price, party.patience / (float) party.patienceMax, Config.MAX_TIP.get());
             party.members.forEach(m -> m.setState(State.EATING));
         }
@@ -280,8 +291,9 @@ public class Customer extends PathfinderMob {
     }
 
     /** Order price plus a tip. The tip is maxTipPercent of the price when no patience was used, and 0 when none is left. */
-    static int payment(int price, float patienceLeft, int maxTipPercent) {
-        return price + (int) (price * (long) maxTipPercent * Mth.clamp(patienceLeft, 0, 1) / 100);
+    static int payment(long price, float patienceLeft, int maxTipPercent) {
+        long tip = (long) (price * maxTipPercent * (double) Mth.clamp(patienceLeft, 0, 1) / 100);
+        return (int) Math.min(Integer.MAX_VALUE, price + tip);
     }
 
     private void syncOrder() {
@@ -312,14 +324,29 @@ public class Customer extends PathfinderMob {
 
     /** For tests. */
     Restaurant restaurant() { return restaurant; }
-    int bill() { return bill; }
+    long bill() { return bill; }
     Party party() { return party; }
 
     @Override
     public void remove(RemovalReason reason) {
         super.remove(reason);
+        removeFromRestaurant();
+    }
+
+    @Override
+    public void onRemovedFromLevel() {
+        super.onRemovedFromLevel();
+        if (getRemovalReason() != null) removeFromRestaurant();
+    }
+
+    void removeFromRestaurant() {
         if (level() instanceof ServerLevel && restaurant != null) {
+            if (restaurant.isOpen() && getState() != State.LEAVING && !party.settled) {
+                party.settle(restaurant, getState() == State.EATING);
+                for (Customer c : List.copyOf(party.members)) if (c != this) c.discard();
+            }
             restaurant.customers.remove(this);
+            restaurant.arriving.remove(this);
             party.members.remove(this);
         }
     }

@@ -21,7 +21,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -61,7 +60,7 @@ public class Restaurant {
     List<List<Seat>> tables = List.of();
     /** Group members that wait to walk in. They are in {@link #customers} already. */
     final List<Customer> arriving = new ArrayList<>();
-    int arriveTimer;
+    int arriveTimer, seatScanTimer;
     final List<Customer> customers = new ArrayList<>();
 
     Restaurant(Restaurants owner, BlockPos sign) {
@@ -77,7 +76,7 @@ public class Restaurant {
     public BlockPos delivery() { return delivery; }
 
     public void addMoney(int amount) {
-        register += amount;
+        register = (int) Math.min(Integer.MAX_VALUE, (long) register + amount);
         owner.setDirty();
     }
 
@@ -136,11 +135,11 @@ public class Restaurant {
     /** Waits while the delivery point is not loaded, so no order is lost. */
     private void tickDeliveries(ServerLevel level) {
         if (deliveries.isEmpty() || delivery == null || !level.isLoaded(delivery)) return;
+        owner.setDirty();
         for (Delivery d : List.copyOf(deliveries)) {
             if (--d.ticks > 0) continue;
             deliveries.remove(d);
             deliver(level, d.stack);
-            owner.setDirty();
         }
     }
 
@@ -212,6 +211,7 @@ public class Restaurant {
             return;
         }
         ready.clear();
+        seatScanTimer = 0;
         tables = groupTables(level, seats);
         arriving.clear();
         open = true;
@@ -222,13 +222,15 @@ public class Restaurant {
     }
 
     void tick(ServerLevel level) {
+        // Hidden chunks can unload entities without calling Customer.remove or a second tracking callback.
+        for (Customer c : List.copyOf(customers)) if (c.isRemoved()) c.removeFromRestaurant();
         if (!level.isLoaded(sign)) return;
         BlockState state = level.getBlockState(sign);
         if (!state.is(OneMoreClient.OPEN_SIGN)) return;
         tickDeliveries(level);
         if (state.getValue(OpenSignBlock.OPEN) != open) level.setBlockAndUpdate(sign, state.setValue(OpenSignBlock.OPEN, open));
         if (!open) return;
-        customers.removeIf(Entity::isRemoved);
+        if (seatScanTimer > 0) seatScanTimer--;
         if (!arriving.isEmpty() && --arriveTimer <= 0) {
             level.addFreshEntity(arriving.remove(0));
             arriveTimer = 10;
@@ -238,9 +240,16 @@ public class Restaurant {
             int size = 1;
             if (Config.MAX_GROUP.get() > 1 && level.random.nextDouble() < Config.GROUP_CHANCE.get())
                 size = 2 + level.random.nextInt(Config.MAX_GROUP.get() - 1);
-            if (spawnParty(level, size) == 0) return;
-            spawnTimer = Config.SPAWN_INTERVAL.get();
-        } else if (customers.isEmpty()) {
+            if (spawnParty(level, size) == 0) {
+                if (seatScanTimer == 0) {
+                    seats = scanSeats(level);
+                    tables = groupTables(level, seats);
+                    seatScanTimer = 100;
+                }
+                if (seats.isEmpty() && customers.isEmpty()) toSpawn = 0;
+            } else spawnTimer = Config.SPAWN_INTERVAL.get();
+        }
+        if (toSpawn == 0 && customers.isEmpty()) {
             open = false;
             broadcast(level, Component.translatable("onemoreclient.day.end", day, served, lost, earned));
             day++;

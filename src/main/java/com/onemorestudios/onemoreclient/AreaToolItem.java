@@ -43,7 +43,8 @@ public class AreaToolItem extends Item {
         ItemStack stack = context.getItemInHand();
         CompoundTag data = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
         Restaurants all = Restaurants.get(level);
-        Restaurant r = data.contains("sign") ? all.at(BlockPos.of(data.getLong("sign"))) : null;
+        Restaurant r = data.contains("sign") && data.getString("dimension").equals(level.dimension().location().toString())
+                ? all.at(BlockPos.of(data.getLong("sign"))) : null;
         String message;
         if (player == null) {
             return InteractionResult.PASS;
