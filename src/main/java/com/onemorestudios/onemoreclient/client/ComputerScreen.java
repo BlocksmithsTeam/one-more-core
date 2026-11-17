@@ -174,8 +174,9 @@ public class ComputerScreen extends Screen {
                     g.drawString(font, String.valueOf(line.price()), left + 200, y + 4, TEXT);
                 }
                 g.renderItem(icon, left + 8, y);
-                g.drawString(font, font.plainSubstrByWidth(name, menu ? 100 : 164), left + 30, y + 4, TEXT);
-                if (mouseX >= left + 8 && mouseX < left + (menu ? 130 : 194) && mouseY >= y && mouseY < y + 16) hovered = tooltip;
+                name = font.plainSubstrByWidth(name, menu ? 100 : 164);
+                g.drawString(font, name, left + 30, y + 4, TEXT);
+                if (mouseX >= left + 8 && mouseX < left + 30 + font.width(name) && mouseY >= y && mouseY < y + 16) hovered = tooltip;
             }
             if (rows() == 0) g.drawCenteredString(font, text("empty"), left + W / 2, top + 80, DIM);
         }
