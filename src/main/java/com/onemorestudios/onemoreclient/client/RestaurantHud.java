@@ -1,6 +1,5 @@
 package com.onemorestudios.onemoreclient.client;
 
-import com.onemorestudios.onemoreclient.Config;
 import com.onemorestudios.onemoreclient.OneMoreClient;
 import com.onemorestudios.onemoreclient.Status;
 
@@ -9,6 +8,7 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -42,7 +42,7 @@ public class RestaurantHud {
         // Open: day, customers, served and lost, register. Closed: day, what to do next, register.
         int x = 4, y = 4, lines = s.open() ? 4 : 3;
         Component hint = s.needed() > 0 ? text("ready", s.ready(), s.needed()) : text("click_sign");
-        int width = s.open() ? WIDTH : Math.max(WIDTH, font.width(hint) + 24);
+        int width = Math.max(WIDTH, font.width(s.open() ? text("left", s.left()) : hint) + 24);
         g.blitSprite(PANEL, x, y, width, 8 + lines * LINE);
         x += 6;
         y += 5;
@@ -69,11 +69,10 @@ public class RestaurantHud {
         }
         y += LINE;
 
-        // ponytail: the client's own currency config; a server with another currency shows the wrong icon. Send the item if this shows.
         g.pose().pushPose();
         g.pose().translate(x - 1, y - 1, 0);
         g.pose().scale(0.6875f, 0.6875f, 1);
-        g.renderItem(new ItemStack(Config.currency()), 0, 0);
+        g.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(s.currency())), 0, 0);
         g.pose().popPose();
         String money = String.valueOf(s.register());
         g.drawString(font, money, x + 12, y + 1, 0xFFFFE27A, false);

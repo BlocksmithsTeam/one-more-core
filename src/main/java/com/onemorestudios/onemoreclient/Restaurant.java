@@ -12,6 +12,7 @@ import java.util.UUID;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -61,8 +62,6 @@ public class Restaurant {
     int toSpawn, spawnTimer, served, lost, earned;
     long penalties;
     final Set<UUID> ready = new HashSet<>();
-    /** Players that must click the sign before the day starts. 0: no ready check runs. */
-    int needed;
     List<Seat> seats = List.of();
     /** The seats, grouped by table. One party sits at a table. */
     List<List<Seat>> tables = List.of();
@@ -215,7 +214,6 @@ public class Restaurant {
         ready.add(player.getUUID());
         ready.retainAll(needed);
         if (Config.READY_CHECK.get() && ready.size() < needed.size()) {
-            this.needed = needed.size();
             BoundingBox near = area.inflatedBy(16);
             Component message = Component.translatable("onemoreclient.open.ready", player.getDisplayName(), ready.size(), needed.size());
             for (ServerPlayer p : level.players()) if (near.isInside(p.blockPosition())) p.displayClientMessage(message, true);
@@ -223,7 +221,6 @@ public class Restaurant {
             return;
         }
         ready.clear();
-        this.needed = 0;
         seatScanTimer = 0;
         tables = groupTables(level, seats);
         arriving.clear();
@@ -427,8 +424,17 @@ public class Restaurant {
         Status status = null;
         for (ServerPlayer p : level.players()) {
             if (!near.isInside(p.blockPosition())) continue;
-            if (status == null) status = new Status(open, day, toSpawn + customers.size(), served, lost,
-                    Config.MAX_LOST_PER_DAY.get(), register, earned, needed == 0 ? 0 : ready.size(), needed);
+            if (status == null) {
+                // Like requestOpen: the players inside the area must be ready; a ready player who left does not count.
+                int inside = 0, readyInside = 0;
+                for (ServerPlayer q : level.players()) {
+                    if (!area.isInside(q.blockPosition())) continue;
+                    inside++;
+                    if (ready.contains(q.getUUID())) readyInside++;
+                }
+                status = new Status(open, day, toSpawn + customers.size(), served, lost, Config.MAX_LOST_PER_DAY.get(), register, earned,
+                        readyInside, readyInside == 0 ? 0 : inside, BuiltInRegistries.ITEM.getKey(Config.currency()));
+            }
             PacketDistributor.sendToPlayer(p, status);
         }
     }
