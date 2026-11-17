@@ -1,11 +1,15 @@
 package com.onemorestudios.onemoreclient;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
@@ -16,16 +20,21 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
 import net.neoforged.neoforge.items.wrapper.InvWrapper;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 /** One restaurant. The Open/Closed Sign position is its identity. Progress and money belong to the restaurant. */
 public class Restaurant {
@@ -40,12 +49,19 @@ public class Restaurant {
     final Set<String> unlocked = new HashSet<>();
     BlockPos delivery;
     final List<Delivery> deliveries = new ArrayList<>();
+    /** Dirty serving surfaces and their dirty cells, see {@link Dirt}. */
+    final Map<BlockPos, Long> dirt = new HashMap<>();
 
     // Not saved: a restaurant is closed after a world load, and the day starts again.
     boolean open;
     int toSpawn, spawnTimer, served, lost, earned;
     final Set<UUID> ready = new HashSet<>();
     List<Seat> seats = List.of();
+    /** The seats, grouped by table. One party sits at a table. */
+    List<List<Seat>> tables = List.of();
+    /** Group members that wait to walk in. They are in {@link #customers} already. */
+    final List<Customer> arriving = new ArrayList<>();
+    int arriveTimer;
     final List<Customer> customers = new ArrayList<>();
 
     Restaurant(Restaurants owner, BlockPos sign) {
@@ -166,6 +182,8 @@ public class Restaurant {
             return;
         }
         ready.clear();
+        tables = groupTables(level, seats);
+        arriving.clear();
         open = true;
         served = lost = earned = 0;
         toSpawn = Config.CUSTOMERS_BASE.get() + Config.CUSTOMERS_PER_DAY.get() * (day - 1);
@@ -181,18 +199,16 @@ public class Restaurant {
         if (state.getValue(OpenSignBlock.OPEN) != open) level.setBlockAndUpdate(sign, state.setValue(OpenSignBlock.OPEN, open));
         if (!open) return;
         customers.removeIf(Entity::isRemoved);
+        if (!arriving.isEmpty() && --arriveTimer <= 0) {
+            level.addFreshEntity(arriving.remove(0));
+            arriveTimer = 10;
+        }
         if (toSpawn > 0) {
             if (--spawnTimer > 0) return;
-            Seat seat = freeSeat(level);
-            if (seat == null) return;
-            List<Customer.Line> order = makeOrder(level);
-            if (order.isEmpty()) { toSpawn = 0; return; }
-            Customer c = new Customer(OneMoreClient.CUSTOMER.get(), level);
-            c.setup(this, seat, order);
-            c.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, 0, 0);
-            level.addFreshEntity(c);
-            customers.add(c);
-            toSpawn--;
+            int size = 1;
+            if (Config.MAX_GROUP.get() > 1 && level.random.nextDouble() < Config.GROUP_CHANCE.get())
+                size = 2 + level.random.nextInt(Config.MAX_GROUP.get() - 1);
+            if (spawnParty(level, size) == 0) return;
             spawnTimer = Config.SPAWN_INTERVAL.get();
         } else if (customers.isEmpty()) {
             open = false;
@@ -200,6 +216,25 @@ public class Restaurant {
             day++;
             owner.setDirty();
         }
+    }
+
+    /**
+     * Makes a party of up to {@code size} customers for one free table. The members walk in one after the other.
+     * Each member counts as one customer of the day. Returns the number of members; 0 if no table is free.
+     */
+    int spawnParty(ServerLevel level, int size) {
+        Customer.Party party = new Customer.Party();
+        for (Seat seat : freeSeats(level, Math.min(size, toSpawn))) {
+            List<Customer.Line> order = makeOrder(level);
+            if (order.isEmpty()) { toSpawn = 0; break; }
+            Customer c = new Customer(OneMoreClient.CUSTOMER.get(), level);
+            c.setup(this, seat, order, party);
+            c.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, 0, 0);
+            arriving.add(c);
+            customers.add(c);
+            toSpawn--;
+        }
+        return party.members.size();
     }
 
     private List<Customer.Line> makeOrder(ServerLevel level) {
@@ -215,10 +250,26 @@ public class Restaurant {
         return order;
     }
 
-    private Seat freeSeat(ServerLevel level) {
-        List<Seat> free = seats.stream().filter(s -> isSeat(level, s)
-                && customers.stream().noneMatch(c -> s.seat().equals(c.seat))).toList();
-        return free.isEmpty() ? null : free.get(level.random.nextInt(free.size()));
+    /**
+     * Up to {@code wanted} seats of one table where no party sits. Fewer, if no free table has that many clean seats.
+     * Empty, if no table is free.
+     */
+    private List<Seat> freeSeats(ServerLevel level, int wanted) {
+        List<List<Seat>> free = new ArrayList<>();
+        int most = 0;
+        for (List<Seat> table : tables) {
+            if (table.stream().anyMatch(s -> customers.stream().anyMatch(c -> s.seat().equals(c.seat)))) continue;
+            List<Seat> clean = new ArrayList<>(table.stream().filter(s -> isSeat(level, s) && !dirt.containsKey(s.surface())).toList());
+            if (clean.isEmpty()) continue;
+            free.add(clean);
+            most = Math.max(most, clean.size());
+        }
+        int size = Math.min(wanted, most);
+        free.removeIf(t -> t.size() < size);
+        if (free.isEmpty()) return List.of();
+        List<Seat> table = free.get(level.random.nextInt(free.size()));
+        Util.shuffle(table, level.random);
+        return table.subList(0, size);
     }
 
     private static boolean isSeat(ServerLevel level, Seat s) {
@@ -239,6 +290,54 @@ public class Restaurant {
             }
         }
         return found;
+    }
+
+    /** A table is a set of serving surfaces that touch each other. Its seats are the seats next to these surfaces. */
+    List<List<Seat>> groupTables(ServerLevel level, List<Seat> seats) {
+        List<List<Seat>> found = new ArrayList<>();
+        Map<BlockPos, List<Seat>> tableOf = new HashMap<>();
+        for (Seat s : seats) {
+            List<Seat> table = tableOf.get(s.surface());
+            if (table == null) {
+                found.add(table = new ArrayList<>());
+                tableOf.put(s.surface(), table);
+                ArrayDeque<BlockPos> todo = new ArrayDeque<>(List.of(s.surface()));
+                while (!todo.isEmpty()) {
+                    BlockPos pos = todo.pop();
+                    for (Direction dir : Direction.Plane.HORIZONTAL) {
+                        BlockPos next = pos.relative(dir);
+                        if (area.isInside(next) && level.getBlockState(next).is(OneMoreClient.SURFACES) && tableOf.putIfAbsent(next, table) == null) todo.push(next);
+                    }
+                }
+            }
+            table.add(s);
+        }
+        return found;
+    }
+
+    /** Sets the dirty cells of a surface and tells the clients that see it. 0 cleans the surface. */
+    void setDirt(ServerLevel level, BlockPos pos, long cells) {
+        if (cells == 0) dirt.remove(pos); else dirt.put(pos, cells);
+        owner.setDirty();
+        PacketDistributor.sendToPlayersTrackingChunk(level, new ChunkPos(pos), new Dirt(pos, cells));
+    }
+
+    /**
+     * A player wipes a dirty surface at the hit position: the cell and its 8 neighbours become clean.
+     * False if the surface is not dirty, the player is too far away or the hit is not on the block.
+     */
+    boolean wipe(ServerLevel level, Player player, BlockPos pos, Vec3 hit) {
+        Long cells = dirt.get(pos);
+        if (cells == null || !player.canInteractWithBlock(pos, 1) || !new AABB(pos).inflate(0.01).contains(hit)) return false;
+        int cx = Mth.clamp((int) ((hit.x - pos.getX()) * 8), 0, 7), cz = Mth.clamp((int) ((hit.z - pos.getZ()) * 8), 0, 7);
+        long left = cells;
+        for (int z = Math.max(0, cz - 1); z <= Math.min(7, cz + 1); z++)
+            for (int x = Math.max(0, cx - 1); x <= Math.min(7, cx + 1); x++) left &= ~(1L << (z * 8 + x));
+        if (left != cells) {
+            double clean = 1 - Long.bitCount(left) / (double) Long.bitCount(Dirt.FULL);
+            setDirt(level, pos, clean >= Config.DIRT_CLEAN_FRACTION.get() ? 0 : left);
+        }
+        return true;
     }
 
     void broadcast(ServerLevel level, Component message) {
@@ -267,6 +366,13 @@ public class Restaurant {
             pending.add(t);
         }
         tag.put("deliveries", pending);
+        long[] d = new long[dirt.size() * 2];
+        int i = 0;
+        for (Map.Entry<BlockPos, Long> e : dirt.entrySet()) {
+            d[i++] = e.getKey().asLong();
+            d[i++] = e.getValue();
+        }
+        tag.putLongArray("dirt", d);
         return tag;
     }
 
@@ -284,6 +390,8 @@ public class Restaurant {
             ItemStack.parse(owner.registries, d.getCompound("stack")).ifPresent(stack ->
                     r.deliveries.add(new Delivery(stack.copyWithCount(Math.max(1, d.getInt("count"))), d.getInt("ticks"))));
         }
+        long[] d = tag.getLongArray("dirt");
+        for (int i = 0; i + 1 < d.length; i += 2) r.dirt.put(BlockPos.of(d[i]), d[i + 1]);
         return r;
     }
 }

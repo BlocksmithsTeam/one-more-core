@@ -53,9 +53,49 @@ public class Customer extends PathfinderMob {
     private Restaurant restaurant;
     BlockPos seat;
     private final List<Line> wanted = new ArrayList<>();
-    private int patience, patienceMax = 1, timer, stuck, bill;
+    private int timer, stuck, bill;
+    private Party party;
     private Vec3 standPos;
     SkinPool.Entry identity;
+
+    /**
+     * Customers that sit together at one table. A single customer is a party of one.
+     * The party has one patience and pays one bill. The first member runs the party.
+     */
+    static class Party {
+        final List<Customer> members = new ArrayList<>();
+        // patience 0: the party does not wait yet (a member still walks).
+        int patience, patienceMax = 1, bill;
+
+        void start(int ticks) {
+            patience = patienceMax = ticks;
+            members.forEach(m -> m.entityData.set(PATIENCE, 1f));
+        }
+
+        void tick(Restaurant restaurant) {
+            State state = members.get(0).getState();
+            boolean same = members.stream().allMatch(m -> m.getState() == state);
+            if (!same) return;
+            if (state == State.WAITING_ORDER && patience == 0) {
+                start(Config.ORDER_PATIENCE.get());
+            } else if (state == State.WAITING_ORDER || state == State.WAITING_FOOD) {
+                if (--patience <= 0) {
+                    restaurant.lost += members.size();
+                    List.copyOf(members).forEach(Customer::leave);
+                } else if (patience % 10 == 0) {
+                    members.forEach(m -> m.entityData.set(PATIENCE, patience / (float) patienceMax));
+                }
+            } else if (state == State.EATING && members.get(0).timer > Config.EAT_TICKS.get()) {
+                restaurant.served += members.size();
+                restaurant.earned += bill;
+                restaurant.addMoney(bill);
+                for (Customer m : List.copyOf(members)) {
+                    if (Config.DIRT_ENABLED.get()) restaurant.setDirt((ServerLevel) m.level(), m.getSurface(), Dirt.FULL);
+                    m.leave();
+                }
+            }
+        }
+    }
 
     public Customer(EntityType<? extends Customer> type, Level level) {
         super(type, level);
@@ -66,8 +106,10 @@ public class Customer extends PathfinderMob {
         return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 20).add(Attributes.MOVEMENT_SPEED, 0.3);
     }
 
-    void setup(Restaurant restaurant, Restaurant.Seat seat, List<Line> order) {
+    void setup(Restaurant restaurant, Restaurant.Seat seat, List<Line> order, Party party) {
         this.restaurant = restaurant;
+        this.party = party;
+        party.members.add(this);
         this.seat = seat.seat();
         wanted.addAll(order);
         entityData.set(SURFACE, Optional.of(seat.surface()));
@@ -119,35 +161,18 @@ public class Customer extends PathfinderMob {
         timer = stuck = 0;
     }
 
-    private void startPatience(int ticks) {
-        patience = patienceMax = ticks;
-        entityData.set(PATIENCE, 1f);
-    }
-
     @Override
     public void tick() {
         super.tick();
         if (level().isClientSide) return;
         if (restaurant == null || !restaurant.isOpen()) { discard(); return; }
         timer++;
+        if (party.members.get(0) == this) party.tick(restaurant);
         switch (getState()) {
             case WALKING_IN -> {
                 if (walkTo(seat)) sit();
             }
-            case WAITING_ORDER, WAITING_FOOD -> {
-                holdSeat();
-                if (--patience <= 0) { restaurant.lost++; leave(); }
-                else if (patience % 10 == 0) entityData.set(PATIENCE, patience / (float) patienceMax);
-            }
-            case EATING -> {
-                holdSeat();
-                if (timer > Config.EAT_TICKS.get()) {
-                    restaurant.served++;
-                    restaurant.earned += bill;
-                    restaurant.addMoney(bill);
-                    leave();
-                }
-            }
+            case WAITING_ORDER, WAITING_FOOD, EATING -> holdSeat();
             case LEAVING -> {
                 if (walkTo(restaurant.spawn)) discard();
             }
@@ -180,8 +205,8 @@ public class Customer extends PathfinderMob {
         noPhysics = true;
         setNoGravity(true);
         holdSeat();
-        startPatience(Config.ORDER_PATIENCE.get());
         setState(State.WAITING_ORDER);
+        party.tick(restaurant); // the patience starts in the tick in which the last member sits
     }
 
     private void holdSeat() {
@@ -210,13 +235,17 @@ public class Customer extends PathfinderMob {
         if (hand != InteractionHand.MAIN_HAND || (state != State.WAITING_ORDER && state != State.WAITING_FOOD)) return InteractionResult.PASS;
         if (level().isClientSide) return InteractionResult.SUCCESS;
         if (state == State.WAITING_ORDER) {
-            startPatience(Config.FOOD_PATIENCE.get());
-            setState(State.WAITING_FOOD);
-            syncOrder();
+            // The order of the whole party is taken at once, after the last member sat down.
+            if (party.patience == 0) return InteractionResult.SUCCESS;
+            party.start(Config.FOOD_PATIENCE.get());
+            for (Customer m : party.members) {
+                m.setState(State.WAITING_FOOD);
+                m.syncOrder();
+            }
         } else {
             ItemStack held = player.getItemInHand(hand);
             if (!deliver(player, held) && !held.isEmpty()) {
-                patience -= Config.WRONG_PENALTY.get();
+                party.patience = Math.max(1, party.patience - Config.WRONG_PENALTY.get());
                 player.displayClientMessage(Component.translatable("onemoreclient.customer.wrong"), true);
             }
         }
@@ -241,9 +270,11 @@ public class Customer extends PathfinderMob {
         entityData.set(SERVED, served);
         held.consume(1, player);
         syncOrder();
-        if (wanted.isEmpty()) {
-            bill = payment(bill, patience / (float) patienceMax, Config.MAX_TIP.get());
-            setState(State.EATING);
+        // A member that has all its food waits until every member is served.
+        if (party.members.stream().allMatch(m -> m.wanted.isEmpty())) {
+            int price = party.members.stream().mapToInt(m -> m.bill).sum();
+            party.bill = payment(price, party.patience / (float) party.patienceMax, Config.MAX_TIP.get());
+            party.members.forEach(m -> m.setState(State.EATING));
         }
         return true;
     }
@@ -282,10 +313,14 @@ public class Customer extends PathfinderMob {
     /** For tests. */
     Restaurant restaurant() { return restaurant; }
     int bill() { return bill; }
+    Party party() { return party; }
 
     @Override
     public void remove(RemovalReason reason) {
         super.remove(reason);
-        if (level() instanceof ServerLevel && restaurant != null) restaurant.customers.remove(this);
+        if (level() instanceof ServerLevel && restaurant != null) {
+            restaurant.customers.remove(this);
+            party.members.remove(this);
+        }
     }
 }
