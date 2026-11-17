@@ -43,6 +43,7 @@ public class Customer extends PathfinderMob {
     private static final EntityDataAccessor<List<ItemStack>> ORDER = SynchedEntityData.defineId(Customer.class, OneMoreClient.STACKS.get());
     private static final EntityDataAccessor<List<ItemStack>> SERVED = SynchedEntityData.defineId(Customer.class, OneMoreClient.STACKS.get());
     private static final EntityDataAccessor<Optional<BlockPos>> SURFACE = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.OPTIONAL_BLOCK_POS);
+    private static final EntityDataAccessor<String> SKIN_NAME = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.STRING);
 
     // ponytail: a customer that stands still this long, or walks longer than the timeout, is moved to its target.
     // Add better pathing if this shows in play.
@@ -54,6 +55,7 @@ public class Customer extends PathfinderMob {
     private final List<Line> wanted = new ArrayList<>();
     private int patience, patienceMax = 1, timer, stuck, bill;
     private Vec3 standPos;
+    SkinPool.Entry identity;
 
     public Customer(EntityType<? extends Customer> type, Level level) {
         super(type, level);
@@ -69,6 +71,16 @@ public class Customer extends PathfinderMob {
         this.seat = seat.seat();
         wanted.addAll(order);
         entityData.set(SURFACE, Optional.of(seat.surface()));
+        setIdentity(SkinPool.pick(random, restaurant.customers));
+    }
+
+    /** The skin comes from the Minecraft account; the visible name is the vanilla custom name. Null keeps a default skin and no name. */
+    void setIdentity(SkinPool.Entry entry) {
+        identity = entry;
+        if (entry == null) return;
+        entityData.set(SKIN_NAME, entry.minecraftName());
+        setCustomName(Component.literal(entry.displayName()));
+        setCustomNameVisible(true);
     }
 
     @Override
@@ -79,6 +91,7 @@ public class Customer extends PathfinderMob {
         builder.define(ORDER, List.of());
         builder.define(SERVED, List.of());
         builder.define(SURFACE, Optional.empty());
+        builder.define(SKIN_NAME, "");
     }
 
     @Override
@@ -93,6 +106,8 @@ public class Customer extends PathfinderMob {
     public List<ItemStack> getOrder() { return entityData.get(ORDER); }
     public List<ItemStack> getServed() { return entityData.get(SERVED); }
     public BlockPos getSurface() { return entityData.get(SURFACE).orElse(null); }
+    /** The Minecraft account whose skin the customer wears. Empty: a default skin. */
+    public String getSkinName() { return entityData.get(SKIN_NAME); }
 
     public boolean isSeated() {
         State s = getState();

@@ -87,6 +87,8 @@ public class OneMoreClient {
             if (e.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) e.accept(COMPUTER_ITEM);
         });
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> Menu.load(e.getServer().registryAccess()));
+        NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> SkinPool.start(e.getServer()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStoppingEvent e) -> SkinPool.stop());
         NeoForge.EVENT_BUS.addListener((LevelTickEvent.Post e) -> {
             if (e.getLevel() instanceof ServerLevel level) Restaurants.get(level).tick(level);
         });
