@@ -54,6 +54,15 @@ public class Config {
             .defineListAllowEmpty("foodDisplay", List.of(), () -> "", Config::isPair);
     public static final ModConfigSpec.DoubleValue FOOD_SCALE = B.defineInRange("foodScale", 1.0, 0.1, 4);
 
+    static final ModConfigSpec.IntValue SHOP_DELIVERY = B
+            .comment("Ticks between a shop order on the Restaurant Computer and its delivery.")
+            .defineInRange("shopDeliveryTicks", 600, 0, 72000);
+    static final ModConfigSpec.BooleanValue APP_MENU = B
+            .comment("Apps of the Restaurant Computer. A disabled app is shown as inactive.")
+            .define("appMenu", true);
+    static final ModConfigSpec.BooleanValue APP_SHOP = B.define("appShop", true);
+    static final ModConfigSpec.BooleanValue APP_MANAGER = B.define("appManager", true);
+
     static final ModConfigSpec SPEC = B.build();
 
     private static boolean isPair(Object o) {

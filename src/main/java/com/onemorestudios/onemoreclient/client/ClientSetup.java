@@ -64,6 +64,7 @@ public class ClientSetup {
         if (a.length == 6) LevelRenderer.renderLineBox(pose, lines, new AABB(a[0], a[1], a[2], a[3] + 1, a[4] + 1, a[5] + 1), 0.3f, 1f, 0.4f, 1f);
         if (data.contains("c1")) LevelRenderer.renderLineBox(pose, lines, new AABB(BlockPos.of(data.getLong("c1"))), 1f, 1f, 0.3f, 1f);
         if (data.contains("spawn")) LevelRenderer.renderLineBox(pose, lines, new AABB(BlockPos.of(data.getLong("spawn"))), 0.3f, 0.6f, 1f, 1f);
+        if (data.contains("delivery")) LevelRenderer.renderLineBox(pose, lines, new AABB(BlockPos.of(data.getLong("delivery"))), 1f, 0.5f, 0.1f, 1f);
         pose.popPose();
         buffers.endBatch(RenderType.lines());
     }

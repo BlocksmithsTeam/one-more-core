@@ -43,6 +43,7 @@ public class OpenSignBlock extends Block {
             Restaurant r = Restaurants.get(sl).remove(pos);
             if (r != null) {
                 r.open = false; // the customers remove themselves
+                for (Restaurant.Delivery d : r.deliveries) r.deliver(sl, d.stack); // paid orders arrive now
                 for (int left = r.register; left > 0; left -= 64) popResource(level, pos, new ItemStack(Config.currency(), Math.min(64, left)));
             }
         }
