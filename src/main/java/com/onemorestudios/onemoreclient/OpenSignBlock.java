@@ -58,6 +58,7 @@ public class OpenSignBlock extends Block {
             CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> {
                 tag.remove("c1");
                 tag.putLong("sign", pos.asLong());
+                tag.putString("dimension", level.dimension().location().toString());
             });
             AreaToolItem.showArea(stack, r);
             player.displayClientMessage(Component.translatable("onemoreclient.tool.bound"), true);

@@ -64,10 +64,11 @@ public class Shop {
                 JsonObject o = el.getAsJsonObject();
                 String id = GsonHelper.getAsString(o, "id");
                 ItemStack stack = Menu.stack(o.get("item"), registries);
-                if (o.has("count")) stack.setCount(Math.max(1, GsonHelper.getAsInt(o, "count")));
+                if (o.has("count")) stack.setCount(GsonHelper.getAsInt(o, "count"));
+                if (stack.isEmpty()) throw new IllegalArgumentException("empty item stack");
                 ItemStack icon = o.has("icon") ? Menu.stack(o.get("icon"), registries) : stack;
                 if (out.stream().anyMatch(e -> e.id.equals(id))) throw new IllegalArgumentException("duplicate id");
-                out.add(new Entry(id, stack, icon, Math.max(0, GsonHelper.getAsInt(o, "price"))));
+                out.add(new Entry(id, stack, icon, Menu.money(GsonHelper.getAsInt(o, "price"))));
             } catch (Exception e) {
                 OneMoreClient.LOGGER.error("Skipped bad shop entry {}: {}", el, e.getMessage());
             }
