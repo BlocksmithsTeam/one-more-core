@@ -21,6 +21,7 @@
   "onemoreclient.day.end": "Day %s ended. Served: %s. Lost: %s. Earned: %s.",
   "onemoreclient.register.withdraw": "You took %s from the register.",
   "onemoreclient.register.empty": "The register is empty.",
+  "onemoreclient.register.deposit": "You put %s into the register.",
   "onemoreclient.customer.wrong": "The customer did not order this.",
   "onemoreclient.cmd.no_restaurant": "You are not inside a restaurant area.",
   "onemoreclient.cmd.unknown": "Unknown menu item: %s.",

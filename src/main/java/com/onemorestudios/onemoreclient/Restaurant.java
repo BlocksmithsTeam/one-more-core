@@ -156,11 +156,41 @@ public class Restaurant {
         }
     }
 
-    int takeMoney() {
-        int n = register;
-        register = 0;
+    /** Takes up to max money from the register, like one click on a storage drawer. */
+    int take(int max) {
+        int n = Math.min(max, register);
+        register -= n;
         owner.setDirty();
         return n;
+    }
+
+    /** Puts money into the register. Returns how much fitted; the register never wraps past Integer.MAX_VALUE. */
+    int deposit(int amount) {
+        int n = (int) Math.min(amount, (long) Integer.MAX_VALUE - register);
+        register += n;
+        owner.setDirty();
+        return n;
+    }
+
+    /** Day, register, unlocks and paid orders: what the sign item keeps when the sign is broken. Positions are not kept. */
+    CompoundTag progress() {
+        CompoundTag tag = save();
+        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt")) tag.remove(key);
+        return tag;
+    }
+
+    boolean hasProgress() {
+        return day > 1 || register > 0 || !unlocked.isEmpty() || !deliveries.isEmpty();
+    }
+
+    void restore(CompoundTag progress) {
+        progress.putLong("sign", sign.asLong());
+        Restaurant from = load(owner, progress);
+        day = from.day;
+        register = from.register;
+        unlocked.addAll(from.unlocked);
+        deliveries.addAll(from.deliveries);
+        owner.setDirty();
     }
 
     /** A player clicked the sign of the closed restaurant. */

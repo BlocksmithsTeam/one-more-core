@@ -11,7 +11,8 @@ The mod does not add food. It works with the items of any mod.
 4. Click the sign to start the day. In multiplayer, every player inside the area must click it.
 5. Click a seated customer to take the order. Look at the customer to read the order.
 6. Hold the ordered item and click the customer, or the surface in front of the customer.
-7. Sneak-click the sign with an empty hand to take the money from the register.
+7. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
+   A broken sign keeps the money, the day, the unlocks and the paid orders in the item, like a shulker box. Place it again and set the area again.
 8. Customers leave a dirty spot on the table. Hold the use button with an empty hand and move the crosshair over the spot to wipe it. A dirty seat gets no customer.
 
 Customers can come as a group. A group sits at one table, and one table has one party at a time. A table is a set of serving surfaces that touch each other.

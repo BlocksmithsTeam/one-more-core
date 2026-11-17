@@ -30,6 +30,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.material.PushReaction;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -60,7 +61,7 @@ public class OneMoreClient {
     private static final DeferredRegister<EntityDataSerializer<?>> SERIALIZERS = DeferredRegister.create(NeoForgeRegistries.Keys.ENTITY_DATA_SERIALIZERS, MODID);
 
     public static final DeferredBlock<OpenSignBlock> OPEN_SIGN = BLOCKS.register("open_sign",
-            () -> new OpenSignBlock(BlockBehaviour.Properties.of().strength(1.5f).sound(SoundType.WOOD)));
+            () -> new OpenSignBlock(BlockBehaviour.Properties.of().strength(1.5f).sound(SoundType.WOOD).pushReaction(PushReaction.BLOCK)));
     public static final DeferredItem<BlockItem> OPEN_SIGN_ITEM = ITEMS.registerSimpleBlockItem(OPEN_SIGN);
     public static final DeferredItem<AreaToolItem> AREA_TOOL = ITEMS.register("area_tool",
             () -> new AreaToolItem(new Item.Properties().stacksTo(1)));
