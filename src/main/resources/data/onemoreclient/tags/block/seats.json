@@ -15,6 +15,7 @@
     {"id": "#kaleidoscope_cookery:chair", "required": false},
     {"id": "#kaleidoscope_cookery:cook_stool", "required": false},
     {"id": "kaleidoscope_cookery:long_bench", "required": false},
+    {"id": "#kaleidoscope_tavern:sittable", "required": false},
     {"id": "#interiors:chairs", "required": false},
     {"id": "#interiors:floor_chairs", "required": false},
     {"id": "interiors:kelp_chair", "required": false},

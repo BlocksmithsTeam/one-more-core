@@ -16,6 +16,8 @@
     {"id": "#mcwfurnitures:drawer_counter", "required": false},
     {"id": "#mcwfurnitures:double_drawer_counter", "required": false},
     {"id": "#kaleidoscope_cookery:table", "required": false},
+    {"id": "kaleidoscope_tavern:table", "required": false},
+    {"id": "kaleidoscope_tavern:bar_counter", "required": false},
     {"id": "interiors:wall_mounted_table", "required": false},
     {"id": "#refurbished_furniture:tuckable", "required": false},
     {"id": "refurbished_furniture:acacia_kitchen_cabinetry", "required": false},
