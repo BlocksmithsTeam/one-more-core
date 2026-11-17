@@ -15,6 +15,9 @@ The mod does not add food. It works with the items of any mod.
    A broken sign keeps the money, the day, the unlocks and the paid orders in the item, like a shulker box. Place it again and set the area again.
 8. Customers leave a dirty spot on the table. Hold the use button with an empty hand and move the crosshair over the spot to wipe it. A dirty seat gets no customer.
 
+Near a restaurant, a panel at the top left shows the day, the customers left, the served and lost customers and the register.
+The start and the end of a day show as a title. A customer shows a speech bubble: a "!" when it waits for a player, then the ordered items and its patience bar.
+
 Customers can come as a group. A group sits at one table, and one table has one party at a time. A table is a set of serving surfaces that touch each other.
 One click takes the orders of the whole group. Each member gets its own food. The group eats when every member has its food, pays one bill and leaves together.
 
