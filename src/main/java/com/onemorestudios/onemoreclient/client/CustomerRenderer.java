@@ -1,6 +1,9 @@
 package com.onemorestudios.onemoreclient.client;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
@@ -8,6 +11,7 @@ import com.onemorestudios.onemoreclient.Config;
 import com.onemorestudios.onemoreclient.Customer;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelLayers;
@@ -28,6 +32,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /** A player model with a default skin, the patience bar, the order icons and the served food. */
@@ -54,9 +59,28 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         items = context.getItemRenderer();
     }
 
-    // ponytail: one of the vanilla default skins, chosen by entity UUID. Add a skin pool with the streamer feature.
+    // ponytail: one map entry per account name for the whole session, and a failed lookup stays failed. Add expiry if this shows.
+    private static final Map<String, CompletableFuture<PlayerSkin>> SKINS = new HashMap<>();
+
+    /** The skin of the customer's Minecraft account. A vanilla default skin until it is loaded, or if the account does not exist. */
     private static PlayerSkin skin(Customer customer) {
-        return DefaultPlayerSkin.get(customer.getUUID());
+        PlayerSkin fallback = DefaultPlayerSkin.get(customer.getUUID());
+        String name = customer.getSkinName();
+        if (name.isEmpty()) return fallback;
+        // Both steps load in the background, like a player head. The render thread only reads the result.
+        PlayerSkin skin = SKINS.computeIfAbsent(name, n -> SkullBlockEntity.fetchGameProfile(n).thenComposeAsync(
+                profile -> profile.isPresent() ? Minecraft.getInstance().getSkinManager().getOrLoad(profile.get())
+                        : CompletableFuture.completedFuture(null), Minecraft.getInstance())).getNow(null);
+        return skin == null ? fallback : skin;
+    }
+
+    // The vanilla name tag is at the height of the patience bar. This puts it above the order icons.
+    @Override
+    protected void renderNameTag(Customer customer, Component name, PoseStack pose, MultiBufferSource buffers, int light, float partialTick) {
+        pose.pushPose();
+        pose.translate(0, 0.6, 0);
+        super.renderNameTag(customer, name, pose, buffers, light, partialTick);
+        pose.popPose();
     }
 
     @Override

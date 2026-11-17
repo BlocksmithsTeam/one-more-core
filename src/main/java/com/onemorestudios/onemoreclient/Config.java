@@ -53,6 +53,20 @@ public class Config {
                     "Items that are not in this list use their model: 2D items lie flat, 3D items stay 3D.")
             .defineListAllowEmpty("foodDisplay", List.of(), () -> "", Config::isPair);
     public static final ModConfigSpec.DoubleValue FOOD_SCALE = B.defineInRange("foodScale", 1.0, 0.1, 4);
+    static final ModConfigSpec.ConfigValue<List<? extends String>> SKIN_NAMES = B
+            .comment("Minecraft account names. Customers get the skins and the names of these accounts.",
+                    "If this list and the stream chat give no names, customers use the default skins and have no name.")
+            .defineListAllowEmpty("skinNames", List.of(), () -> "", o -> o instanceof String);
+    static final ModConfigSpec.ConfigValue<String> CHAT_PLATFORM = B
+            .comment("Stream chat that viewers use to become customers: \"none\" or \"twitch\". The chat is only read.",
+                    "A viewer writes the chat command and a Minecraft account name, for example: !omc Notch",
+                    "The customer gets the skin of that account and the chat name of the viewer. A restart applies changes.")
+            .defineInList("chatPlatform", "none", List.of("none", "twitch"));
+    static final ModConfigSpec.ConfigValue<String> CHAT_CHANNEL = B.define("chatChannel", "");
+    static final ModConfigSpec.ConfigValue<String> CHAT_COMMAND = B.define("chatCommand", "!omc");
+    static final ModConfigSpec.IntValue SKIN_POOL_SIZE = B
+            .comment("Maximum number of chat viewers in the skin pool. The oldest viewer drops out.")
+            .defineInRange("skinPoolSize", 100, 1, 10000);
 
     static final ModConfigSpec SPEC = B.build();
 
