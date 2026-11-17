@@ -30,8 +30,10 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
@@ -160,7 +162,17 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
             pose.pushPose();
             pose.translate(x - dx * 0.2 - dz * side, y, z - dz * 0.2 + dx * side);
             pose.mulPose(Axis.YP.rotationDegrees(facing));
-            if (isFlat(stack, customer)) {
+            String display = display(stack, customer);
+            if (display.equals("block")) {
+                // The placed block of a food item (a cake, a pie block): drawn at 0.4 size, with its bottom centre on the surface.
+                pose.scale(0.4f * scale, 0.4f * scale, 0.4f * scale);
+                pose.translate(-0.5, 0, -0.5);
+                Minecraft.getInstance().getBlockRenderer().renderSingleBlock(((BlockItem) stack.getItem()).getBlock().defaultBlockState(),
+                        pose, buffers, light, OverlayTexture.NO_OVERLAY);
+                pose.popPose();
+                continue;
+            }
+            if (display.equals("flat")) {
                 pose.translate(0, 0.5f * scale / 32, 0);
                 pose.mulPose(Axis.XP.rotationDegrees(90));
                 pose.scale(0.5f * scale, 0.5f * scale, 0.5f * scale);
@@ -174,9 +186,16 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         }
     }
 
-    private boolean isFlat(ItemStack stack, Customer customer) {
+    /**
+     * "flat", "upright" or "block". Without a config entry: a 3D item model stays upright; a 2D item whose item places
+     * a modelled block (cake, pie and meal blocks) shows that block; any other 2D item lies flat.
+     */
+    private String display(ItemStack stack, Customer customer) {
+        boolean placesBlock = stack.getItem() instanceof BlockItem item
+                && item.getBlock().defaultBlockState().getRenderShape() == RenderShape.MODEL;
         String override = Config.lookup(Config.FOOD_DISPLAY.get(), BuiltInRegistries.ITEM.getKey(stack.getItem()));
-        if (override != null) return override.equals("flat");
-        return !items.getModel(stack, customer.level(), null, 0).isGui3d();
+        if (override != null) return override.equals("block") && !placesBlock ? "upright" : override;
+        if (items.getModel(stack, customer.level(), null, 0).isGui3d()) return "upright";
+        return placesBlock ? "block" : "flat";
     }
 }

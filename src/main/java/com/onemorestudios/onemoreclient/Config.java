@@ -63,8 +63,9 @@ public class Config {
             .comment("Sitting height for specific blocks. Format: \"modid:block=0.5\".")
             .defineListAllowEmpty("seatHeights", defaultSeatHeights(), () -> "", Config::isPair);
     public static final ModConfigSpec.ConfigValue<List<? extends String>> FOOD_DISPLAY = B
-            .comment("How a served item lies on the serving surface. Format: \"modid:item=flat\" or \"modid:item=upright\".",
-                    "Items that are not in this list use their model: 2D items lie flat, 3D items stay 3D.")
+            .comment("How a served item lies on the serving surface. Format: \"modid:item=flat\", \"modid:item=upright\" or \"modid:item=block\".",
+                    "Items that are not in this list use their model: 3D items stay 3D, 2D items that place a block show that block,",
+                    "other 2D items lie flat. \"block\" works only for items that place a block.")
             .defineListAllowEmpty("foodDisplay", List.of(), () -> "", Config::isPair);
     public static final ModConfigSpec.DoubleValue FOOD_SCALE = B.defineInRange("foodScale", 1.0, 0.1, 4);
     static final ModConfigSpec.ConfigValue<List<? extends String>> SKIN_NAMES = B
