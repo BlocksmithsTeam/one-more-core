@@ -48,6 +48,11 @@ The order goes into this container. If the container is full or gone, the items 
 `item` is an item id, a `#tag`, or a full item stack with components. `match` is `ignore` (default) or `exact` (components must be equal).
 An entry with `cost` is bought with `/onemoreclient unlock <id>`; the money comes from the register.
 
+Kaleidoscope Cookery chairs, stools, benches and tables use the furniture tags shipped with this mod.
+Kaleidoscope Tavern tables and bar counters also work as serving surfaces.
+A customer blocks player interaction with its occupied seat. Free seats keep their normal furniture interaction.
+For Kaleidoscope food, the `kaleidoscope_cookery:quality` component uses names such as `excellent`, not numbers.
+
 `shop.json`:
 
 ```json
