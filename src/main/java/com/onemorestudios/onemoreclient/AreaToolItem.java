@@ -16,6 +16,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 /**
  * Selects the box area and the customer spawn point of a restaurant.
  * Click a sign to link the tool, click two corners, sneak-click the spawn point.
+ * Sneak-click a container to set the delivery point of the shop instead.
  */
 public class AreaToolItem extends Item {
     public AreaToolItem(Properties properties) {
@@ -27,9 +28,11 @@ public class AreaToolItem extends Item {
         CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> {
             tag.remove("area");
             tag.remove("spawn");
+            tag.remove("delivery");
             BoundingBox a = r.area;
             if (a != null) tag.putIntArray("area", new int[] {a.minX(), a.minY(), a.minZ(), a.maxX(), a.maxY(), a.maxZ()});
             if (r.spawn != null) tag.putLong("spawn", r.spawn.asLong());
+            if (r.delivery != null) tag.putLong("delivery", r.delivery.asLong());
         });
     }
 
@@ -48,6 +51,9 @@ public class AreaToolItem extends Item {
             message = "no_sign";
         } else if (r.isOpen()) {
             message = "busy";
+        } else if (player.isShiftKeyDown() && Restaurant.container(level, context.getClickedPos()) != null) {
+            r.setDelivery(context.getClickedPos());
+            message = "delivery_set";
         } else if (player.isShiftKeyDown()) {
             r.setSpawn(context.getClickedPos().relative(context.getClickedFace()));
             message = "spawn_set";

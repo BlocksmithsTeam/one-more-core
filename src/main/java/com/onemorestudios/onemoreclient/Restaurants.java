@@ -16,9 +16,13 @@ import net.minecraft.world.level.saveddata.SavedData;
 /** All restaurants of one dimension. This is the entry point for other mods. */
 public class Restaurants extends SavedData {
     private final Map<BlockPos, Restaurant> bySign = new HashMap<>();
+    /** Needed to save and load the item stacks of pending deliveries. */
+    HolderLookup.Provider registries;
 
     public static Restaurants get(ServerLevel level) {
-        return level.getDataStorage().computeIfAbsent(new Factory<>(Restaurants::new, Restaurants::load), "onemoreclient_restaurants");
+        Restaurants data = level.getDataStorage().computeIfAbsent(new Factory<>(Restaurants::new, Restaurants::load), "onemoreclient_restaurants");
+        data.registries = level.registryAccess();
+        return data;
     }
 
     public Restaurant at(BlockPos sign) {
@@ -60,6 +64,7 @@ public class Restaurants extends SavedData {
 
     static Restaurants load(CompoundTag tag, HolderLookup.Provider registries) {
         Restaurants data = new Restaurants();
+        data.registries = registries;
         for (Tag t : tag.getList("restaurants", Tag.TAG_COMPOUND)) {
             Restaurant r = Restaurant.load(data, (CompoundTag) t);
             data.bySign.put(r.sign, r);

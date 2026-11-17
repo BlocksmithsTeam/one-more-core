@@ -77,13 +77,10 @@ public class Menu {
                 JsonElement item = o.get("item");
                 ItemStack stack = null;
                 TagKey<Item> tag = null;
-                if (item != null && item.isJsonObject()) {
-                    stack = ItemStack.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, registries), item).getOrThrow();
-                } else if (GsonHelper.getAsString(o, "item").startsWith("#")) {
+                if (item != null && item.isJsonPrimitive() && item.getAsString().startsWith("#")) {
                     tag = TagKey.create(Registries.ITEM, ResourceLocation.parse(item.getAsString().substring(1)));
                 } else {
-                    stack = new ItemStack(BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(item.getAsString()))
-                            .orElseThrow(() -> new IllegalArgumentException("unknown item " + item.getAsString())));
+                    stack = stack(item, registries);
                 }
                 JsonObject unlock = GsonHelper.getAsJsonObject(o, "unlock", new JsonObject());
                 String match = GsonHelper.getAsString(o, "match", "ignore");
@@ -100,6 +97,14 @@ public class Menu {
             }
         }
         return List.copyOf(out);
+    }
+
+    /** An item id or a full item stack object ({"id": ..., "components": {...}}). */
+    static ItemStack stack(JsonElement item, HolderLookup.Provider registries) {
+        if (item == null) throw new IllegalArgumentException("missing item");
+        if (item.isJsonObject()) return ItemStack.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, registries), item).getOrThrow();
+        return new ItemStack(BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(item.getAsString()))
+                .orElseThrow(() -> new IllegalArgumentException("unknown item " + item.getAsString())));
     }
 
     private static boolean byIdIn(List<Entry> list, String id) {

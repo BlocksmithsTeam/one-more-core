@@ -65,6 +65,9 @@ public class OneMoreClient {
             () -> EntityType.Builder.<Customer>of(Customer::new, MobCategory.MISC).sized(0.6f, 1.8f).noSave().noSummon().clientTrackingRange(8).build("customer"));
     public static final DeferredHolder<EntityDataSerializer<?>, EntityDataSerializer<List<ItemStack>>> STACKS = SERIALIZERS.register("stacks",
             () -> EntityDataSerializer.forValueType(ItemStack.OPTIONAL_LIST_STREAM_CODEC));
+    public static final DeferredBlock<Computer> COMPUTER = BLOCKS.register("computer",
+            () -> new Computer(BlockBehaviour.Properties.of().strength(1.5f).sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredItem<BlockItem> COMPUTER_ITEM = ITEMS.registerSimpleBlockItem(COMPUTER);
 
     /** Blocks a customer can sit on. */
     public static final TagKey<Block> SEATS = BlockTags.create(ResourceLocation.fromNamespaceAndPath(MODID, "seats"));
@@ -81,6 +84,7 @@ public class OneMoreClient {
         bus.addListener((BuildCreativeModeTabContentsEvent e) -> {
             if (e.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) e.accept(OPEN_SIGN_ITEM);
             if (e.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) e.accept(AREA_TOOL);
+            if (e.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) e.accept(COMPUTER_ITEM);
         });
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> Menu.load(e.getServer().registryAccess()));
         NeoForge.EVENT_BUS.addListener((LevelTickEvent.Post e) -> {
@@ -88,6 +92,8 @@ public class OneMoreClient {
         });
         NeoForge.EVENT_BUS.addListener(OneMoreClient::onRightClickBlock);
         NeoForge.EVENT_BUS.addListener(OneMoreClient::registerCommands);
+        bus.addListener(Computer::registerPayloads);
+        NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> Shop.load(e.getServer().registryAccess()));
     }
 
     /** Food delivery: a player clicks the serving surface of a waiting customer with an ordered item. */
@@ -109,6 +115,7 @@ public class OneMoreClient {
                         .executes(OneMoreClient::unlock)))
                 .then(Commands.literal("reload").requires(s -> s.hasPermission(2)).executes(c -> {
                     Menu.load(c.getSource().registryAccess());
+                    Shop.load(c.getSource().registryAccess());
                     c.getSource().sendSuccess(() -> Component.translatable("onemoreclient.cmd.reloaded", Menu.entries.size()), true);
                     return Menu.entries.size();
                 })));

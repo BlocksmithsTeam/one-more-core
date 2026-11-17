@@ -15,11 +15,17 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.wrapper.InvWrapper;
 
 /** One restaurant. The Open/Closed Sign position is its identity. Progress and money belong to the restaurant. */
 public class Restaurant {
@@ -32,6 +38,8 @@ public class Restaurant {
     int day = 1;
     int register;
     final Set<String> unlocked = new HashSet<>();
+    BlockPos delivery;
+    final List<Delivery> deliveries = new ArrayList<>();
 
     // Not saved: a restaurant is closed after a world load, and the day starts again.
     boolean open;
@@ -50,6 +58,7 @@ public class Restaurant {
     public int register() { return register; }
     public BoundingBox area() { return area; }
     public BlockPos spawn() { return spawn; }
+    public BlockPos delivery() { return delivery; }
 
     public void addMoney(int amount) {
         register += amount;
@@ -76,6 +85,60 @@ public class Restaurant {
 
     void setArea(BoundingBox box) { area = box; owner.setDirty(); }
     void setSpawn(BlockPos pos) { spawn = pos; owner.setDirty(); }
+    void setDelivery(BlockPos pos) { delivery = pos; owner.setDirty(); }
+
+    /** A paid shop order that is on its way. */
+    static final class Delivery {
+        final ItemStack stack;
+        int ticks;
+
+        Delivery(ItemStack stack, int ticks) {
+            this.stack = stack;
+            this.ticks = ticks;
+        }
+    }
+
+    /** Result of {@link #buy}. */
+    public enum Buy { OK, COST, NO_DELIVERY }
+
+    /** Orders a shop entry with money from the register. The items arrive at the delivery point after shopDeliveryTicks. */
+    public Buy buy(Shop.Entry e) {
+        if (delivery == null) return Buy.NO_DELIVERY;
+        if (register < e.price()) return Buy.COST;
+        register -= e.price();
+        deliveries.add(new Delivery(e.stack().copy(), Config.SHOP_DELIVERY.get()));
+        owner.setDirty();
+        return Buy.OK;
+    }
+
+    /** The item handler of the block, or null. */
+    static IItemHandler container(ServerLevel level, BlockPos pos) {
+        IItemHandler handler = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
+        return handler == null && level.getBlockEntity(pos) instanceof Container c ? new InvWrapper(c) : handler;
+    }
+
+    /** Waits while the delivery point is not loaded, so no order is lost. */
+    private void tickDeliveries(ServerLevel level) {
+        if (deliveries.isEmpty() || delivery == null || !level.isLoaded(delivery)) return;
+        for (Delivery d : List.copyOf(deliveries)) {
+            if (--d.ticks > 0) continue;
+            deliveries.remove(d);
+            deliver(level, d.stack);
+            owner.setDirty();
+        }
+    }
+
+    /** Puts the stack into the container at the delivery point. Without a container, or when it is full, the items drop. */
+    void deliver(ServerLevel level, ItemStack stack) {
+        IItemHandler handler = container(level, delivery);
+        BlockPos at = handler == null ? delivery : delivery.above();
+        int max = stack.getMaxStackSize();
+        for (int left = stack.getCount(); left > 0; left -= max) {
+            ItemStack part = stack.copyWithCount(Math.min(max, left));
+            if (handler != null) part = ItemHandlerHelper.insertItemStacked(handler, part, false);
+            if (!part.isEmpty()) level.addFreshEntity(new ItemEntity(level, at.getX() + 0.5, at.getY() + 0.25, at.getZ() + 0.5, part, 0, 0, 0));
+        }
+    }
 
     int takeMoney() {
         int n = register;
@@ -114,6 +177,7 @@ public class Restaurant {
         if (!level.isLoaded(sign)) return;
         BlockState state = level.getBlockState(sign);
         if (!state.is(OneMoreClient.OPEN_SIGN)) return;
+        tickDeliveries(level);
         if (state.getValue(OpenSignBlock.OPEN) != open) level.setBlockAndUpdate(sign, state.setValue(OpenSignBlock.OPEN, open));
         if (!open) return;
         customers.removeIf(Entity::isRemoved);
@@ -192,6 +256,17 @@ public class Restaurant {
         ListTag list = new ListTag();
         for (String id : unlocked) list.add(StringTag.valueOf(id));
         tag.put("unlocked", list);
+        if (delivery != null) tag.putLong("delivery", delivery.asLong());
+        ListTag pending = new ListTag();
+        for (Delivery d : deliveries) {
+            // The count is saved apart from the stack: an order can be larger than one stack.
+            CompoundTag t = new CompoundTag();
+            t.put("stack", d.stack.copyWithCount(1).save(owner.registries));
+            t.putInt("count", d.stack.getCount());
+            t.putInt("ticks", d.ticks);
+            pending.add(t);
+        }
+        tag.put("deliveries", pending);
         return tag;
     }
 
@@ -203,6 +278,12 @@ public class Restaurant {
         r.day = Math.max(1, tag.getInt("day"));
         r.register = Math.max(0, tag.getInt("register"));
         for (Tag t : tag.getList("unlocked", Tag.TAG_STRING)) r.unlocked.add(t.getAsString());
+        if (tag.contains("delivery")) r.delivery = BlockPos.of(tag.getLong("delivery"));
+        for (Tag t : tag.getList("deliveries", Tag.TAG_COMPOUND)) {
+            CompoundTag d = (CompoundTag) t;
+            ItemStack.parse(owner.registries, d.getCompound("stack")).ifPresent(stack ->
+                    r.deliveries.add(new Delivery(stack.copyWithCount(Math.max(1, d.getInt("count"))), d.getInt("ticks"))));
+        }
         return r;
     }
 }
