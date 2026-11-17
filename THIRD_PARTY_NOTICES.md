@@ -4,6 +4,7 @@
 
 - File: `src/main/resources/assets/onemoreclient/textures/misc/oil_film.png` (the dirt on serving surfaces)
 - Source: https://github.com/Pocky-l/handson-delight/blob/1.21.1/common/src/main/resources/assets/handson_delight/textures/block/oil_film.png
+- Changes: darker colours and higher opacity, so that the spot shows on a wooden table
 - License: MIT
 
 ```
