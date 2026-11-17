@@ -19,6 +19,8 @@
   "onemoreclient.open.started": "Day %s started. Customers: %s.",
   "onemoreclient.open.status": "Day %s. Customers left: %s. Register: %s.",
   "onemoreclient.day.end": "Day %s ended. Served: %s. Lost: %s. Earned: %s.",
+  "onemoreclient.day.failed": "Day %s failed. Served: %s. Lost: %s. Earned: %s.",
+  "onemoreclient.day.penalty": " Penalties: %s.",
   "onemoreclient.register.withdraw": "You took %s from the register.",
   "onemoreclient.register.empty": "The register is empty.",
   "onemoreclient.register.deposit": "You put %s into the register.",

@@ -32,6 +32,8 @@ The order goes into this container. If the container is full or gone, the items 
 ## Configuration
 
 - `config/onemoreclient-common.toml`: currency item, patience, customer count, group size and chance, dirt, tip, seat heights, food display, shop delivery time, computer apps (`appMenu`, `appShop`, `appManager`).
+- `lostCustomerPenalty`: money lost per customer who leaves without food. Default: 0 (off). The register stays at or above 0.
+- `maxLostPerDay`: lost customers that fail the day. Default: 0 (off). A failed day repeats; earned money stays.
 - `config/onemoreclient/menu.json`: the orderable items. `/onemoreclient reload` reads it again.
 - `config/onemoreclient/shop.json`: the items of the Shop app. `/onemoreclient reload` reads it again.
 

@@ -54,6 +54,7 @@ public class Restaurant {
     // Not saved: a restaurant is closed after a world load, and the day starts again.
     boolean open;
     int toSpawn, spawnTimer, served, lost, earned;
+    long penalties;
     final Set<UUID> ready = new HashSet<>();
     List<Seat> seats = List.of();
     /** The seats, grouped by table. One party sits at a table. */
@@ -216,6 +217,7 @@ public class Restaurant {
         arriving.clear();
         open = true;
         served = lost = earned = 0;
+        penalties = 0;
         toSpawn = Config.CUSTOMERS_BASE.get() + Config.CUSTOMERS_PER_DAY.get() * (day - 1);
         spawnTimer = 40;
         broadcast(level, Component.translatable("onemoreclient.open.started", day, toSpawn));
@@ -249,12 +251,21 @@ public class Restaurant {
                 if (seats.isEmpty() && customers.isEmpty()) toSpawn = 0;
             } else spawnTimer = Config.SPAWN_INTERVAL.get();
         }
-        if (toSpawn == 0 && customers.isEmpty()) {
-            open = false;
-            broadcast(level, Component.translatable("onemoreclient.day.end", day, served, lost, earned));
-            day++;
-            owner.setDirty();
+        if (toSpawn == 0 && customers.isEmpty()) endDay(level, false);
+    }
+
+    void endDay(ServerLevel level, boolean failed) {
+        if (!open) return;
+        open = false;
+        if (failed) {
+            toSpawn = 0;
+            for (Customer c : List.copyOf(customers)) c.discard();
         }
+        var message = Component.translatable(failed ? "onemoreclient.day.failed" : "onemoreclient.day.end", day, served, lost, earned);
+        if (penalties > 0) message.append(Component.translatable("onemoreclient.day.penalty", penalties));
+        broadcast(level, message);
+        if (!failed) day++;
+        owner.setDirty();
     }
 
     /**

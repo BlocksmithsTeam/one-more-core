@@ -76,7 +76,14 @@ public class Customer extends PathfinderMob {
                 restaurant.served += members.size();
                 restaurant.earned = (int) Math.min(Integer.MAX_VALUE, (long) restaurant.earned + bill);
                 restaurant.addMoney(bill);
-            } else restaurant.lost += members.size();
+            } else {
+                restaurant.lost += members.size();
+                long penalty = Math.min(restaurant.register(), (long) members.size() * Config.LOST_CUSTOMER_PENALTY.get());
+                if (penalty > 0) restaurant.penalties += restaurant.take((int) penalty);
+                int maximum = Config.MAX_LOST_PER_DAY.get();
+                if (maximum > 0 && restaurant.lost >= maximum)
+                    restaurant.endDay((ServerLevel) members.get(0).level(), true);
+            }
         }
 
         void start(int ticks) {
@@ -179,6 +186,7 @@ public class Customer extends PathfinderMob {
         if (restaurant == null || !restaurant.isOpen()) { discard(); return; }
         timer++;
         if (party.members.get(0) == this) party.tick(restaurant);
+        if (isRemoved()) return;
         switch (getState()) {
             case WALKING_IN -> {
                 if (walkTo(seat)) sit();

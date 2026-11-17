@@ -27,6 +27,12 @@ public class Config {
             .comment("Customers per day = customersBase + customersPerDay * (day - 1).")
             .defineInRange("customersBase", 3, 1, 1000);
     static final ModConfigSpec.IntValue CUSTOMERS_PER_DAY = B.defineInRange("customersPerDay", 1, 0, 1000);
+    static final ModConfigSpec.IntValue LOST_CUSTOMER_PENALTY = B
+            .comment("Money that the register loses for each customer who leaves without food. 0 disables the penalty. The register does not go below 0.")
+            .defineInRange("lostCustomerPenalty", 0, 0, 1_000_000);
+    static final ModConfigSpec.IntValue MAX_LOST_PER_DAY = B
+            .comment("The day fails when this many customers leave without food. 0 disables it.")
+            .defineInRange("maxLostPerDay", 0, 0, 1000);
     static final ModConfigSpec.IntValue SPAWN_INTERVAL = B
             .comment("Ticks between two customers.")
             .defineInRange("spawnIntervalTicks", 200, 1, 72000);
