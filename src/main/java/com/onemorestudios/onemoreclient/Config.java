@@ -1,9 +1,11 @@
 package com.onemorestudios.onemoreclient;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
@@ -47,7 +49,7 @@ public class Config {
             .defineInRange("seatHeight", 0.5, 0, 2);
     static final ModConfigSpec.ConfigValue<List<? extends String>> SEAT_HEIGHTS = B
             .comment("Sitting height for specific blocks. Format: \"modid:block=0.5\".")
-            .defineListAllowEmpty("seatHeights", List.of(), () -> "", Config::isPair);
+            .defineListAllowEmpty("seatHeights", defaultSeatHeights(), () -> "", Config::isPair);
     public static final ModConfigSpec.ConfigValue<List<? extends String>> FOOD_DISPLAY = B
             .comment("How a served item lies on the serving surface. Format: \"modid:item=flat\" or \"modid:item=upright\".",
                     "Items that are not in this list use their model: 2D items lie flat, 3D items stay 3D.")
@@ -55,6 +57,20 @@ public class Config {
     public static final ModConfigSpec.DoubleValue FOOD_SCALE = B.defineInRange("foodScale", 1.0, 0.1, 4);
 
     static final ModConfigSpec SPEC = B.build();
+
+    /** Seats of known mods that are not 0.5 high. The values are the top of the seat part in the block model. */
+    private static List<String> defaultSeatHeights() {
+        List<String> list = new ArrayList<>();
+        for (String wood : List.of("oak", "spruce", "acacia", "bamboo", "birch", "cherry", "crimson", "dark_oak", "jungle", "mangrove", "warped")) {
+            list.add("kaleidoscope_cookery:chair_" + wood + "=0.5625");
+            list.add("kaleidoscope_cookery:cook_stool_" + wood + "=0.4375");
+        }
+        for (DyeColor color : DyeColor.values()) {
+            list.add("kaleidoscope_tavern:" + color.getName() + "_bar_stool=0.9375");
+            list.add("kaleidoscope_world_liquor:bar_stool_" + color.getName() + "=0.9375");
+        }
+        return list;
+    }
 
     private static boolean isPair(Object o) {
         return o instanceof String s && s.indexOf('=') > 0;

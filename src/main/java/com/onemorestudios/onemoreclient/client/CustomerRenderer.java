@@ -41,6 +41,14 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         public void setupAnim(Customer entity, float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch) {
             riding = entity.isSeated();
             super.setupAnim(entity, limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch);
+            // On a high seat the legs hang down. Legs that point forward go through the counter.
+            BlockPos surface = entity.getSurface();
+            if (riding && surface != null && entity.getY() + 0.6 - surface.getY() >= 0.75) {
+                rightLeg.xRot = leftLeg.xRot = -0.2f;
+                rightLeg.yRot = leftLeg.yRot = 0;
+                rightPants.copyFrom(rightLeg);
+                leftPants.copyFrom(leftLeg);
+            }
         }
     }
 
