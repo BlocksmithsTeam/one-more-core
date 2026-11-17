@@ -5,6 +5,12 @@ import java.util.List;
 import java.util.Optional;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ItemParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.particles.SimpleParticleType;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -98,16 +104,22 @@ public class Customer extends PathfinderMob {
             if (!same) return;
             if (state == State.WAITING_ORDER && patience == 0) {
                 start(Config.ORDER_PATIENCE.get());
+                members.get(0).effect(SoundEvents.NOTE_BLOCK_BELL.value(), null);
             } else if (state == State.WAITING_ORDER || state == State.WAITING_FOOD) {
                 if (--patience <= 0) {
                     settle(restaurant, false);
-                    List.copyOf(members).forEach(Customer::leave);
+                    for (Customer m : List.copyOf(members)) {
+                        m.effect(SoundEvents.VILLAGER_NO, ParticleTypes.ANGRY_VILLAGER);
+                        m.leave();
+                    }
                 } else if (patience % 10 == 0) {
                     members.forEach(m -> m.entityData.set(PATIENCE, patience / (float) patienceMax));
                 }
             } else if (state == State.EATING && members.get(0).timer > Config.EAT_TICKS.get()) {
                 settle(restaurant, true);
+                members.get(0).effect(SoundEvents.EXPERIENCE_ORB_PICKUP, null);
                 for (Customer m : List.copyOf(members)) {
+                    m.effect(null, ParticleTypes.HAPPY_VILLAGER);
                     if (Config.DIRT_ENABLED.get()) restaurant.setDirt((ServerLevel) m.level(), m.getSurface(), Dirt.FULL);
                     m.leave();
                 }
@@ -191,7 +203,11 @@ public class Customer extends PathfinderMob {
             case WALKING_IN -> {
                 if (walkTo(seat)) sit();
             }
-            case WAITING_ORDER, WAITING_FOOD, EATING -> holdSeat();
+            case WAITING_ORDER, WAITING_FOOD -> holdSeat();
+            case EATING -> {
+                holdSeat();
+                if (timer % 16 == 0) eatEffect();
+            }
             case LEAVING -> {
                 if (walkTo(restaurant.spawn)) discard();
             }
@@ -257,6 +273,7 @@ public class Customer extends PathfinderMob {
             // The order of the whole party is taken at once, after the last member sat down.
             if (party.patience == 0) return InteractionResult.SUCCESS;
             party.start(Config.FOOD_PATIENCE.get());
+            effect(SoundEvents.BOOK_PAGE_TURN, null);
             for (Customer m : party.members) {
                 m.setState(State.WAITING_FOOD);
                 m.syncOrder();
@@ -265,6 +282,7 @@ public class Customer extends PathfinderMob {
             ItemStack held = player.getItemInHand(hand);
             if (!deliver(player, held) && !held.isEmpty()) {
                 party.patience = Math.max(1, party.patience - Config.WRONG_PENALTY.get());
+                effect(SoundEvents.VILLAGER_NO, null);
                 player.displayClientMessage(Component.translatable("onemoreclient.customer.wrong"), true);
             }
         }
@@ -289,6 +307,7 @@ public class Customer extends PathfinderMob {
         entityData.set(SERVED, served);
         held.consume(1, player);
         syncOrder();
+        effect(SoundEvents.ITEM_PICKUP, null);
         // A member that has all its food waits until every member is served.
         if (party.members.stream().allMatch(m -> m.wanted.isEmpty())) {
             long price = party.members.stream().mapToLong(m -> m.bill).sum();
@@ -296,6 +315,22 @@ public class Customer extends PathfinderMob {
             party.members.forEach(m -> m.setState(State.EATING));
         }
         return true;
+    }
+
+    /** Plays a sound at the customer and shows particles above its head. Either can be null. Server only. */
+    private void effect(SoundEvent sound, SimpleParticleType particle) {
+        if (!(level() instanceof ServerLevel level)) return;
+        if (sound != null) level.playSound(null, getX(), getY(), getZ(), sound, SoundSource.NEUTRAL, 0.8f, 0.9f + random.nextFloat() * 0.2f);
+        if (particle != null) level.sendParticles(particle, getX(), getY() + getBbHeight() + 0.3, getZ(), 5, 0.3, 0.2, 0.3, 0);
+    }
+
+    /** Eating sound and crumbs of the first served item over the plate. */
+    private void eatEffect() {
+        List<ItemStack> served = getServed();
+        BlockPos surface = getSurface();
+        if (served.isEmpty() || surface == null || !(level() instanceof ServerLevel level)) return;
+        level.playSound(null, getX(), getY(), getZ(), SoundEvents.GENERIC_EAT, SoundSource.NEUTRAL, 0.5f, 0.9f + random.nextFloat() * 0.2f);
+        level.sendParticles(new ItemParticleOption(ParticleTypes.ITEM, served.get(0)), surface.getX() + 0.5, surface.getY() + 1.1, surface.getZ() + 0.5, 4, 0.1, 0.05, 0.1, 0.05);
     }
 
     /** Order price plus a tip. The tip is maxTipPercent of the price when no patience was used, and 0 when none is left. */

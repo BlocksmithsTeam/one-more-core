@@ -19,7 +19,8 @@ import net.neoforged.neoforge.network.PacketDistributor;
 /** The screen of the Restaurant Computer: a main menu of apps and one view per app. It shows the last state from the server. */
 public class ComputerScreen extends Screen {
     private static final int W = 320, H = 212, ROWS = 6, ROW = 20;
-    private static final int TEXT = 0xFFE0E0E0, DIM = 0xFF9A9A9A;
+    private static final int TEXT = 0xFFD8F0E0, DIM = 0xFF7FA595;
+    private static final net.minecraft.resources.ResourceLocation FRAME = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "computer/frame");
     private static final int[] APPS = {Computer.APP_MENU, Computer.APP_SHOP, Computer.APP_MANAGER};
     private static final String[] APP_KEYS = {"menu", "shop", "manager"};
 
@@ -110,9 +111,14 @@ public class ComputerScreen extends Screen {
     @Override
     public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.renderBackground(g, mouseX, mouseY, partialTick);
-        g.fill(left, top, left + W, top + H, 0xF0101820);
-        g.fill(left, top, left + W, top + 22, 0xFF24364A);
-        g.renderOutline(left, top, W, H, 0xFF5A7A9A);
+        // A monitor: beige bezel, dark screen with scan lines, a title bar and stripes behind the list rows.
+        g.blitSprite(FRAME, left - 10, top - 10, W + 20, H + 20);
+        g.fill(left, top, left + W, top + 22, 0xFF1D4A3C);
+        g.fill(left, top + 22, left + W, top + 23, 0xFF3FA37C);
+        for (int row = 0; row < ROWS && page * ROWS + row < rows(); row += 2)
+            g.fill(left + 4, rowY(row) - 2, left + W - 4, rowY(row) + ROW - 2, 0x18FFFFFF);
+        for (int y = top + 23; y < top + H; y += 2) g.fill(left, y, left + W, y + 1, 0x0C000000);
+        g.fill(left + W - 6, top + H + 3, left + W - 2, top + H + 6, 0xFF55E07A);
     }
 
     @Override

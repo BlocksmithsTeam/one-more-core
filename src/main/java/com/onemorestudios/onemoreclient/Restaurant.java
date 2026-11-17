@@ -17,6 +17,11 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
@@ -56,6 +61,8 @@ public class Restaurant {
     int toSpawn, spawnTimer, served, lost, earned;
     long penalties;
     final Set<UUID> ready = new HashSet<>();
+    /** Players that must click the sign before the day starts. 0: no ready check runs. */
+    int needed;
     List<Seat> seats = List.of();
     /** The seats, grouped by table. One party sits at a table. */
     List<List<Seat>> tables = List.of();
@@ -208,10 +215,15 @@ public class Restaurant {
         ready.add(player.getUUID());
         ready.retainAll(needed);
         if (Config.READY_CHECK.get() && ready.size() < needed.size()) {
-            broadcast(level, Component.translatable("onemoreclient.open.ready", player.getDisplayName(), ready.size(), needed.size()));
+            this.needed = needed.size();
+            BoundingBox near = area.inflatedBy(16);
+            Component message = Component.translatable("onemoreclient.open.ready", player.getDisplayName(), ready.size(), needed.size());
+            for (ServerPlayer p : level.players()) if (near.isInside(p.blockPosition())) p.displayClientMessage(message, true);
+            level.playSound(null, sign, SoundEvents.NOTE_BLOCK_CHIME.value(), SoundSource.BLOCKS, 1, 1.4f);
             return;
         }
         ready.clear();
+        this.needed = 0;
         seatScanTimer = 0;
         tables = groupTables(level, seats);
         arriving.clear();
@@ -220,7 +232,9 @@ public class Restaurant {
         penalties = 0;
         toSpawn = Config.CUSTOMERS_BASE.get() + Config.CUSTOMERS_PER_DAY.get() * (day - 1);
         spawnTimer = 40;
-        broadcast(level, Component.translatable("onemoreclient.open.started", day, toSpawn));
+        announce(level, Component.translatable("onemoreclient.open.started.title", day),
+                Component.translatable("onemoreclient.open.started", day, toSpawn));
+        level.playSound(null, sign, SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 1, 1);
     }
 
     void tick(ServerLevel level) {
@@ -231,6 +245,7 @@ public class Restaurant {
         if (!state.is(OneMoreClient.OPEN_SIGN)) return;
         tickDeliveries(level);
         if (state.getValue(OpenSignBlock.OPEN) != open) level.setBlockAndUpdate(sign, state.setValue(OpenSignBlock.OPEN, open));
+        if (area != null && level.getGameTime() % 10 == 0) sendStatus(level);
         if (!open) return;
         if (seatScanTimer > 0) seatScanTimer--;
         if (!arriving.isEmpty() && --arriveTimer <= 0) {
@@ -267,7 +282,8 @@ public class Restaurant {
         }
         var message = Component.translatable(failed ? "onemoreclient.day.failed" : "onemoreclient.day.end", day, served, lost, earned);
         if (penalties > 0) message.append(Component.translatable("onemoreclient.day.penalty", penalties));
-        broadcast(level, message);
+        announce(level, Component.translatable(failed ? "onemoreclient.day.failed.title" : "onemoreclient.day.end.title", day), message);
+        level.playSound(null, sign, failed ? SoundEvents.ANVIL_LAND : SoundEvents.PLAYER_LEVELUP, SoundSource.BLOCKS, failed ? 0.5f : 1, 1);
         if (!failed) day++;
         owner.setDirty();
     }
@@ -394,9 +410,27 @@ public class Restaurant {
         return true;
     }
 
-    void broadcast(ServerLevel level, Component message) {
+    /** Shows a title and a subtitle to the players in and near the area. */
+    void announce(ServerLevel level, Component title, Component subtitle) {
         BoundingBox near = area.inflatedBy(16);
-        for (ServerPlayer p : level.players()) if (near.isInside(p.blockPosition())) p.sendSystemMessage(message);
+        for (ServerPlayer p : level.players()) {
+            if (!near.isInside(p.blockPosition())) continue;
+            p.connection.send(new ClientboundSetTitlesAnimationPacket(10, 70, 20));
+            p.connection.send(new ClientboundSetSubtitleTextPacket(subtitle));
+            p.connection.send(new ClientboundSetTitleTextPacket(title));
+        }
+    }
+
+    // ponytail: a player near two restaurants gets both, and the HUD shows the last one. Pick the nearest if this shows.
+    private void sendStatus(ServerLevel level) {
+        BoundingBox near = area.inflatedBy(8);
+        Status status = null;
+        for (ServerPlayer p : level.players()) {
+            if (!near.isInside(p.blockPosition())) continue;
+            if (status == null) status = new Status(open, day, toSpawn + customers.size(), served, lost,
+                    Config.MAX_LOST_PER_DAY.get(), register, earned, needed == 0 ? 0 : ready.size(), needed);
+            PacketDistributor.sendToPlayer(p, status);
+        }
     }
 
     CompoundTag save() {

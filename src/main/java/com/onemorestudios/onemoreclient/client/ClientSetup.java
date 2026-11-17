@@ -34,6 +34,7 @@ public class ClientSetup {
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerEntityRenderer(OneMoreClient.CUSTOMER.get(), CustomerRenderer::new));
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderOrderTooltip);
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderArea);
+        bus.addListener(RestaurantHud::register);
         DirtRenderer.register();
     }
 
