@@ -31,6 +31,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.PushReaction;
+import net.minecraft.world.phys.AABB;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -106,6 +107,14 @@ public class OneMoreClient {
 
     /** Food delivery: a player clicks the serving surface of a waiting customer with an ordered item. */
     private static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        // Furniture mods must not mount a player on a seat already used by a customer.
+        if (event.getLevel() instanceof ServerLevel level && level.getBlockState(event.getPos()).is(SEATS)
+                && !level.getEntitiesOfClass(Customer.class, new AABB(event.getPos()).inflate(2),
+                        c -> c.isSeated() && event.getPos().equals(c.seat)).isEmpty()) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return;
+        }
         ItemStack held = event.getItemStack();
         // Wiping: an empty main hand on a dirty surface. Vanilla sends the click again every 4 ticks while the button is down,
         // with the hit position, and checks the reach. No own packet is necessary.
