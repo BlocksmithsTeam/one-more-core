@@ -311,7 +311,7 @@ public class Customer extends PathfinderMob {
         // A member that has all its food waits until every member is served.
         if (party.members.stream().allMatch(m -> m.wanted.isEmpty())) {
             long price = party.members.stream().mapToLong(m -> m.bill).sum();
-            party.bill = payment(price, party.patience / (float) party.patienceMax, Config.MAX_TIP.get());
+            party.bill = payment(price, party.patience, party.patienceMax, Config.MAX_TIP.get());
             party.members.forEach(m -> m.setState(State.EATING));
         }
         return true;
@@ -336,6 +336,12 @@ public class Customer extends PathfinderMob {
     /** Order price plus a tip. The tip is maxTipPercent of the price when no patience was used, and 0 when none is left. */
     static int payment(long price, float patienceLeft, int maxTipPercent) {
         long tip = (long) (price * maxTipPercent * (double) Mth.clamp(patienceLeft, 0, 1) / 100);
+        return (int) Math.min(Integer.MAX_VALUE, price + tip);
+    }
+
+    /** Keep patience as ticks so a rounded float cannot change the whole-number tip. */
+    static int payment(long price, int patience, int patienceMax, int maxTipPercent) {
+        long tip = price * maxTipPercent * Mth.clamp(patience, 0, patienceMax) / (100L * patienceMax);
         return (int) Math.min(Integer.MAX_VALUE, price + tip);
     }
 
