@@ -103,13 +103,14 @@ public class Menu {
     /** An item id or a full item stack object ({"id": ..., "components": {...}}). */
     static ItemStack stack(JsonElement item, HolderLookup.Provider registries) {
         if (item == null) throw new IllegalArgumentException("missing item");
-        // The vanilla codec silently replaces an invalid count with 1.
-        if (item.isJsonObject() && integer(item.getAsJsonObject(), "count", 1) <= 0)
-            throw new IllegalArgumentException("empty item stack");
+        // The vanilla codec silently replaces counts above 99 with 1.
+        int count = item.isJsonObject() ? integer(item.getAsJsonObject(), "count", 1) : 1;
+        if (count <= 0) throw new IllegalArgumentException("empty item stack");
         ItemStack stack = item.isJsonObject() ? ItemStack.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, registries), item).getOrThrow()
                 : new ItemStack(BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(item.getAsString()))
                         .orElseThrow(() -> new IllegalArgumentException("unknown item " + item.getAsString())));
         if (stack.isEmpty()) throw new IllegalArgumentException("empty item stack");
+        stack.setCount(count);
         return stack;
     }
 
