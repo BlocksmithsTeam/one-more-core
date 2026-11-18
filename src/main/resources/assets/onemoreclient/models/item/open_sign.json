@@ -1,1 +1,1 @@
-{"parent":"onemoreclient:block/open_sign_closed"}
+{"loader":"neoforge:separate_transforms","base":{"parent":"onemoreclient:block/open_sign_open"},"perspectives":{"gui":{"parent":"minecraft:item/generated","textures":{"layer0":"onemoreclient:item/open_sign"}}}}

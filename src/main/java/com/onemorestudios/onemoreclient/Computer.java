@@ -26,6 +26,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
@@ -35,6 +36,9 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
  */
 public class Computer extends Block {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
+    /** The monitor, its back and the keyboard. */
+    private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {2, 0, 4, 14, 11, 13}, new double[] {4, 1, 13, 12, 9, 16},
+            new double[] {2, 0, 0.5, 14, 1.5, 3.5});
     public static final int REFRESH = 0, UNLOCK = 1, BUY = 2;
     /** Bits of {@link State#apps}. */
     public static final int APP_MENU = 1, APP_SHOP = 2, APP_MANAGER = 4;
@@ -102,6 +106,21 @@ public class Computer extends Block {
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.shapes.CollisionContext context) {
+        return SHAPES[state.getValue(FACING).get2DDataValue()];
+    }
+
+    @Override
+    protected BlockState rotate(BlockState state, net.minecraft.world.level.block.Rotation rotation) {
+        return state.setValue(FACING, rotation.rotate(state.getValue(FACING)));
+    }
+
+    @Override
+    protected BlockState mirror(BlockState state, net.minecraft.world.level.block.Mirror mirror) {
+        return state.rotate(mirror.getRotation(state.getValue(FACING)));
     }
 
     @Override
