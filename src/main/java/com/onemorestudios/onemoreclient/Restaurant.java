@@ -281,7 +281,7 @@ public class Restaurant {
         if (penalties > 0) message.append(Component.translatable("onemoreclient.day.penalty", penalties));
         announce(level, Component.translatable(failed ? "onemoreclient.day.failed.title" : "onemoreclient.day.end.title", day), message);
         level.playSound(null, sign, failed ? SoundEvents.ANVIL_LAND : SoundEvents.PLAYER_LEVELUP, SoundSource.BLOCKS, failed ? 0.5f : 1, 1);
-        if (!failed) day++;
+        if (!failed && day < Integer.MAX_VALUE) day++;
         owner.setDirty();
     }
 
