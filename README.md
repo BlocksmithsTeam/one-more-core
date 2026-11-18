@@ -8,7 +8,7 @@ The mod does not add food. It works with the items of any mod.
 1. Place an **Open/Closed Sign**.
 2. Click the sign with the **Restaurant Area Tool**. Click two corners to select the area. Sneak-click to set the customer spawn point.
 3. Put seats next to serving surfaces inside the area.
-4. Click the sign to start the day. In multiplayer, every player inside the area must click it.
+4. Get ready: hold **R** (key "Get ready (hold)") or click the sign. A panel shows every player inside the area. When all of them are ready, a short countdown starts the day. Hold the key again to cancel.
 5. Click a seated customer to take the order. Look at the customer to read the order.
 6. Hold the ordered item and click the customer, or the surface in front of the customer.
 7. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
@@ -36,6 +36,7 @@ The order goes into this container. If the container is full or gone, the items 
 
 - `config/onemoreclient-common.toml`: currency item, patience, customer count, group size and chance, dirt, tip, seat heights, food display, shop delivery time, computer apps (`appMenu`, `appShop`, `appManager`).
 - `lostCustomerPenalty`: money lost per customer who leaves without food. Default: 0 (off). The register stays at or above 0.
+- `readyCountdownTicks`: ticks between "everyone is ready" and the start of the day. Default: 60. 0 starts at once.
 - `maxLostPerDay`: lost customers that fail the day. Default: 0 (off). A failed day repeats; earned money stays.
 - `config/onemoreclient/menu.json`: the orderable items. `/onemoreclient reload` reads it again.
 - `config/onemoreclient/shop.json`: the items of the Shop app. `/onemoreclient reload` reads it again.
