@@ -227,7 +227,8 @@ public class Restaurant {
 
     /**
      * Marks the player ready or not ready. When every player inside the area is ready, the countdown starts;
-     * the day starts when it ends. The player who clicks counts even when outside the area.
+     * the day starts when it ends. A player who is alone starts the day at once. The player who clicks counts even when
+     * outside the area.
      */
     void setReady(ServerLevel level, Player player, boolean on) {
         if (open) return;
@@ -253,7 +254,8 @@ public class Restaurant {
             return;
         }
         if (countdown > 0) return;
-        countdown = Config.READY_COUNTDOWN.get();
+        // Alone, the day starts at once; with others, after a countdown in which a player can still cancel.
+        countdown = needed.size() <= 1 ? 0 : Config.READY_COUNTDOWN.get();
         if (countdown == 0) startDay(level);
     }
 

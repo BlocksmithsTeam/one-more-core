@@ -23,7 +23,10 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
+import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -32,6 +35,18 @@ import net.neoforged.neoforge.common.NeoForge;
 public class ClientSetup {
     public ClientSetup(IEventBus bus) {
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerEntityRenderer(OneMoreClient.CUSTOMER.get(), CustomerRenderer::new));
+        bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreClient.OPEN_SIGN_ENTITY.get(), OpenSignRenderer::new));
+        bus.addListener(OpenSignRenderer::registerModels);
+        bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
+            private OpenSignRenderer.Item renderer;
+
+            @Override
+            public BlockEntityWithoutLevelRenderer getCustomRenderer() {
+                Minecraft mc = Minecraft.getInstance();
+                if (renderer == null) renderer = new OpenSignRenderer.Item(mc.getBlockEntityRenderDispatcher(), mc.getEntityModels());
+                return renderer;
+            }
+        }, OneMoreClient.OPEN_SIGN_ITEM.get()));
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderOrderTooltip);
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderArea);
         bus.addListener(RestaurantHud::register);

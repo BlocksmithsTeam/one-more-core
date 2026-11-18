@@ -6,7 +6,14 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.block.state.properties.DirectionProperty;
+import net.minecraft.world.level.block.EntityBlock;
+import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.properties.AttachFace;
+import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.block.state.properties.IntegerProperty;
+import net.minecraft.world.level.block.state.properties.RotationSegment;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import java.util.List;
@@ -33,41 +40,76 @@ import net.minecraft.world.phys.BlockHitResult;
  * The core block of a restaurant. Click to start the day. Like a storage drawer for money: click with money to put it in,
  * sneak-click to take one stack out.
  */
-public class OpenSignBlock extends Block {
+public class OpenSignBlock extends Block implements EntityBlock {
     public static final BooleanProperty OPEN = BlockStateProperties.OPEN;
-    public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    /** The register cabinet and the neon board on two short posts. */
-    private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {1, 0, 5, 15, 4, 11}, new double[] {3, 4, 7, 13, 6, 9},
-            new double[] {0, 6, 6.5, 16, 16, 9.5});
+    /** On the floor (a post), on a wall (two rods) or under a ceiling (two chains). */
+    public static final EnumProperty<AttachFace> FACE = BlockStateProperties.ATTACH_FACE;
+    /** Like a vanilla sign: 0 faces south, 4 west, 8 north, 12 east. A wall sign uses only 0, 4, 8 and 12. */
+    public static final IntegerProperty ROTATION = BlockStateProperties.ROTATION_16;
+    private static final VoxelShape FLOOR = box(4, 0, 4, 12, 16, 12), CEILING = box(4, 2, 4, 12, 16, 12);
+    /** The wall sign that faces north: the wall is at z 16, the board (z 10..12) turns on two rods out of the wall. */
+    private static final VoxelShape[] WALL = BoxShapes.byFacing(new double[] {0, 4, 10, 16, 12, 16});
 
     public OpenSignBlock(Properties properties) {
         super(properties);
-        registerDefaultState(stateDefinition.any().setValue(OPEN, false).setValue(FACING, Direction.NORTH));
+        registerDefaultState(stateDefinition.any().setValue(OPEN, false).setValue(FACE, AttachFace.FLOOR).setValue(ROTATION, 0));
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(OPEN, FACING);
+        builder.add(OPEN, FACE, ROTATION);
     }
 
+    /** Clicked on top of a block: on the floor; under a block: hanging; on a side: on the wall. Floor and ceiling face the player. */
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+        Direction clicked = context.getClickedFace();
+        if (clicked.getAxis().isHorizontal())
+            return defaultBlockState().setValue(FACE, AttachFace.WALL).setValue(ROTATION, RotationSegment.convertToSegment(clicked));
+        return defaultBlockState().setValue(FACE, clicked == Direction.UP ? AttachFace.FLOOR : AttachFace.CEILING)
+                .setValue(ROTATION, RotationSegment.convertToSegment(context.getRotation() + 180));
+    }
+
+    /** The direction that a wall sign faces, away from its wall. */
+    public static Direction wallFacing(BlockState state) {
+        // Segment 0 faces south (yaw 0), like a vanilla sign. RotationSegment.convertToDirection uses another origin.
+        return Direction.fromYRot(RotationSegment.convertToDegrees(state.getValue(ROTATION)));
     }
 
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return SHAPES[state.getValue(FACING).get2DDataValue()];
+        return switch (state.getValue(FACE)) {
+            case FLOOR -> FLOOR;
+            case CEILING -> CEILING;
+            case WALL -> WALL[wallFacing(state).get2DDataValue()];
+        };
+    }
+
+    /** Like a vanilla sign, players and customers walk through it. */
+    @Override
+    protected VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return Shapes.empty();
+    }
+
+    /** The block entity renderer draws the sign, so that the board can turn. */
+    @Override
+    protected RenderShape getRenderShape(BlockState state) {
+        return RenderShape.ENTITYBLOCK_ANIMATED;
+    }
+
+    @Override
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return new OpenSignBlockEntity(pos, state);
     }
 
     @Override
     protected BlockState rotate(BlockState state, Rotation rotation) {
-        return state.setValue(FACING, rotation.rotate(state.getValue(FACING)));
+        return state.setValue(ROTATION, rotation.rotate(state.getValue(ROTATION), 16));
     }
 
     @Override
     protected BlockState mirror(BlockState state, Mirror mirror) {
-        return state.rotate(mirror.getRotation(state.getValue(FACING)));
+        return state.setValue(ROTATION, mirror.mirror(state.getValue(ROTATION), 16));
     }
 
     @Override

@@ -56,11 +56,14 @@ public class ReadyHud {
         event.registerBelow(VanillaGuiLayers.DEBUG_OVERLAY, ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "ready"), ReadyHud::render);
     }
 
-    /** The fresh status of a closed restaurant whose area contains this player, or null. */
+    /**
+     * The fresh status of a closed restaurant whose area contains this player and in which a player clicked the sign
+     * (at least one player is ready), or null.
+     */
     static Status status() {
         Minecraft mc = Minecraft.getInstance();
         Status s = Status.client;
-        if (s == null || s.open() || mc.player == null || System.currentTimeMillis() - Status.clientTime > 1500) return null;
+        if (s == null || s.open() || s.readyCount() == 0 || mc.player == null || System.currentTimeMillis() - Status.clientTime > 1500) return null;
         return me(s) == null ? null : s;
     }
 

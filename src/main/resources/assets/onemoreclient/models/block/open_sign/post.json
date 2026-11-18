@@ -1,0 +1,76 @@
+{
+ "textures": {
+  "wood": "minecraft:block/dark_oak_planks",
+  "particle": "minecraft:block/dark_oak_planks"
+ },
+ "elements": [
+  {
+   "from": [
+    7,
+    0,
+    7
+   ],
+   "to": [
+    9,
+    8,
+    9
+   ],
+   "faces": {
+    "north": {
+     "texture": "#wood",
+     "uv": [
+      7,
+      8,
+      9,
+      16
+     ]
+    },
+    "south": {
+     "texture": "#wood",
+     "uv": [
+      7,
+      8,
+      9,
+      16
+     ]
+    },
+    "east": {
+     "texture": "#wood",
+     "uv": [
+      7,
+      8,
+      9,
+      16
+     ]
+    },
+    "west": {
+     "texture": "#wood",
+     "uv": [
+      7,
+      8,
+      9,
+      16
+     ]
+    },
+    "up": {
+     "texture": "#wood",
+     "uv": [
+      7,
+      7,
+      9,
+      9
+     ]
+    },
+    "down": {
+     "texture": "#wood",
+     "uv": [
+      7,
+      7,
+      9,
+      9
+     ]
+    }
+   }
+  }
+ ]
+}
