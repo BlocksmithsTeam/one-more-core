@@ -282,6 +282,7 @@ public class Customer extends PathfinderMob {
             ItemStack held = player.getItemInHand(hand);
             if (!deliver(player, held) && !held.isEmpty()) {
                 party.patience = Math.max(1, party.patience - Config.WRONG_PENALTY.get());
+                party.members.forEach(m -> m.entityData.set(PATIENCE, party.patience / (float) party.patienceMax));
                 effect(SoundEvents.VILLAGER_NO, null);
                 player.displayClientMessage(Component.translatable("onemoreclient.customer.wrong"), true);
             }
