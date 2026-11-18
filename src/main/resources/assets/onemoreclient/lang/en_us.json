@@ -90,5 +90,6 @@
   "onemoreclient.free.help_area2": "Right click the second corner. Left click: cancel.",
   "onemoreclient.free.help_spawn": "Right click the ground where customers arrive.",
   "onemoreclient.free.help_delivery": "Right click a chest or a barrel. Shop orders arrive in it.",
-  "onemoreclient.free.keys": "WASD, Space, Shift: fly. Ctrl: fast. 1 2 3: tool. Esc: done."
+  "onemoreclient.free.keys": "WASD, Space, Shift: fly. Ctrl: fast. 1 2 3: tool. Esc: done.",
+  "onemoreclient.wiping.cloth": "Pick up and drag to wipe. Esc: leave."
 }

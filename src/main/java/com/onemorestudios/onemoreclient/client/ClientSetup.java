@@ -53,8 +53,10 @@ public class ClientSetup {
         bus.addListener(ReadyHud::registerKeys);
         bus.addListener(ReadyHud::registerLayer);
         NeoForge.EVENT_BUS.addListener(ReadyHud::tick);
+        bus.addListener(DirtRenderer::registerModels);
         DirtRenderer.register();
         ComputerCamera.register();
+        if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) WipingBehavior.register();
     }
 
     /** Shows the normal item tooltips of the order while the player looks at a customer. */
