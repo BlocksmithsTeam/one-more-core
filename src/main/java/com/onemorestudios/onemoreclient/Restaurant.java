@@ -227,7 +227,7 @@ public class Restaurant {
         open = true;
         served = lost = earned = 0;
         penalties = 0;
-        toSpawn = Config.CUSTOMERS_BASE.get() + Config.CUSTOMERS_PER_DAY.get() * (day - 1);
+        toSpawn = (int) Math.min(Integer.MAX_VALUE, Config.CUSTOMERS_BASE.get() + (long) Config.CUSTOMERS_PER_DAY.get() * (day - 1));
         spawnTimer = 40;
         announce(level, Component.translatable("onemoreclient.open.started.title", day),
                 Component.translatable("onemoreclient.open.started", day, toSpawn));
