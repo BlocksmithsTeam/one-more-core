@@ -65,7 +65,7 @@ public final class ComputerCamera {
     static int reopenApp;
 
     // Free camera.
-    enum Tool { AREA, SPAWN, DELIVERY }
+    enum Tool { AREA, SPAWN, DELIVERY, TABLES }
     static Tool tool = Tool.AREA;
     static BlockPos corner;
     static Component message = Component.empty();
@@ -309,6 +309,7 @@ public final class ComputerCamera {
             }
             case SPAWN -> send(Computer.SET_SPAWN, List.of(pos.getX(), pos.getY(), pos.getZ()));
             case DELIVERY -> send(Computer.SET_DELIVERY, List.of(pos.getX(), pos.getY(), pos.getZ()));
+            case TABLES -> send(Computer.TOGGLE_TABLE, List.of(pos.getX(), pos.getY(), pos.getZ()));
         }
     }
 
@@ -322,7 +323,7 @@ public final class ComputerCamera {
     private static void key(InputEvent.Key event) {
         if (mode != Mode.FREE || event.getAction() != org.lwjgl.glfw.GLFW.GLFW_PRESS || Minecraft.getInstance().screen != null) return;
         int k = event.getKey();
-        if (k >= org.lwjgl.glfw.GLFW.GLFW_KEY_1 && k <= org.lwjgl.glfw.GLFW.GLFW_KEY_3) {
+        if (k >= org.lwjgl.glfw.GLFW.GLFW_KEY_1 && k <= org.lwjgl.glfw.GLFW.GLFW_KEY_4) {
             tool = Tool.values()[k - org.lwjgl.glfw.GLFW.GLFW_KEY_1];
             corner = null;
         }
@@ -352,6 +353,14 @@ public final class ComputerCamera {
         state.sign().ifPresent(p -> LevelRenderer.renderLineBox(pose, lines, new AABB(p).inflate(0.02), 1f, 1f, 1f, 1f));
         state.spawn().ifPresent(p -> LevelRenderer.renderLineBox(pose, lines, new AABB(p), 0.3f, 0.6f, 1f, 1f));
         state.delivery().ifPresent(p -> LevelRenderer.renderLineBox(pose, lines, new AABB(p).inflate(0.02), 1f, 0.55f, 0.1f, 1f));
+        if (tool == Tool.TABLES) {
+            // Tables: green when customers may use them, red when they are off.
+            java.util.Set<BlockPos> off = new java.util.HashSet<>(state.offSurfaces());
+            for (BlockPos p : state.surfaces()) {
+                boolean on = !off.contains(p);
+                LevelRenderer.renderLineBox(pose, lines, new AABB(p).deflate(0.03), on ? 0.3f : 1f, on ? 1f : 0.25f, on ? 0.4f : 0.25f, 1f);
+            }
+        }
         BlockPos p = target();
         if (p != null) {
             // The box grows from the first corner to the looked-at point, like Create's Super Glue.
@@ -368,22 +377,24 @@ public final class ComputerCamera {
         GuiGraphics g = event.getGuiGraphics();
         var font = mc.font;
         Component[] tools = {Component.translatable("onemoreclient.free.area"), Component.translatable("onemoreclient.free.spawn"),
-                Component.translatable("onemoreclient.free.delivery")};
-        int[] colors = {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A};
+                Component.translatable("onemoreclient.free.delivery"), Component.translatable("onemoreclient.free.tables")};
+        int[] colors = {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A, 0xFFE05555};
         Component help = altDown() ? Component.translatable("onemoreclient.free.help_alt", (int) reach)
                 : Component.translatable(tool == Tool.AREA ? (corner == null ? "onemoreclient.free.help_area1" : "onemoreclient.free.help_area2")
-                : tool == Tool.SPAWN ? "onemoreclient.free.help_spawn" : "onemoreclient.free.help_delivery");
+                : tool == Tool.SPAWN ? "onemoreclient.free.help_spawn" : tool == Tool.DELIVERY ? "onemoreclient.free.help_delivery"
+                : "onemoreclient.free.help_tables");
         // Tool tabs, then one line of help, then the last answer of the server.
         int toolsW = -4;
         for (Component t : tools) toolsW += font.width(t) + 24 + 4;
         int w = Math.min(g.guiWidth() - 12, Math.max(toolsW, font.width(help)) + 12);
         boolean showMessage = System.currentTimeMillis() - messageTime < 4000 && !message.getString().isEmpty();
         int h = 4 + 14 + 4 + 10 + (showMessage ? 10 : 0) + 4;
-        int x = (g.guiWidth() - w) / 2, y = 6;
+        // At the bottom, above the hotbar: the top of the screen belongs to block tooltips of other mods (Jade).
+        int x = (g.guiWidth() - w) / 2, y = g.guiHeight() - 62 - h;
         g.fill(x + 1, y, x + w - 1, y + h, 0x8C0C0C0C);
         g.fill(x, y + 1, x + w, y + h - 1, 0x8C0C0C0C);
         int tx = x + (w - toolsW) / 2, ty = y + 4;
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < tools.length; i++) {
             int tw = font.width(tools[i]) + 24;
             boolean on = tool.ordinal() == i;
             g.fill(tx, ty, tx + tw, ty + 14, on ? 0x55FFFFFF : 0x1AFFFFFF);
@@ -395,6 +406,6 @@ public final class ComputerCamera {
         g.drawString(font, help, x + (w - font.width(help)) / 2, ty + 18, 0xFFFFFFFF, false);
         if (showMessage) g.drawString(font, message, x + (w - font.width(message)) / 2, ty + 28, 0xFFFFE27A, false);
         Component keys = Component.translatable("onemoreclient.free.keys");
-        g.drawString(font, keys, (g.guiWidth() - font.width(keys)) / 2, g.guiHeight() - 60, 0xFFC0C6CC, true);
+        g.drawString(font, keys, (g.guiWidth() - font.width(keys)) / 2, y - 11, 0xFFC0C6CC, true);
     }
 }

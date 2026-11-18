@@ -250,31 +250,11 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
                     float grow = 1.2f + 0.04f * Mth.sin(time * 0.3f);
                     pose.scale(grow, grow, grow);
                 }
-                renderFood(order.get(i), pose, buffers, customer, i);
+                // The bubble shows the item as it is; the 3D form is only for the food on the table.
+                items.renderStatic(order.get(i), ItemDisplayContext.FIXED, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, pose, buffers, customer.level(), customer.getId() + i);
                 pose.popPose();
             }
         }
-        pose.popPose();
-    }
-
-    /**
-     * A food in the bubble, in 3D when it has a block form (a Display Delight plate, a placed dish or bottle): the block
-     * at a slant like a block in the inventory. Other items use their own model.
-     */
-    private void renderFood(ItemStack stack, PoseStack pose, MultiBufferSource buffers, Customer customer, int seed) {
-        var block = FoodModels.block(stack);
-        if (block == null) {
-            items.renderStatic(stack, ItemDisplayContext.FIXED, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, pose, buffers, customer.level(), customer.getId() + seed);
-            return;
-        }
-        pose.pushPose();
-        // The pose faces away from the camera after the half turn; the slant shows the top of the dish.
-        pose.mulPose(Axis.XP.rotationDegrees(-30));
-        pose.mulPose(Axis.YP.rotationDegrees(45));
-        // A plate is flat: at 1.1 its width fills the slot like a flat item does.
-        pose.scale(1.1f, 1.1f, 1.1f);
-        pose.translate(-0.5, -0.5, -0.5);
-        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(block, pose, buffers, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY);
         pose.popPose();
     }
 

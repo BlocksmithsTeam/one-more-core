@@ -41,7 +41,8 @@ public class Computer extends Block {
     private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {2, 0, 4, 14, 11, 13}, new double[] {4, 1, 13, 12, 9, 16},
             new double[] {2, 0, 0.5, 14, 1.5, 3.5});
     public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
-            TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9;
+            TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9, SET_KIND = 10, ADD_COMBO = 11, REMOVE_COMBO = 12,
+            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14;
     /** How far from the computer the manager app may set a point, in blocks per axis. */
     public static final int PLACE_RANGE = 48;
     /** Bits of {@link State#apps}. */
@@ -50,7 +51,7 @@ public class Computer extends Block {
     public static final int AVAILABLE = 0, LOCKED_DAY = 1, BUYABLE = 2;
 
     /** A dish. "on": customers order it. "custom": a player added it, so its price can change and it can be removed. */
-    public record MenuLine(String id, ItemStack icon, int price, int day, int cost, int state, boolean on, boolean custom) {
+    public record MenuLine(String id, ItemStack icon, int price, int day, int cost, int state, boolean on, boolean custom, String kind) {
         static final StreamCodec<RegistryFriendlyByteBuf, MenuLine> CODEC = StreamCodec.of((b, l) -> {
             ByteBufCodecs.STRING_UTF8.encode(b, l.id);
             ItemStack.OPTIONAL_STREAM_CODEC.encode(b, l.icon);
@@ -60,8 +61,16 @@ public class Computer extends Block {
             b.writeVarInt(l.state);
             b.writeBoolean(l.on);
             b.writeBoolean(l.custom);
+            ByteBufCodecs.stringUtf8(16).encode(b, l.kind);
         }, b -> new MenuLine(ByteBufCodecs.STRING_UTF8.decode(b), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(), b.readVarInt(),
-                b.readVarInt(), b.readVarInt(), b.readBoolean(), b.readBoolean()));
+                b.readVarInt(), b.readVarInt(), b.readBoolean(), b.readBoolean(), ByteBufCodecs.stringUtf8(16).decode(b)));
+    }
+
+    /** A combo: its dish ids, its price, and whether customers can order it now. */
+    public record ComboLine(String id, List<String> dishes, int price, boolean orderable) {
+        static final StreamCodec<RegistryFriendlyByteBuf, ComboLine> CODEC = StreamCodec.composite(
+                ByteBufCodecs.STRING_UTF8, ComboLine::id, ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list(8)), ComboLine::dishes,
+                ByteBufCodecs.VAR_INT, ComboLine::price, ByteBufCodecs.BOOL, ComboLine::orderable, ComboLine::new);
     }
 
     public record ShopLine(String id, ItemStack stack, ItemStack icon, int price) {
@@ -78,7 +87,13 @@ public class Computer extends Block {
      */
     public record State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance,
             List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message,
-            Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery) implements CustomPacketPayload {
+            Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
+            List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces) implements CustomPacketPayload {
+        public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, List<MenuLine> menu, List<ShopLine> shop,
+                List<Component> info, Component message, Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery) {
+            this(pos, open, found, apps, currency, balance, menu, shop, info, message, sign, area, spawn, delivery, List.of(), List.of(), List.of());
+        }
+        static final StreamCodec<io.netty.buffer.ByteBuf, List<BlockPos>> POSITIONS = BlockPos.STREAM_CODEC.apply(ByteBufCodecs.list(4096));
         static final StreamCodec<io.netty.buffer.ByteBuf, Optional<BlockPos>> OPTIONAL_POS = ByteBufCodecs.optional(BlockPos.STREAM_CODEC);
         static final StreamCodec<io.netty.buffer.ByteBuf, List<Integer>> INTS = ByteBufCodecs.VAR_INT.apply(ByteBufCodecs.list(6));
         public static final Type<State> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "computer_state"));
@@ -97,10 +112,14 @@ public class Computer extends Block {
             INTS.encode(b, s.area);
             OPTIONAL_POS.encode(b, s.spawn);
             OPTIONAL_POS.encode(b, s.delivery);
+            ComboLine.CODEC.apply(ByteBufCodecs.list()).encode(b, s.combos);
+            POSITIONS.encode(b, s.surfaces);
+            POSITIONS.encode(b, s.offSurfaces);
         }, b -> new State(b.readBlockPos(), b.readBoolean(), b.readBoolean(), b.readVarInt(), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(),
                 MenuLine.CODEC.apply(ByteBufCodecs.list()).decode(b), ShopLine.CODEC.apply(ByteBufCodecs.list()).decode(b),
                 ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(b), ComponentSerialization.STREAM_CODEC.decode(b),
-                OPTIONAL_POS.decode(b), INTS.decode(b), OPTIONAL_POS.decode(b), OPTIONAL_POS.decode(b)));
+                OPTIONAL_POS.decode(b), INTS.decode(b), OPTIONAL_POS.decode(b), OPTIONAL_POS.decode(b),
+                ComboLine.CODEC.apply(ByteBufCodecs.list()).decode(b), POSITIONS.decode(b), POSITIONS.decode(b)));
 
         @Override
         public Type<State> type() { return TYPE; }
@@ -187,6 +206,40 @@ public class Computer extends Block {
             else if (Restaurant.container(level, a) == null) key = "not_container";
             else { r.setDelivery(a); key = "delivery_set"; }
             message = Component.translatable("onemoreclient.tool." + key, key.equals("too_big") ? Config.MAX_AREA.get() : PLACE_RANGE);
+        } else if (request.action == TOGGLE_TABLE) {
+            if (r == null || !Config.APP_MANAGER.get()) return null;
+            int[] n = ints(request.id, 3);
+            if (n == null) return null;
+            BlockPos p = new BlockPos(n[0], n[1], n[2]);
+            String key = !near(request.pos, p) || !level.isLoaded(p) ? "too_far" : r.isOpen() ? "busy" : !r.toggleTable(level, p) ? "not_table"
+                    : r.isTableOn(r.tableAt(level, p)) ? "table_on" : "table_off";
+            message = Component.translatable("onemoreclient.tool." + key, PLACE_RANGE);
+        } else if (request.action >= SET_KIND && request.action <= SET_COMBO_PRICE) {
+            if (r == null || !Config.APP_MENU.get()) return null;
+            String key;
+            if (request.action == REMOVE_COMBO) {
+                if (!r.removeCombo(request.id)) return null;
+                key = "combo_removed";
+            } else {
+                int comma = request.id.lastIndexOf(',');
+                if (comma < 0) return null;
+                String head = request.id.substring(0, comma), tail = request.id.substring(comma + 1).trim();
+                if (request.action == SET_KIND) {
+                    if (!r.setKind(head, tail)) return null;
+                    key = "kind_set";
+                } else {
+                    int price;
+                    try { price = Integer.parseInt(tail); } catch (NumberFormatException e) { return null; }
+                    if (request.action == SET_COMBO_PRICE) key = r.setComboPrice(head, price) ? "price_set" : "price_range";
+                    else key = switch (r.addCombo(List.of(head.split(";")), price)) {
+                        case OK -> "combo_added";
+                        case DISHES -> "combo_dishes";
+                        case PRICE -> "price_range";
+                        case FULL -> "combo_full";
+                    };
+                }
+            }
+            message = Component.translatable("onemoreclient.computer." + key, Config.MAX_DISH_PRICE.get() * Restaurant.MAX_COMBO_DISHES);
         } else if (request.action >= TOGGLE_DISH && request.action <= SET_PRICE) {
             if (r == null || !Config.APP_MENU.get()) return null;
             String key;
@@ -272,7 +325,7 @@ public class Computer extends Block {
             ItemStack icon = e.tag() == null ? e.stack() : BuiltInRegistries.ITEM.getTag(e.tag())
                     .flatMap(set -> set.stream().findFirst()).map(ItemStack::new).orElse(ItemStack.EMPTY);
             menu.add(new MenuLine(e.id(), icon, e.price(), e.day(), e.cost(), r.isAvailable(e) ? AVAILABLE : r.day() < e.day() ? LOCKED_DAY : BUYABLE,
-                    r.isOn(e), e.id().startsWith("custom:")));
+                    r.isOn(e), e.id().startsWith("custom:"), r.kind(e)));
         }
         List<ShopLine> shop = new ArrayList<>();
         for (Shop.Entry e : Shop.entries) shop.add(new ShopLine(e.id(), e.stack(), e.icon(), e.price()));
@@ -290,8 +343,19 @@ public class Computer extends Block {
                 Component.translatable("onemoreclient.computer.info.delivery", r.delivery() == null ? none : r.delivery().toShortString()),
                 Component.translatable("onemoreclient.computer.info.seats", seats),
                 Component.translatable("onemoreclient.computer.info.orders", r.deliveries.size()));
+        List<ComboLine> combos = r.combos.stream().map(c -> new ComboLine(c.id(), c.dishes(), c.price(), r.canOrder(c))).toList();
+        // The serving surfaces next to seats, and the ones of tables that are off, for the free camera's table tool.
+        List<BlockPos> surfaces = new ArrayList<>(), off = new ArrayList<>();
+        if (a != null) {
+            for (List<Restaurant.Seat> table : r.groupTables(level, r.isOpen() ? r.seats : r.scanSeats(level))) {
+                java.util.Set<BlockPos> all = r.tableAt(level, table.get(0).surface());
+                boolean on = r.isTableOn(all);
+                for (BlockPos p : all) { surfaces.add(p); if (!on) off.add(p); }
+            }
+        }
         return new State(pos, open, true, apps, currency, r.register(), menu, shop, info, message, Optional.of(r.sign),
                 a == null ? List.of() : List.of(a.minX(), a.minY(), a.minZ(), a.maxX(), a.maxY(), a.maxZ()),
-                Optional.ofNullable(r.spawn()), Optional.ofNullable(r.delivery()));
+                Optional.ofNullable(r.spawn()), Optional.ofNullable(r.delivery()), combos,
+                surfaces.size() > 4096 ? surfaces.subList(0, 4096) : surfaces, off.size() > 4096 ? off.subList(0, 4096) : off);
     }
 }

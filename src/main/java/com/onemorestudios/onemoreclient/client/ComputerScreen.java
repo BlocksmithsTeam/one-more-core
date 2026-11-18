@@ -40,6 +40,12 @@ public class ComputerScreen extends Screen {
     private int app;
     /** In the menu app: the picker that adds a food. */
     private boolean adding;
+    /** In the menu app: "all", a kind of dish, or "combos". */
+    private String filter = "all";
+    /** In the combos tab: the dishes of a new combo, while it is made. */
+    private List<String> building;
+    private static final String[] FILTERS = {"all", "main", "drink", "starter", "dessert", "combos"};
+    private static final int CHIPS = 13;
     private double scroll;
     private int dx, dy, dw, dh, wx, wy, ww, wh, cx, cy, cw, ch;
     private final List<Hit> hits = new ArrayList<>();
@@ -78,6 +84,8 @@ public class ComputerScreen extends Screen {
     private void open(int which) {
         app = which;
         adding = false;
+        building = null;
+        filter = "all";
         scroll = 0;
         if (search != null) search.setValue("");
         send(Computer.REFRESH, "");
@@ -192,7 +200,7 @@ public class ComputerScreen extends Screen {
         rounded(g, wx, wy, ww, wh, WINDOW);
         g.fill(wx + 1, wy, wx + ww - 1, wy + TITLE, TITLE_BAR);
         g.blitSprite(sprite("app_" + KEYS[i]), wx + 4, wy + 2, 14, 14);
-        Component title = adding ? text("title.add") : text("title." + KEYS[i]);
+        Component title = adding ? text("title.add") : building != null ? text("title.combo") : text("title." + KEYS[i]);
         g.drawString(font, title, wx + 22, wy + 5, WHITE, false);
         // The register, at the right of the title bar.
         String money = String.valueOf(state.balance());
@@ -207,10 +215,11 @@ public class ComputerScreen extends Screen {
         boolean overClose = mouseX >= bx && mouseX < wx + ww && mouseY >= wy && mouseY < wy + TITLE;
         if (overClose) g.fill(bx, wy, wx + ww - 1, wy + TITLE, RED);
         g.drawString(font, "×", bx + (TITLE - font.width("×")) / 2 + 1, wy + 5, WHITE, false);
-        hits.add(new Hit(bx, wy, TITLE, TITLE, () -> { if (adding) adding = false; else app = 0; }));
+        hits.add(new Hit(bx, wy, TITLE, TITLE, this::back));
 
         cx = wx + 6;
-        cy = wy + TITLE + 5 + (hasSearch() ? SEARCH + 5 : 0);
+        boolean chips = app == Computer.APP_MENU && !adding && building == null;
+        cy = wy + TITLE + 5 + (hasSearch() ? SEARCH + 5 : 0) + (chips ? CHIPS + 4 : 0);
         cw = ww - 12;
         ch = wy + wh - 6 - cy;
         if (hasSearch()) {
@@ -222,9 +231,23 @@ public class ComputerScreen extends Screen {
             search.setWidth(cw - 20);
             search.render(g, mouseX, mouseY, partialTick);
         }
+        if (chips) {
+            // Kind filters: all, the four kinds, and the combos.
+            int x = cx, y = wy + TITLE + 5 + SEARCH + 5;
+            for (String f : FILTERS) {
+                Component label = text("kind." + f);
+                int w = font.width(label) + 8;
+                boolean on = filter.equals(f), over = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + CHIPS;
+                rounded(g, x, y, w, CHIPS, on ? BLUE : over ? CARD_HOVER : CARD);
+                g.drawString(font, label, x + 4, y + 3, on ? WHITE : GREY, false);
+                hits.add(new Hit(x, y, w, CHIPS, () -> { filter = f; scroll = 0; }));
+                x += w + 3;
+            }
+        }
         g.enableScissor(cx, cy, cx + cw, cy + ch);
         ItemStack hovered = switch (app) {
-            case Computer.APP_MENU -> adding ? drawPicker(g, mouseX, mouseY) : drawMenu(g, mouseX, mouseY);
+            case Computer.APP_MENU -> adding ? drawPicker(g, mouseX, mouseY) : building != null ? drawBuilder(g, mouseX, mouseY)
+                    : filter.equals("combos") ? drawCombos(g, mouseX, mouseY) : drawMenu(g, mouseX, mouseY);
             case Computer.APP_SHOP -> drawShop(g, mouseX, mouseY);
             default -> { drawManager(g, mouseX, mouseY); yield ItemStack.EMPTY; }
         };
@@ -290,7 +313,7 @@ public class ComputerScreen extends Screen {
     }
 
     private ItemStack drawMenu(GuiGraphics g, int mouseX, int mouseY) {
-        List<Computer.MenuLine> lines = state.menu().stream().filter(l -> matches(l.icon())).toList();
+        List<Computer.MenuLine> lines = state.menu().stream().filter(l -> matches(l.icon()) && (filter.equals("all") || filter.equals(l.kind()))).toList();
         int columns = columns(), w = cardWidth(columns);
         int count = lines.size() + 1; // the last card adds a dish
         scroll = Mth.clamp(scroll, 0, Math.max(0, ((count + columns - 1) / columns) * (CARD_H + GAP) - GAP - ch));
@@ -309,7 +332,14 @@ public class ComputerScreen extends Screen {
             }
             Computer.MenuLine line = lines.get(i);
             boolean over = card(g, x, y, w, line.icon(), ItemStack.EMPTY, mouseX, mouseY);
-            if (over && mouseY < y + 42) hovered = line.icon();
+            if (over && mouseY < y + 42 && mouseY > y + 15) hovered = line.icon();
+            // The kind, top left of the picture: a click changes it to the next kind.
+            Component kind = text("kind." + line.kind());
+            int kw = font.width(kind) + 6;
+            boolean overKind = inside(mouseX, mouseY, x + 4, y + 4, kw, 11);
+            rounded(g, x + 4, y + 4, kw, 11, overKind ? 0xEE3D7FE0 : 0xCC11151A);
+            g.drawString(font, kind, x + 7, y + 6, WHITE, false);
+            clipHit(x + 4, y + 4, kw, 11, () -> send(Computer.SET_KIND, line.id() + "," + nextKind(line.kind())));
             int py = y + 57;
             if (line.custom()) {
                 // Price with - and + (Shift: 10); the cross removes the dish.
@@ -330,6 +360,105 @@ public class ComputerScreen extends Screen {
                 default -> button(g, x + 4, by, w - 8, 15, text("unlock_cost", line.cost()), BLUE, BLUE_HOVER, state.balance() >= line.cost(),
                         mouseX, mouseY, () -> send(Computer.UNLOCK, line.id()));
             }
+        }
+        return hovered;
+    }
+
+    private static String nextKind(String kind) {
+        int i = java.util.Arrays.asList(FILTERS).indexOf(kind);
+        return FILTERS[i < 1 || i >= 4 ? 1 : i + 1];
+    }
+
+    /** Closes the picker or the combo maker first, then the window. */
+    private void back() {
+        if (adding) adding = false;
+        else if (building != null) building = null;
+        else app = 0;
+    }
+
+    private Computer.MenuLine line(String id) {
+        for (Computer.MenuLine l : state.menu()) if (l.id().equals(id)) return l;
+        return null;
+    }
+
+    /** The combos: their dishes, price (- and +), a cross that removes them, and a card that makes a new one. */
+    private ItemStack drawCombos(GuiGraphics g, int mouseX, int mouseY) {
+        List<Computer.ComboLine> combos = state.combos();
+        int columns = Math.max(1, (cw + GAP) / (96 + GAP)), w = (cw - (columns - 1) * GAP) / columns, h = 62;
+        int count = combos.size() + 1;
+        scroll = Mth.clamp(scroll, 0, Math.max(0, ((count + columns - 1) / columns) * (h + GAP) - GAP - ch));
+        ItemStack hovered = ItemStack.EMPTY;
+        for (int i = 0; i < count; i++) {
+            int x = cx + (i % columns) * (w + GAP), y = cy + (i / columns) * (h + GAP) - (int) scroll;
+            if (y + h < cy || y > cy + ch) continue;
+            boolean over = inside(mouseX, mouseY, x, y, w, h);
+            if (i == combos.size()) {
+                rounded(g, x, y, w, h, over ? CARD_HOVER : 0xFF20252C);
+                g.blitSprite(sprite("add"), x + w / 2 - 8, y + 14, 16, 16);
+                Component add = text("combo_new");
+                g.drawString(font, add, x + (w - font.width(add)) / 2, y + 36, GREY, false);
+                clipHit(x, y, w, h, () -> { building = new ArrayList<>(); scroll = 0; search.setValue(""); });
+                continue;
+            }
+            Computer.ComboLine c = combos.get(i);
+            rounded(g, x, y, w, h, over ? CARD_HOVER : CARD);
+            rounded(g, x + 3, y + 3, w - 6, 24, PICTURE);
+            int ix = x + (w - c.dishes().size() * 18) / 2;
+            for (String id : c.dishes()) {
+                Computer.MenuLine l = line(id);
+                if (l != null) {
+                    g.renderItem(l.icon(), ix + 1, y + 7);
+                    if (inside(mouseX, mouseY, ix, y + 6, 18, 18)) hovered = l.icon();
+                }
+                ix += 18;
+            }
+            button(g, x + 4, y + 30, 11, 11, Component.literal("-"), OFF, CARD_HOVER, c.price() > 1, mouseX, mouseY,
+                    () -> send(Computer.SET_COMBO_PRICE, c.id() + "," + Math.max(1, c.price() - step())));
+            price(g, x + 18, y + 32, c.price());
+            button(g, x + w - 15, y + 30, 11, 11, Component.literal("+"), OFF, CARD_HOVER, true, mouseX, mouseY,
+                    () -> send(Computer.SET_COMBO_PRICE, c.id() + "," + (c.price() + step())));
+            Component status = text(c.orderable() ? "combo_on" : "combo_off");
+            g.drawString(font, status, x + 4, y + 47, c.orderable() ? GREEN_HOVER : GREY, false);
+            button(g, x + w - 13, y + 5, 9, 9, Component.literal("\u00d7"), 0xAA000000, RED, true, mouseX, mouseY, () -> send(Computer.REMOVE_COMBO, c.id()));
+        }
+        return hovered;
+    }
+
+    /** The combo maker: dishes on the menu to pick (2 to 4), then "Create" with 90 percent of their prices. */
+    private ItemStack drawBuilder(GuiGraphics g, int mouseX, int mouseY) {
+        List<Computer.MenuLine> lines = state.menu().stream().filter(l -> l.on() && l.state() == Computer.AVAILABLE && matches(l.icon())).toList();
+        int size = 28, columns = Math.max(1, (cw + 3) / (size + 3));
+        int top = 22;
+        int sum = building.stream().map(this::line).filter(java.util.Objects::nonNull).mapToInt(Computer.MenuLine::price).sum();
+        int comboPrice = Math.max(1, (int) Math.round(sum * 0.9));
+        // The bar at the top: picked dishes and the Create button.
+        rounded(g, cx, cy, cw, 18, CARD);
+        int bx = cx + 4;
+        for (String id : building) {
+            Computer.MenuLine l = line(id);
+            if (l != null) g.renderItem(l.icon(), bx, cy + 1);
+            bx += 18;
+        }
+        if (building.size() >= 2) price(g, bx + 4, cy + 5, comboPrice);
+        button(g, cx + cw - 52, cy + 2, 48, 14, text("combo_create"), GREEN, GREEN_HOVER, building.size() >= 2, mouseX, mouseY, () -> {
+            send(Computer.ADD_COMBO, String.join(";", building) + "," + comboPrice);
+            building = null;
+            filter = "combos";
+        });
+        scroll = Mth.clamp(scroll, 0, Math.max(0, top + ((lines.size() + columns - 1) / columns) * (size + 3) - 3 - ch));
+        ItemStack hovered = ItemStack.EMPTY;
+        for (int i = 0; i < lines.size(); i++) {
+            Computer.MenuLine l = lines.get(i);
+            int x = cx + (i % columns) * (size + 3), y = cy + top + (i / columns) * (size + 3) - (int) scroll;
+            if (y + size < cy + top || y > cy + ch) continue;
+            boolean picked = building.contains(l.id()), over = inside(mouseX, mouseY, x, y, size, size);
+            rounded(g, x, y, size, size, picked ? 0xFF1F3A27 : over ? CARD_HOVER : CARD);
+            g.renderItem(l.icon(), x + (size - 16) / 2, y + (size - 16) / 2);
+            if (over) hovered = l.icon();
+            clipHit(x, Math.max(y, cy + top), size, size, () -> {
+                if (picked) building.remove(l.id());
+                else if (building.size() < 4) building.add(l.id());
+            });
         }
         return hovered;
     }
@@ -405,7 +534,14 @@ public class ComputerScreen extends Screen {
             g.blitSprite(sprite(set[i] ? "check" : "cross"), cx + cw - 16, y + 6, 8, 8);
             y += 23;
         }
-        y += 4;
+        // Tables: how many of them customers may use.
+        long tables = state.surfaces().size(), off = state.offSurfaces().size();
+        rounded(g, cx, y, cw, 20, CARD);
+        g.fill(cx + 6, y + 7, cx + 12, y + 13, 0xFFE05555);
+        g.drawString(font, Component.translatable("onemoreclient.free.tables"), cx + 18, y + 6, WHITE, false);
+        String count = (tables - off) + "/" + tables;
+        g.drawString(font, count, cx + cw - 8 - font.width(count), y + 6, GREY, false);
+        y += 27;
         button(g, cx, y, cw, 20, text("edit_places"), BLUE, BLUE_HOVER, true, mouseX, mouseY, ComputerCamera::startFree);
     }
 
@@ -436,8 +572,7 @@ public class ComputerScreen extends Screen {
     @Override
     public boolean keyPressed(int key, int scanCode, int modifiers) {
         if (key == GLFW.GLFW_KEY_ESCAPE) {
-            if (adding) adding = false;
-            else if (app != 0) app = 0;
+            if (adding || building != null || app != 0) back();
             else ComputerCamera.leave();
             return true;
         }

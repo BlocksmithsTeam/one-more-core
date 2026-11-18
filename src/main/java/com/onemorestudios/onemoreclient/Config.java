@@ -26,8 +26,18 @@ public class Config {
     static final ModConfigSpec.IntValue READY_COUNTDOWN = B
             .comment("Ticks between the moment every player is ready and the start of the day. 0 starts the day at once.")
             .defineInRange("readyCountdownTicks", 60, 0, 600);
+    static final ModConfigSpec.IntValue DAY_LENGTH = B
+            .comment("Length of the service of one day, in ticks (1200 = one minute). Customers come during the whole service;",
+                    "their number depends on the free tables and the speed of the players. 0: a fixed number of customers per day instead.")
+            .defineInRange("dayLengthTicks", 6000, 0, 1_728_000);
+    static final ModConfigSpec.IntValue TABLE_PAUSE = B
+            .comment("Ticks that a table stays empty after its customers left, before new customers sit there.")
+            .defineInRange("tablePauseTicks", 100, 0, 72000);
+    static final ModConfigSpec.DoubleValue COMBO_CHANCE = B
+            .comment("Chance that a customer orders one of the restaurant's combos, when a combo can be ordered.")
+            .defineInRange("comboChance", 0.3, 0, 1);
     static final ModConfigSpec.IntValue CUSTOMERS_BASE = B
-            .comment("Customers per day = customersBase + customersPerDay * (day - 1).")
+            .comment("Only with dayLengthTicks = 0: customers per day = customersBase + customersPerDay * (day - 1).")
             .defineInRange("customersBase", 3, 1, 1000);
     static final ModConfigSpec.IntValue CUSTOMERS_PER_DAY = B.defineInRange("customersPerDay", 1, 0, 1000);
     static final ModConfigSpec.IntValue LOST_CUSTOMER_PENALTY = B
@@ -37,7 +47,7 @@ public class Config {
             .comment("The day fails when this many customers leave without food. 0 disables it.")
             .defineInRange("maxLostPerDay", 0, 0, 1000);
     static final ModConfigSpec.IntValue SPAWN_INTERVAL = B
-            .comment("Ticks between two customers.")
+            .comment("Ticks between two groups of customers, on average. It is shorter on later days, down to 40 percent, and varies by up to 40 percent.")
             .defineInRange("spawnIntervalTicks", 200, 1, 72000);
     static final ModConfigSpec.IntValue ORDER_PATIENCE = B
             .comment("Ticks a seated customer waits for a player to take the order.")

@@ -65,9 +65,14 @@ public class OneMoreClient {
     public static final DeferredBlock<OpenSignBlock> OPEN_SIGN = BLOCKS.register("open_sign",
             () -> new OpenSignBlock(BlockBehaviour.Properties.of().strength(1.5f).lightLevel(s -> s.getValue(OpenSignBlock.OPEN) ? 9 : 0).noOcclusion().sound(SoundType.WOOD).pushReaction(PushReaction.BLOCK)));
     public static final DeferredItem<BlockItem> OPEN_SIGN_ITEM = ITEMS.registerSimpleBlockItem(OPEN_SIGN);
+    public static final DeferredBlock<MenuBoardBlock> MENU_BOARD = BLOCKS.register("menu_board",
+            () -> new MenuBoardBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.WOOD)));
+    public static final DeferredItem<BlockItem> MENU_BOARD_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOARD);
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OpenSignBlockEntity>> OPEN_SIGN_ENTITY = BLOCK_ENTITIES.register("open_sign",
             () -> BlockEntityType.Builder.of(OpenSignBlockEntity::new, OPEN_SIGN.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBoardBlockEntity>> MENU_BOARD_ENTITY = BLOCK_ENTITIES.register("menu_board",
+            () -> BlockEntityType.Builder.of(MenuBoardBlockEntity::new, MENU_BOARD.get()).build(null));
     public static final DeferredHolder<EntityType<?>, EntityType<Customer>> CUSTOMER = ENTITIES.register("customer",
             () -> EntityType.Builder.<Customer>of(Customer::new, MobCategory.MISC).sized(0.6f, 1.8f).noSave().noSummon().clientTrackingRange(8).build("customer"));
     public static final DeferredHolder<EntityDataSerializer<?>, EntityDataSerializer<List<ItemStack>>> STACKS = SERIALIZERS.register("stacks",
@@ -83,6 +88,7 @@ public class OneMoreClient {
             .displayItems((parameters, output) -> {
                 output.accept(OPEN_SIGN_ITEM);
                 output.accept(COMPUTER_ITEM);
+                output.accept(MENU_BOARD_ITEM);
             }).build());
 
     /** Blocks a customer can sit on. */
@@ -133,6 +139,21 @@ public class OneMoreClient {
             return;
         }
         ItemStack held = event.getItemStack();
+        // Sneak-click with an empty hand on a table of a closed restaurant turns the table off or on (like PlateUp).
+        if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND && event.getEntity().isShiftKeyDown()
+                && event.getLevel().getBlockState(event.getPos()).is(SURFACES)) {
+            if (event.getLevel() instanceof ServerLevel level) {
+                Restaurant r = Restaurants.get(level).containing(event.getPos());
+                if (r == null || r.isOpen() || !r.toggleTable(level, event.getPos())) return;
+                boolean on = r.isTableOn(r.tableAt(level, event.getPos()));
+                event.getEntity().displayClientMessage(Component.translatable("onemoreclient.tool." + (on ? "table_on" : "table_off")), true);
+                level.playSound(null, event.getPos(), on ? net.minecraft.sounds.SoundEvents.WOODEN_BUTTON_CLICK_ON : net.minecraft.sounds.SoundEvents.WOODEN_BUTTON_CLICK_OFF,
+                        net.minecraft.sounds.SoundSource.BLOCKS, 0.6f, 1);
+            }
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return;
+        }
         // Wiping: an empty main hand on a dirty surface. Vanilla sends the click again every 4 ticks while the button is down,
         // with the hit position, and checks the reach. No own packet is necessary.
         if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND) {

@@ -17,9 +17,15 @@ import net.minecraft.resources.ResourceLocation;
  *
  * @param players   the players inside the area, for the ready screen
  * @param countdown ticks until the day starts; 0 when no countdown runs
+ * @param serviceLeft ticks of service left today; 0 when the day has a fixed number of customers (then "left" counts them)
  */
 public record Status(boolean open, int day, int left, int served, int lost, int maxLost, int register, int earned,
-        ResourceLocation currency, List<Member> players, int countdown) implements CustomPacketPayload {
+        ResourceLocation currency, List<Member> players, int countdown, int serviceLeft) implements CustomPacketPayload {
+    public Status(boolean open, int day, int left, int served, int lost, int maxLost, int register, int earned,
+            ResourceLocation currency, List<Member> players, int countdown) {
+        this(open, day, left, served, lost, maxLost, register, earned, currency, players, countdown, 0);
+    }
+
     /** A player inside the area and whether the player is ready. */
     public record Member(UUID id, String name, boolean ready) {}
 
@@ -28,7 +34,7 @@ public record Status(boolean open, int day, int left, int served, int lost, int 
     static final int MAX_PLAYERS = 64;
     static final StreamCodec<ByteBuf, Status> CODEC = StreamCodec.of((buf, s) -> {
         buf.writeBoolean(s.open);
-        for (int v : new int[] {s.day, s.left, s.served, s.lost, s.maxLost, s.register, s.earned, s.countdown})
+        for (int v : new int[] {s.day, s.left, s.served, s.lost, s.maxLost, s.register, s.earned, s.countdown, s.serviceLeft})
             ByteBufCodecs.VAR_INT.encode(buf, v);
         ResourceLocation.STREAM_CODEC.encode(buf, s.currency);
         int n = Math.min(MAX_PLAYERS, s.players.size());
@@ -41,7 +47,7 @@ public record Status(boolean open, int day, int left, int served, int lost, int 
         }
     }, buf -> {
         boolean open = buf.readBoolean();
-        int[] v = new int[8];
+        int[] v = new int[9];
         for (int i = 0; i < v.length; i++) v[i] = ByteBufCodecs.VAR_INT.decode(buf);
         ResourceLocation currency = ResourceLocation.STREAM_CODEC.decode(buf);
         int n = ByteBufCodecs.VAR_INT.decode(buf);
@@ -49,7 +55,7 @@ public record Status(boolean open, int day, int left, int served, int lost, int 
         List<Member> players = new ArrayList<>(n);
         for (int i = 0; i < n; i++)
             players.add(new Member(UUIDUtil.STREAM_CODEC.decode(buf), ByteBufCodecs.stringUtf8(16).decode(buf), buf.readBoolean()));
-        return new Status(open, v[0], v[1], v[2], v[3], v[4], v[5], v[6], currency, List.copyOf(players), v[7]);
+        return new Status(open, v[0], v[1], v[2], v[3], v[4], v[5], v[6], currency, List.copyOf(players), v[7], v[8]);
     });
 
     public int readyCount() { return (int) players.stream().filter(Member::ready).count(); }

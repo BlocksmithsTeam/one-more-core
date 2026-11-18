@@ -55,6 +55,19 @@ public class Restaurant {
     final Set<String> unlocked = new HashSet<>();
     /** Ids of dishes that the players took off the menu. */
     final Set<String> off = new HashSet<>();
+    /** The kind of a dish, set by a player; without an entry the dish keeps its own kind. */
+    final Map<String, String> kinds = new HashMap<>();
+    /** Combos that the players made: several dishes for one price. */
+    final List<Combo> combos = new ArrayList<>();
+    /** Surfaces of tables that the players turned off. A table with one of them gets no customers. */
+    final Set<BlockPos> offTables = new HashSet<>();
+    /** Game time when the last party left a surface's table. */
+    private final Map<BlockPos, Long> freedAt = new HashMap<>();
+    /** Ticks of service left today; 0 ends the arrivals. Only with dayLengthTicks > 0. */
+    int serviceLeft;
+
+    /** A combo: dish ids and the price of all of them together. */
+    public record Combo(String id, List<String> dishes, int price) {}
     /** Dishes that the players added, ids "custom:<item id>". */
     final List<Menu.Entry> custom = new ArrayList<>();
     BlockPos delivery;
@@ -167,10 +180,114 @@ public class Restaurant {
         return false;
     }
 
+    /** The kind of a dish in this restaurant. */
+    public String kind(Menu.Entry e) {
+        return kinds.getOrDefault(e.id(), e.category());
+    }
+
+    boolean setKind(String id, String kind) {
+        Menu.Entry e = dish(id);
+        if (e == null || !Menu.CATEGORIES.contains(kind)) return false;
+        if (kind.equals(e.category())) kinds.remove(id); else kinds.put(id, kind);
+        owner.setDirty();
+        return true;
+    }
+
+    /** Most combos of one restaurant, and most dishes in one combo. */
+    static final int MAX_COMBOS = 16, MAX_COMBO_DISHES = 4;
+
+    /** Result of {@link #addCombo}. */
+    public enum AddCombo { OK, DISHES, PRICE, FULL }
+
+    /** Adds a combo of 2 to MAX_COMBO_DISHES different dishes of this restaurant, with a price from 1 to maxDishPrice. */
+    AddCombo addCombo(List<String> ids, int price) {
+        if (ids.size() < 2 || ids.size() > MAX_COMBO_DISHES || ids.stream().distinct().count() != ids.size()
+                || ids.stream().anyMatch(id -> dish(id) == null)) return AddCombo.DISHES;
+        if (price < 1 || price > Config.MAX_DISH_PRICE.get() * MAX_COMBO_DISHES) return AddCombo.PRICE;
+        if (combos.size() >= MAX_COMBOS) return AddCombo.FULL;
+        int n = 1;
+        while (combo("combo:" + n) != null) n++;
+        combos.add(new Combo("combo:" + n, List.copyOf(ids), price));
+        owner.setDirty();
+        return AddCombo.OK;
+    }
+
+    Combo combo(String id) {
+        for (Combo c : combos) if (c.id().equals(id)) return c;
+        return null;
+    }
+
+    boolean removeCombo(String id) {
+        boolean removed = combos.removeIf(c -> c.id().equals(id));
+        if (removed) owner.setDirty();
+        return removed;
+    }
+
+    boolean setComboPrice(String id, int price) {
+        if (price < 1 || price > Config.MAX_DISH_PRICE.get() * MAX_COMBO_DISHES) return false;
+        for (int i = 0; i < combos.size(); i++) {
+            if (!combos.get(i).id().equals(id)) continue;
+            combos.set(i, new Combo(id, combos.get(i).dishes(), price));
+            owner.setDirty();
+            return true;
+        }
+        return false;
+    }
+
+    /** A combo can be ordered when every one of its dishes can be ordered. */
+    boolean canOrder(Combo c) {
+        for (String id : c.dishes()) {
+            Menu.Entry e = dish(id);
+            if (e == null || !canOrder(e)) return false;
+        }
+        return true;
+    }
+
+    /** The serving surfaces that touch the one at pos (one table), inside the area, at most 256. */
+    Set<BlockPos> tableAt(ServerLevel level, BlockPos pos) {
+        Set<BlockPos> table = new HashSet<>();
+        if (area == null || !level.getBlockState(pos).is(OneMoreClient.SURFACES)) return table;
+        ArrayDeque<BlockPos> todo = new ArrayDeque<>(List.of(pos.immutable()));
+        table.add(pos.immutable());
+        while (!todo.isEmpty() && table.size() < 256) {
+            BlockPos p = todo.pop();
+            for (Direction dir : Direction.Plane.HORIZONTAL) {
+                BlockPos next = p.relative(dir);
+                if (area.isInside(next) && level.getBlockState(next).is(OneMoreClient.SURFACES) && table.add(next)) todo.push(next);
+            }
+        }
+        return table;
+    }
+
+    public boolean isTableOn(Set<BlockPos> table) {
+        for (BlockPos p : table) if (offTables.contains(p)) return false;
+        return true;
+    }
+
+    /** Turns the table at pos off or on. False if pos is not a serving surface in the area. */
+    boolean toggleTable(ServerLevel level, BlockPos pos) {
+        Set<BlockPos> table = tableAt(level, pos);
+        if (table.isEmpty()) return false;
+        if (isTableOn(table)) offTables.add(pos.immutable()); else offTables.removeAll(table);
+        owner.setDirty();
+        return true;
+    }
+
+    /** A party left the table of these seats: the table stays empty for tablePauseTicks. */
+    void freed(ServerLevel level, BlockPos surface) {
+        freedAt.put(surface, level.getGameTime());
+    }
+
     /** Removes a dish that a player added. Orders that customers already have are not changed. */
     boolean removeDish(String id) {
         boolean removed = custom.removeIf(e -> e.id().equals(id));
-        if (removed) { off.remove(id); owner.setDirty(); }
+        if (removed) {
+            off.remove(id);
+            kinds.remove(id);
+            // A combo without one of its dishes is no combo any more.
+            combos.removeIf(c -> c.dishes().contains(id));
+            owner.setDirty();
+        }
         return removed;
     }
 
@@ -264,12 +381,12 @@ public class Restaurant {
     /** Day, register, unlocks and paid orders: what the sign item keeps when the sign is broken. Positions are not kept. */
     CompoundTag progress() {
         CompoundTag tag = save();
-        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt")) tag.remove(key);
+        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "tables_off")) tag.remove(key);
         return tag;
     }
 
     boolean hasProgress() {
-        return day > 1 || register > 0 || !unlocked.isEmpty() || !deliveries.isEmpty() || !off.isEmpty() || !custom.isEmpty();
+        return day > 1 || register > 0 || !unlocked.isEmpty() || !deliveries.isEmpty() || !off.isEmpty() || !custom.isEmpty() || !kinds.isEmpty() || !combos.isEmpty();
     }
 
     void restore(CompoundTag progress) {
@@ -280,6 +397,8 @@ public class Restaurant {
         unlocked.addAll(from.unlocked);
         off.addAll(from.off);
         custom.addAll(from.custom);
+        kinds.putAll(from.kinds);
+        combos.addAll(from.combos);
         deliveries.addAll(from.deliveries);
         owner.setDirty();
     }
@@ -369,10 +488,14 @@ public class Restaurant {
         open = true;
         served = lost = earned = 0;
         penalties = 0;
-        toSpawn = (int) Math.min(Integer.MAX_VALUE, Config.CUSTOMERS_BASE.get() + (long) Config.CUSTOMERS_PER_DAY.get() * (day - 1));
+        serviceLeft = Config.DAY_LENGTH.get();
+        // With a day length the number of customers is open: they come until the service ends.
+        toSpawn = serviceLeft > 0 ? Integer.MAX_VALUE
+                : (int) Math.min(Integer.MAX_VALUE, Config.CUSTOMERS_BASE.get() + (long) Config.CUSTOMERS_PER_DAY.get() * (day - 1));
         spawnTimer = 40;
-        announce(level, Component.translatable("onemoreclient.open.started.title", day),
-                Component.translatable("onemoreclient.open.started", day, toSpawn));
+        announce(level, Component.translatable("onemoreclient.open.started.title", day), serviceLeft > 0
+                ? Component.translatable("onemoreclient.open.started_time", day, (serviceLeft + 1199) / 1200)
+                : Component.translatable("onemoreclient.open.started", day, toSpawn));
         level.playSound(null, sign, SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 1, 1);
     }
 
@@ -387,6 +510,10 @@ public class Restaurant {
         if (!open && countdown > 0 && area != null) tickCountdown(level);
         if (area != null && level.getGameTime() % 10 == 0) sendStatus(level);
         if (!open) return;
+        if (serviceLeft > 0 && --serviceLeft == 0) {
+            // The service is over: no new parties. Parties that are on their way and the customers inside finish, then the day ends.
+            toSpawn = 0;
+        }
         if (seatScanTimer > 0) seatScanTimer--;
         if (!arriving.isEmpty() && --arriveTimer <= 0) {
             level.addFreshEntity(arriving.remove(0));
@@ -404,9 +531,15 @@ public class Restaurant {
                     seatScanTimer = 100;
                 }
                 if (seats.isEmpty() && customers.isEmpty()) toSpawn = 0;
-            } else spawnTimer = Config.SPAWN_INTERVAL.get();
+            } else spawnTimer = nextInterval(level);
         }
         if (toSpawn == 0 && customers.isEmpty()) endDay(level, false);
+    }
+
+    /** The next pause between arrivals: spawnIntervalTicks, 6 percent shorter per day down to 40 percent, then 60 to 140 percent of that. */
+    int nextInterval(ServerLevel level) {
+        double base = Config.SPAWN_INTERVAL.get() * Math.max(0.4, 1 - 0.06 * (day - 1));
+        return Math.max(1, (int) Math.round(base * (0.6 + 0.8 * level.random.nextDouble())));
     }
 
     void endDay(ServerLevel level, boolean failed) {
@@ -451,9 +584,30 @@ public class Restaurant {
         List<Menu.Entry> available = dishes().stream().filter(this::canOrder).toList();
         List<Customer.Line> order = new ArrayList<>();
         if (available.isEmpty()) return order;
-        int n = 1 + level.random.nextInt(Config.MAX_ORDER_ITEMS.get());
+        // A combo: all its dishes; the combo price is split over the lines (the first line takes the rest of the division).
+        List<Combo> orderable = combos.stream().filter(this::canOrder).toList();
+        if (!orderable.isEmpty() && level.random.nextDouble() < Config.COMBO_CHANCE.get()) {
+            Combo c = orderable.get(level.random.nextInt(orderable.size()));
+            int share = c.price() / c.dishes().size(), rest = c.price() - share * c.dishes().size();
+            for (int i = 0; i < c.dishes().size(); i++) {
+                Menu.Entry e = dish(c.dishes().get(i));
+                ItemStack stack = e.pick(level.random);
+                if (stack.isEmpty()) return new ArrayList<>();
+                order.add(new Customer.Line(stack, share + (i == 0 ? rest : 0), e.exact()));
+            }
+            return order;
+        }
+        // Otherwise one dish of each of up to maxOrderItems different kinds: no two main dishes in one order.
+        Map<String, List<Menu.Entry>> byKind = new java.util.LinkedHashMap<>();
+        for (Menu.Entry e : available) byKind.computeIfAbsent(kind(e), k -> new ArrayList<>()).add(e);
+        List<String> kinds = new ArrayList<>(byKind.keySet());
+        // A main dish comes first when there is one; the other kinds in random order.
+        Util.shuffle(kinds, level.random);
+        if (kinds.remove("main")) kinds.add(0, "main");
+        int n = Math.min(kinds.size(), 1 + level.random.nextInt(Config.MAX_ORDER_ITEMS.get()));
         for (int i = 0; i < n; i++) {
-            Menu.Entry e = available.get(level.random.nextInt(available.size()));
+            List<Menu.Entry> of = byKind.get(kinds.get(i));
+            Menu.Entry e = of.get(level.random.nextInt(of.size()));
             ItemStack stack = e.pick(level.random);
             if (!stack.isEmpty()) order.add(new Customer.Line(stack, e.price(), e.exact()));
         }
@@ -465,21 +619,34 @@ public class Restaurant {
      * Empty, if no table is free.
      */
     private List<Seat> freeSeats(ServerLevel level, int wanted) {
+        // Like PlateUp: a table is free when nobody sits there, no part of it is dirty or off, and its last party left
+        // at least tablePauseTicks ago. The party takes the smallest free table that has room for it.
         List<List<Seat>> free = new ArrayList<>();
         int most = 0;
+        long now = level.getGameTime();
         for (List<Seat> table : tables) {
             if (table.stream().anyMatch(s -> customers.stream().anyMatch(c -> s.seat().equals(c.seat)))) continue;
-            List<Seat> clean = new ArrayList<>(table.stream().filter(s -> isSeat(level, s) && !dirt.containsKey(s.surface())).toList());
-            if (clean.isEmpty()) continue;
-            free.add(clean);
-            most = Math.max(most, clean.size());
+            if (table.stream().anyMatch(s -> dirt.containsKey(s.surface()) || offTables.contains(s.surface())
+                    || now - freedAt.getOrDefault(s.surface(), Long.MIN_VALUE / 2) < Config.TABLE_PAUSE.get())) continue;
+            List<Seat> seated = new ArrayList<>(table.stream().filter(s -> isSeat(level, s)).toList());
+            if (seated.isEmpty() || !isTableOn(tableSurfaces(table))) continue;
+            free.add(seated);
+            most = Math.max(most, seated.size());
         }
         int size = Math.min(wanted, most);
         free.removeIf(t -> t.size() < size);
         if (free.isEmpty()) return List.of();
+        int smallest = free.stream().mapToInt(List::size).min().orElseThrow();
+        free.removeIf(t -> t.size() != smallest);
         List<Seat> table = free.get(level.random.nextInt(free.size()));
         Util.shuffle(table, level.random);
         return table.subList(0, size);
+    }
+
+    private static Set<BlockPos> tableSurfaces(List<Seat> table) {
+        Set<BlockPos> out = new HashSet<>();
+        for (Seat s : table) out.add(s.surface());
+        return out;
     }
 
     private static boolean isSeat(ServerLevel level, Seat s) {
@@ -547,7 +714,13 @@ public class Restaurant {
             for (int x = Math.max(0, cx - 1); x <= Math.min(7, cx + 1); x++) left &= ~(1L << (z * 8 + x));
         if (left != cells) {
             double clean = 1 - Long.bitCount(left) / (double) Long.bitCount(Dirt.FULL);
-            setDirt(level, pos, clean >= Config.DIRT_CLEAN_FRACTION.get() ? 0 : left);
+            if (clean >= Config.DIRT_CLEAN_FRACTION.get()) {
+                // One table is one thing to clean: a clean part makes every part of the table clean.
+                for (BlockPos p : tableAt(level, pos)) if (dirt.containsKey(p)) setDirt(level, p, 0);
+                setDirt(level, pos, 0);
+            } else {
+                setDirt(level, pos, left);
+            }
             level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.BRUSH_GENERIC,
                     SoundSource.BLOCKS, 0.35f, 1.2f);
             level.sendParticles(ParticleTypes.SPLASH,
@@ -579,8 +752,8 @@ public class Restaurant {
                 for (ServerPlayer q : level.players())
                     if (area.isInside(q.blockPosition()))
                         members.add(new Status.Member(q.getUUID(), q.getGameProfile().getName(), ready.contains(q.getUUID())));
-                status = new Status(open, day, toSpawn + customers.size(), served, lost, Config.MAX_LOST_PER_DAY.get(), register, earned,
-                        BuiltInRegistries.ITEM.getKey(Config.currency()), members, countdown);
+                status = new Status(open, day, serviceLeft > 0 ? customers.size() : toSpawn + customers.size(), served, lost, Config.MAX_LOST_PER_DAY.get(), register, earned,
+                        BuiltInRegistries.ITEM.getKey(Config.currency()), members, countdown, open ? serviceLeft : 0);
             }
             PacketDistributor.sendToPlayer(p, status);
         }
@@ -607,6 +780,22 @@ public class Restaurant {
             customList.add(t);
         }
         tag.put("custom", customList);
+        CompoundTag kindTag = new CompoundTag();
+        kinds.forEach(kindTag::putString);
+        tag.put("kinds", kindTag);
+        ListTag comboList = new ListTag();
+        for (Combo c : combos) {
+            CompoundTag t = new CompoundTag();
+            t.putString("id", c.id());
+            ListTag ids = new ListTag();
+            for (String id : c.dishes()) ids.add(StringTag.valueOf(id));
+            t.put("dishes", ids);
+            t.putInt("price", c.price());
+            comboList.add(t);
+        }
+        tag.put("combos", comboList);
+        long[] tablesOff = offTables.stream().mapToLong(BlockPos::asLong).toArray();
+        tag.putLongArray("tables_off", tablesOff);
         if (delivery != null) tag.putLong("delivery", delivery.asLong());
         ListTag pending = new ListTag();
         for (Delivery d : deliveries) {
@@ -637,6 +826,16 @@ public class Restaurant {
         r.register = Math.max(0, tag.getInt("register"));
         for (Tag t : tag.getList("unlocked", Tag.TAG_STRING)) r.unlocked.add(t.getAsString());
         for (Tag t : tag.getList("off", Tag.TAG_STRING)) r.off.add(t.getAsString());
+        CompoundTag kindTag = tag.getCompound("kinds");
+        for (String id : kindTag.getAllKeys()) if (Menu.CATEGORIES.contains(kindTag.getString(id))) r.kinds.put(id, kindTag.getString(id));
+        for (Tag t : tag.getList("combos", Tag.TAG_COMPOUND)) {
+            CompoundTag c = (CompoundTag) t;
+            List<String> ids = new ArrayList<>();
+            for (Tag d : c.getList("dishes", Tag.TAG_STRING)) ids.add(d.getAsString());
+            if (ids.size() >= 2 && ids.size() <= MAX_COMBO_DISHES && r.combos.size() < MAX_COMBOS)
+                r.combos.add(new Combo(c.getString("id"), List.copyOf(ids), Math.max(1, c.getInt("price"))));
+        }
+        for (long p : tag.getLongArray("tables_off")) r.offTables.add(BlockPos.of(p));
         for (Tag t : tag.getList("custom", Tag.TAG_COMPOUND)) {
             CompoundTag c = (CompoundTag) t;
             // An item of a mod that was removed is skipped. A price out of range is clamped to the allowed range.

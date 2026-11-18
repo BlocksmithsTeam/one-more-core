@@ -141,10 +141,11 @@ public class Customer extends PathfinderMob {
     }
 
     /**
-     * Ground navigation that does not walk into or over seats and serving surfaces. Furniture mods give chairs and
-     * tables low or partial collision shapes; the vanilla path finder then takes them as floor, and the customer walks
-     * into the back of a chair and stays there. With them blocked, a path to a seat ends next to it, and the customer
-     * sits from there.
+     * Ground navigation that does not walk into or over the restaurant's seats and serving surfaces. Furniture mods give
+     * chairs and tables low or partial collision shapes; the vanilla path finder then takes them as floor, and the
+     * customer walks into the back of a chair and stays there. With them blocked, a path to a seat ends next to it, and
+     * the customer sits from there. Only blocks that are seats of this restaurant (a seat block next to a table) count:
+     * the seats tag also holds every stair, and a staircase must stay walkable.
      */
     @Override
     protected PathNavigation createNavigation(Level level) {
@@ -164,13 +165,27 @@ public class Customer extends PathfinderMob {
         };
     }
 
-    private static boolean furniture(BlockGetter level, int x, int y, int z) {
-        BlockState state = level.getBlockState(new BlockPos(x, y, z));
-        return state.is(OneMoreClient.SEATS) || state.is(OneMoreClient.SURFACES);
+    /** The seat positions of the restaurant, rebuilt when its seat list changes. */
+    private java.util.Set<BlockPos> seatSet = java.util.Set.of();
+    private List<Restaurant.Seat> seatSetFrom;
+
+    private boolean furniture(BlockGetter level, int x, int y, int z) {
+        BlockPos pos = new BlockPos(x, y, z);
+        if (level.getBlockState(pos).is(OneMoreClient.SURFACES)) return true;
+        if (restaurant == null) return false;
+        if (seatSetFrom != restaurant.seats) {
+            seatSetFrom = restaurant.seats;
+            java.util.Set<BlockPos> set = new java.util.HashSet<>();
+            for (Restaurant.Seat s : restaurant.seats) set.add(s.seat());
+            seatSet = set;
+        }
+        return seatSet.contains(pos);
     }
 
     static AttributeSupplier.Builder createAttributes() {
-        return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 20).add(Attributes.MOVEMENT_SPEED, 0.3);
+        // The follow range limits how far the path finder searches: 16, the vanilla value, is too short for a seat on an
+        // upper floor of a large restaurant.
+        return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 20).add(Attributes.MOVEMENT_SPEED, 0.3).add(Attributes.FOLLOW_RANGE, 64);
     }
 
     void setup(Restaurant restaurant, Restaurant.Seat seat, List<Line> order, Party party) {
@@ -439,6 +454,7 @@ public class Customer extends PathfinderMob {
                 party.settle(restaurant, getState() == State.EATING);
                 for (Customer c : List.copyOf(party.members)) if (c != this) c.discard();
             }
+            if (getSurface() != null && restaurant.customers.contains(this)) restaurant.freed((ServerLevel) level(), getSurface());
             restaurant.customers.remove(this);
             restaurant.arriving.remove(this);
             party.members.remove(this);

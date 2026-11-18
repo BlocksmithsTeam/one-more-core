@@ -26,7 +26,33 @@ import net.neoforged.fml.loading.FMLPaths;
 /** The orderable items, read from config/onemoreclient/menu.json. */
 public class Menu {
     /** Exactly one of stack and tag is set. */
-    public record Entry(String id, ItemStack stack, TagKey<Item> tag, int price, boolean exact, int day, int cost) {
+    /** Kinds of dishes. One order has at most one dish of each kind. */
+    public static final List<String> CATEGORIES = List.of("main", "drink", "starter", "dessert");
+
+    /**
+     * The kind of a dish from its item: a drink if it is drunk or in c:drinks; a dessert or a starter (soup, salad, meze)
+     * from the words in its id; otherwise a main dish.
+     */
+    public static String classify(ItemStack stack) {
+        if (stack.isEmpty()) return "main";
+        if (stack.getUseAnimation() == net.minecraft.world.item.UseAnim.DRINK
+                || stack.is(TagKey.create(Registries.ITEM, ResourceLocation.parse("c:drinks")))) return "drink";
+        String path = BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath();
+        // Starters first: a "cream soup" is a soup.
+        for (String w : new String[] {"soup", "salad", "porridge", "chowder", "broth", "appetizer", "snack", "fries", "chips"})
+            if (path.contains(w)) return "starter";
+        for (String w : new String[] {"cake", "pie", "cookie", "ice_cream", "pudding", "candy", "popsicle", "tart", "jelly", "chocolate",
+                "donut", "muffin", "dessert"})
+            if (path.contains(w)) return "dessert";
+        return "main";
+    }
+
+    public record Entry(String id, ItemStack stack, TagKey<Item> tag, int price, boolean exact, int day, int cost, String category) {
+        /** An entry whose kind comes from its item. */
+        public Entry(String id, ItemStack stack, TagKey<Item> tag, int price, boolean exact, int day, int cost) {
+            this(id, stack, tag, price, exact, day, cost, classify(stack == null ? ItemStack.EMPTY : stack));
+        }
+
         ItemStack pick(RandomSource random) {
             if (tag == null) return stack.copy();
             return BuiltInRegistries.ITEM.getTag(tag).flatMap(set -> set.getRandomElement(random))
@@ -88,11 +114,15 @@ public class Menu {
                 if (!match.equals("ignore") && !match.equals("exact"))
                     throw new IllegalArgumentException("match must be \"ignore\" or \"exact\"");
                 if (byIdIn(out, id)) throw new IllegalArgumentException("duplicate id");
+                String category = GsonHelper.getAsString(o, "category", null);
+                if (category != null && !CATEGORIES.contains(category)) throw new IllegalArgumentException("category must be one of " + CATEGORIES);
+                if (category == null) category = tag == null ? classify(stack)
+                        : BuiltInRegistries.ITEM.getTag(tag).flatMap(set -> set.stream().findFirst()).map(h -> classify(new ItemStack(h))).orElse("main");
                 out.add(new Entry(id, stack, tag,
                         money(o.get("price")),
                         match.equals("exact"),
                         Math.max(1, integer(unlock, "day", 1)),
-                        unlock.has("cost") ? money(unlock.get("cost")) : 0));
+                        unlock.has("cost") ? money(unlock.get("cost")) : 0, category));
             } catch (Exception e) {
                 OneMoreClient.LOGGER.error("Skipped bad menu entry {}: {}", el, e.getMessage());
             }

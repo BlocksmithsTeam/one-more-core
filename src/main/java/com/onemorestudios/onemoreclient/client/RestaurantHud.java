@@ -17,7 +17,7 @@ import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 
 /** The restaurant panel at the top left. It shows while the server sends a {@link Status}, that is, near a restaurant. */
 public class RestaurantHud {
-    private static final ResourceLocation PANEL = sprite("panel"), DAY = sprite("day"), CUSTOMER = sprite("customer"),
+    private static final ResourceLocation PANEL = sprite("panel"), DAY = sprite("day"), CUSTOMER = sprite("customer"), CLOCK = sprite("clock"),
             SERVED = sprite("served"), LOST = sprite("lost");
     private static final int LINE = 11;
 
@@ -44,7 +44,11 @@ public class RestaurantHud {
         Component day = text("day", s.day());
         Component state = s.open() ? text("open").withStyle(ChatFormatting.GREEN) : text("closed").withStyle(ChatFormatting.RED);
         String money = String.valueOf(s.register()), earned = s.open() && s.earned() > 0 ? "+" + s.earned() : "";
-        String left = String.valueOf(s.left()), served = String.valueOf(s.served());
+        // With a day length: the time of service left (counted on from the last status); otherwise the customers left.
+        boolean timed = s.serviceLeft() > 0;
+        long ticks = Math.max(0, s.serviceLeft() - (System.currentTimeMillis() - Status.clientTime) / 50);
+        String left = timed ? String.format("%d:%02d", ticks / 1200, ticks / 20 % 60) : String.valueOf(s.left());
+        String served = String.valueOf(s.served());
         String lost = s.maxLost() > 0 ? s.lost() + "/" + s.maxLost() : String.valueOf(s.lost());
         // Closed and outside the ready panel: one grey line that says what to do.
         Component hint = s.open() || ReadyHud.status() != null ? null
@@ -68,7 +72,7 @@ public class RestaurantHud {
 
         if (s.open()) {
             int cx = x;
-            cx = counter(g, font, CUSTOMER, left, cx, y, WHITE) + 8;
+            cx = counter(g, font, timed ? CLOCK : CUSTOMER, left, cx, y, timed && ticks < 600 ? 0xFFFFD866 : WHITE) + 8;
             cx = counter(g, font, SERVED, served, cx, y, WHITE) + 8;
             counter(g, font, LOST, lost, cx, y, s.maxLost() > 0 && s.lost() * 2 >= s.maxLost() ? 0xFFFF6A5A : WHITE);
             y += LINE;

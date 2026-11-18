@@ -20,6 +20,17 @@ public class ClientSetup {
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerEntityRenderer(OneMoreClient.CUSTOMER.get(), CustomerRenderer::new));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreClient.OPEN_SIGN_ENTITY.get(), OpenSignRenderer::new));
         bus.addListener(OpenSignRenderer::registerModels);
+        bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreClient.MENU_BOARD_ENTITY.get(), MenuBoardRenderer::new));
+        bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
+            private MenuBoardRenderer.Item renderer;
+
+            @Override
+            public BlockEntityWithoutLevelRenderer getCustomRenderer() {
+                Minecraft mc = Minecraft.getInstance();
+                if (renderer == null) renderer = new MenuBoardRenderer.Item(mc.getBlockEntityRenderDispatcher(), mc.getEntityModels());
+                return renderer;
+            }
+        }, OneMoreClient.MENU_BOARD_ITEM.get()));
         bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
             private OpenSignRenderer.Item renderer;
 
