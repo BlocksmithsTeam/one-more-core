@@ -35,7 +35,8 @@ public record Status(boolean open, int day, int left, int served, int lost, int 
         ByteBufCodecs.VAR_INT.encode(buf, n);
         for (Member m : s.players.subList(0, n)) {
             UUIDUtil.STREAM_CODEC.encode(buf, m.id);
-            ByteBufCodecs.stringUtf8(16).encode(buf, m.name);
+            // Fake players of other mods can have longer names than accounts; the codec refuses more than 16 characters.
+            ByteBufCodecs.stringUtf8(16).encode(buf, m.name.length() > 16 ? m.name.substring(0, 16) : m.name);
             buf.writeBoolean(m.ready);
         }
     }, buf -> {
