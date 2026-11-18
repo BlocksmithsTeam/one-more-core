@@ -91,3 +91,10 @@ Restaurant customers: daily service, orders, patience, delivery and payment.
 # stop your mod loading on the server for example.
 #[features.${mod_id}]
 #openGLVersion="[3.2,)"
+
+[[dependencies.${mod_id}]]
+    modId="diegesis"
+    type="optional"
+    versionRange="[1.0.0-beta.11,)"
+    ordering="AFTER"
+    side="BOTH"

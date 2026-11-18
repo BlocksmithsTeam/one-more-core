@@ -94,6 +94,7 @@ public class OneMoreClient {
     public static final TagKey<Block> SURFACES = BlockTags.create(ResourceLocation.fromNamespaceAndPath(MODID, "serving_surfaces"));
 
     public OneMoreClient(IEventBus bus, ModContainer container) {
+        if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) WipingStation.register();
         BLOCKS.register(bus);
         ITEMS.register(bus);
         ENTITIES.register(bus);
@@ -138,6 +139,9 @@ public class OneMoreClient {
         // Wiping: an empty main hand on a dirty surface. Vanilla sends the click again every 4 ticks while the button is down,
         // with the hit position, and checks the reach. No own packet is necessary.
         if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND) {
+            // Diegesis also posts this event to check permission before opening a station.
+            if (event.getLevel() instanceof ServerLevel && net.neoforged.fml.ModList.get().isLoaded("diegesis")
+                    && WipingStation.opens(event.getEntity(), event.getPos(), event.getLevel().getBlockState(event.getPos()))) return;
             boolean wiped;
             if (event.getLevel() instanceof ServerLevel level) {
                 Restaurant r = Restaurants.get(level).containing(event.getPos());

@@ -27,7 +27,7 @@ sourceSets.main.resources {
 }
 
 repositories {
-    // Add here additional repositories if required by some of the dependencies below.
+    maven { url = "https://cursemaven.com"; content { includeGroup "curse.maven" } }
 }
 
 base {
@@ -116,6 +116,7 @@ configurations {
 }
 
 dependencies {
+    compileOnly "curse.maven:diegesis-1790227:9643620" // NeoForge 1.21.1, 1.0.0-beta.11
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

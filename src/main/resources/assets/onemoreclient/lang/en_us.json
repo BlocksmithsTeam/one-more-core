@@ -82,5 +82,6 @@
   "onemoreclient.ready.cancel": "Hold to cancel",
   "onemoreclient.open.stopped": "The countdown stopped. A player is not ready.",
   "onemoreclient.sign.open": "OPEN",
-  "onemoreclient.sign.closed": "CLOSED"
+  "onemoreclient.sign.closed": "CLOSED",
+  "onemoreclient.wiping.cloth": "Pick up and drag to wipe. Esc: leave."
 }

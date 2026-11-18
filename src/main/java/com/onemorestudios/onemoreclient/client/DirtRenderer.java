@@ -1,7 +1,6 @@
 package com.onemorestudios.onemoreclient.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.onemorestudios.onemoreclient.Dirt;
 import com.onemorestudios.onemoreclient.OneMoreClient;
 
@@ -9,31 +8,40 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ModelEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 
-/** Draws the dirty cells on top of serving surfaces, and a cloth under the crosshair while the player wipes. */
+/** The same raised crumbs and thin smears remain in the world while the station camera moves in. */
 class DirtRenderer {
-    // The residue texture of Hands On Delight (MIT), see THIRD_PARTY_NOTICES.md.
-    private static final RenderType DIRT = RenderType.entityTranslucent(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "textures/misc/oil_film.png"));
-    private static final RenderType CLOTH = RenderType.entityCutoutNoCull(ResourceLocation.withDefaultNamespace("textures/block/white_wool.png"));
-    // Half of the cloth size in blocks. The server cleans 3x3 cells of 1/8 block around the hit.
-    private static final float CLOTH_HALF = 3 / 16f;
+    private static final ModelResourceLocation CLOTH = model("cloth");
+    // Most cells have only a smear, with fewer crumbs and food bits.
+    private static final ModelResourceLocation[] RESIDUE = {
+            model("residue_0"), model("residue_1"), model("residue_2"), model("residue_3"),
+            model("residue_4"), model("residue_5"), model("residue_3"), model("residue_4")};
+
+    private static ModelResourceLocation model(String name) {
+        return ModelResourceLocation.standalone(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "diegesis/" + name));
+    }
+
+    static void registerModels(ModelEvent.RegisterAdditional event) {
+        event.register(CLOTH);
+        for (var model : RESIDUE) event.register(model);
+    }
 
     static void register() {
         NeoForge.EVENT_BUS.addListener(DirtRenderer::render);
-        // The server sends the dirt again when the chunk comes back.
         NeoForge.EVENT_BUS.addListener((ChunkEvent.Unload e) -> {
             if (e.getLevel().isClientSide()) Dirt.CLIENT.keySet().removeIf(pos -> e.getChunk().getPos().equals(new ChunkPos(pos)));
         });
@@ -46,44 +54,36 @@ class DirtRenderer {
         PoseStack pose = event.getPoseStack();
         Vec3 cam = event.getCamera().getPosition();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
-        VertexConsumer dirt = buffers.getBuffer(DIRT);
         Dirt.CLIENT.forEach((pos, cells) -> {
-            BlockState state = mc.level.getBlockState(pos);
-            if (!state.is(OneMoreClient.SURFACES) || pos.distToCenterSqr(cam) > 64 * 64) return;
+            if (!mc.level.getBlockState(pos).is(OneMoreClient.SURFACES) || pos.distToCenterSqr(cam) > 64 * 64) return;
             int light = LevelRenderer.getLightColor(mc.level, pos.above());
             pose.pushPose();
-            pose.translate(pos.getX() - cam.x, pos.getY() + top(state, pos) + 0.005 - cam.y, pos.getZ() - cam.z);
+            pose.translate(pos.getX() - cam.x, pos.getY() + Dirt.top(mc.level, pos) + 0.002 - cam.y, pos.getZ() - cam.z);
             for (int i = 0; i < 64; i++) {
                 if ((cells >> i & 1) == 0) continue;
-                float x = (i % 8) / 8f, z = (i / 8) / 8f;
-                quad(dirt, pose.last(), x, z, x + 0.125f, z + 0.125f, x, z, x + 0.125f, z + 0.125f, light);
+                pose.pushPose();
+                pose.translate((i % 8) / 8f, 0, (i / 8) / 8f);
+                draw(pose, buffers, RESIDUE[(i * 13 + i / 8) % RESIDUE.length], light);
+                pose.popPose();
             }
             pose.popPose();
         });
-        buffers.endBatch(DIRT);
 
-        if (mc.options.keyUse.isDown() && mc.player.getMainHandItem().isEmpty()
+        if (mc.screen == null && mc.options.keyUse.isDown() && mc.player != null && mc.player.getMainHandItem().isEmpty()
                 && mc.hitResult instanceof BlockHitResult hit && Dirt.CLIENT.containsKey(hit.getBlockPos())) {
             BlockPos pos = hit.getBlockPos();
             Vec3 at = hit.getLocation();
             pose.pushPose();
-            pose.translate(at.x - cam.x, pos.getY() + top(mc.level.getBlockState(pos), pos) + 0.02 - cam.y, at.z - cam.z);
-            quad(buffers.getBuffer(CLOTH), pose.last(), -CLOTH_HALF, -CLOTH_HALF, CLOTH_HALF, CLOTH_HALF, 0, 0, 1, 1, LevelRenderer.getLightColor(mc.level, pos.above()));
+            pose.translate(at.x - cam.x - 0.5, pos.getY() + Dirt.top(mc.level, pos) + 0.01 - cam.y, at.z - cam.z - 0.5);
+            draw(pose, buffers, CLOTH, LevelRenderer.getLightColor(mc.level, pos.above()));
             pose.popPose();
-            buffers.endBatch(CLOTH);
         }
+        buffers.endBatch(Sheets.cutoutBlockSheet());
     }
 
-    private static double top(BlockState state, BlockPos pos) {
-        VoxelShape shape = state.getShape(Minecraft.getInstance().level, pos);
-        return shape.isEmpty() ? 1 : shape.max(Direction.Axis.Y);
-    }
-
-    /** A flat quad that faces up. */
-    private static void quad(VertexConsumer out, PoseStack.Pose pose, float x0, float z0, float x1, float z1, float u0, float v0, float u1, float v1, int light) {
-        out.addVertex(pose, x0, 0, z0).setColor(-1).setUv(u0, v0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0, 1, 0);
-        out.addVertex(pose, x0, 0, z1).setColor(-1).setUv(u0, v1).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0, 1, 0);
-        out.addVertex(pose, x1, 0, z1).setColor(-1).setUv(u1, v1).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0, 1, 0);
-        out.addVertex(pose, x1, 0, z0).setColor(-1).setUv(u1, v0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose, 0, 1, 0);
+    private static void draw(PoseStack pose, MultiBufferSource buffers, ModelResourceLocation id, int light) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.getBlockRenderer().getModelRenderer().renderModel(pose.last(), buffers.getBuffer(Sheets.cutoutBlockSheet()), null,
+                mc.getModelManager().getModel(id), 1, 1, 1, light, OverlayTexture.NO_OVERLAY, ModelData.EMPTY, RenderType.cutout());
     }
 }

@@ -12,6 +12,7 @@ import java.util.UUID;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -459,7 +460,9 @@ public class Restaurant {
      */
     boolean wipe(ServerLevel level, Player player, BlockPos pos, Vec3 hit) {
         Long cells = dirt.get(pos);
-        if (cells == null || !player.canInteractWithBlock(pos, 1) || !new AABB(pos).inflate(0.01).contains(hit)) return false;
+        if (cells == null || !level.getBlockState(pos).is(OneMoreClient.SURFACES)
+                || !Double.isFinite(hit.x) || !Double.isFinite(hit.y) || !Double.isFinite(hit.z)
+                || !player.canInteractWithBlock(pos, 1) || !new AABB(pos).inflate(0.01).contains(hit)) return false;
         int cx = Mth.clamp((int) ((hit.x - pos.getX()) * 8), 0, 7), cz = Mth.clamp((int) ((hit.z - pos.getZ()) * 8), 0, 7);
         long left = cells;
         for (int z = Math.max(0, cz - 1); z <= Math.min(7, cz + 1); z++)
@@ -467,6 +470,10 @@ public class Restaurant {
         if (left != cells) {
             double clean = 1 - Long.bitCount(left) / (double) Long.bitCount(Dirt.FULL);
             setDirt(level, pos, clean >= Config.DIRT_CLEAN_FRACTION.get() ? 0 : left);
+            level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.BRUSH_GENERIC,
+                    SoundSource.BLOCKS, 0.35f, 1.2f);
+            level.sendParticles(ParticleTypes.SPLASH,
+                    hit.x, hit.y + 0.03, hit.z, 3, 0.06, 0.01, 0.06, 0.01);
         }
         return true;
     }

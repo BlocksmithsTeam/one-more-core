@@ -13,7 +13,14 @@ The mod does not add food. It works with the items of any mod.
 6. Hold the ordered item and click the customer, or the surface in front of the customer.
 7. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
    A broken sign keeps the money, the day, the unlocks and the paid orders in the item, like a shulker box. Place it again and set the area again.
-8. Customers leave a dirty spot on the table. Hold the use button with an empty hand and move the crosshair over the spot to wipe it. A dirty seat gets no customer.
+8. Customers leave crumbs and smears on the table. A dirty surface gets no customer until `dirtCleanFraction` is reached.
+
+Optional [Diegesis](https://github.com/Pocky-l/diegesis) adds a camera above the table and a folded 3D cloth.
+Use NeoForge 1.21.1 with Diegesis beta.11 or newer on the client and server.
+Use a dirty table with an empty main hand. Pick up the cloth and drag it over the dirt.
+
+Press Esc or E to leave. Without Diegesis, hold use and move the crosshair over the dirt.
+The server checks each wipe.
 
 Near a restaurant, a panel at the top left shows the day, the customers left, the served and lost customers and the register.
 The start and the end of a day show as a title. A customer shows a speech bubble: a "!" when it waits for a player, then the ordered items and its patience bar.
@@ -86,4 +93,4 @@ Add blocks of other mods with a datapack. Entries for several furniture mods are
 
 ## License
 
-MIT
+MIT. The folded cloth and table residue models and textures are original MIT art.
