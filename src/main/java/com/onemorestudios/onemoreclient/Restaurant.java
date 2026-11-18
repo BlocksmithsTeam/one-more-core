@@ -91,6 +91,10 @@ public class Restaurant {
         return day >= e.day() && (e.cost() == 0 || unlocked.contains(e.id()));
     }
 
+    private boolean canOrder(Menu.Entry e) {
+        return isAvailable(e) && (e.tag() == null || BuiltInRegistries.ITEM.getTag(e.tag()).filter(tag -> tag.size() > 0).isPresent());
+    }
+
     /** Result of {@link #unlock}. */
     public enum Unlock { OK, ALREADY, DAY, COST }
 
@@ -202,7 +206,7 @@ public class Restaurant {
     /** A player clicked the sign of the closed restaurant. */
     void requestOpen(ServerLevel level, Player player) {
         String problem = area == null ? "no_area" : spawn == null ? "no_spawn"
-                : Menu.entries.stream().noneMatch(this::isAvailable) ? "no_menu" : null;
+                : Menu.entries.stream().noneMatch(this::canOrder) ? "no_menu" : null;
         if (problem == null && (seats = scanSeats(level)).isEmpty()) problem = "no_seats";
         if (problem != null) {
             player.displayClientMessage(Component.translatable("onemoreclient.open." + problem), true);
@@ -305,7 +309,7 @@ public class Restaurant {
     }
 
     private List<Customer.Line> makeOrder(ServerLevel level) {
-        List<Menu.Entry> available = Menu.entries.stream().filter(this::isAvailable).toList();
+        List<Menu.Entry> available = Menu.entries.stream().filter(this::canOrder).toList();
         List<Customer.Line> order = new ArrayList<>();
         if (available.isEmpty()) return order;
         int n = 1 + level.random.nextInt(Config.MAX_ORDER_ITEMS.get());
