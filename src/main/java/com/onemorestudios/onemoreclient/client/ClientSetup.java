@@ -54,6 +54,7 @@ public class ClientSetup {
         bus.addListener(ReadyHud::registerLayer);
         NeoForge.EVENT_BUS.addListener(ReadyHud::tick);
         DirtRenderer.register();
+        ComputerCamera.register();
     }
 
     /** Shows the normal item tooltips of the order while the player looks at a customer. */

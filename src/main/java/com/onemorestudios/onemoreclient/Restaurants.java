@@ -38,6 +38,40 @@ public class Restaurants extends SavedData {
         return null;
     }
 
+    /**
+     * The restaurant that a computer at the position works for: the one whose area contains it, otherwise the nearest
+     * restaurant whose sign is at most {@link #COMPUTER_RANGE} blocks away in each axis (an area that is not set yet).
+     */
+    public Restaurant forComputer(BlockPos pos) {
+        Restaurant in = containing(pos);
+        if (in != null) return in;
+        Restaurant best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (Restaurant r : bySign.values()) {
+            BlockPos s = r.sign;
+            if (Math.abs(s.getX() - pos.getX()) > COMPUTER_RANGE || Math.abs(s.getY() - pos.getY()) > COMPUTER_RANGE
+                    || Math.abs(s.getZ() - pos.getZ()) > COMPUTER_RANGE) continue;
+            long d = (long) s.distManhattan(pos);
+            if (d < bestDistance) { bestDistance = d; best = r; }
+        }
+        return best;
+    }
+
+    public static final int COMPUTER_RANGE = 32;
+
+    /**
+     * Sets the area of the restaurant if it is allowed, and returns the lang key suffix of the result (onemoreclient.tool.*).
+     * The area must hold the sign, must not be larger than maxArea in each axis and must not overlap another area.
+     */
+    String setArea(Restaurant r, BoundingBox box) {
+        int max = Config.MAX_AREA.get();
+        if (box.getXSpan() > max || box.getYSpan() > max || box.getZSpan() > max) return "too_big";
+        if (!box.isInside(r.sign)) return "sign_outside";
+        if (overlaps(box, r)) return "overlap";
+        r.setArea(box);
+        return "area_set";
+    }
+
     boolean overlaps(BoundingBox box, Restaurant except) {
         for (Restaurant r : bySign.values()) if (r != except && r.area != null && r.area.intersects(box)) return true;
         return false;

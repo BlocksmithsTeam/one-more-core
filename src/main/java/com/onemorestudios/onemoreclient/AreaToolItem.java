@@ -64,16 +64,10 @@ public class AreaToolItem extends Item {
         } else {
             BoundingBox box = BoundingBox.fromCorners(BlockPos.of(data.getLong("c1")), context.getClickedPos());
             CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.remove("c1"));
-            int max = Config.MAX_AREA.get();
-            if (box.getXSpan() > max || box.getYSpan() > max || box.getZSpan() > max) {
-                player.displayClientMessage(Component.translatable("onemoreclient.tool.too_big", max), true);
+            message = all.setArea(r, box);
+            if (message.equals("too_big")) {
+                player.displayClientMessage(Component.translatable("onemoreclient.tool.too_big", Config.MAX_AREA.get()), true);
                 return InteractionResult.SUCCESS;
-            }
-            if (!box.isInside(r.sign)) message = "sign_outside";
-            else if (all.overlaps(box, r)) message = "overlap";
-            else {
-                r.setArea(box);
-                message = "area_set";
             }
         }
         if (r != null) showArea(stack, r);

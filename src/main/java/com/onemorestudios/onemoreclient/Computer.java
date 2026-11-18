@@ -2,6 +2,7 @@ package com.onemorestudios.onemoreclient;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -39,7 +40,9 @@ public class Computer extends Block {
     /** The monitor, its back and the keyboard. */
     private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {2, 0, 4, 14, 11, 13}, new double[] {4, 1, 13, 12, 9, 16},
             new double[] {2, 0, 0.5, 14, 1.5, 3.5});
-    public static final int REFRESH = 0, UNLOCK = 1, BUY = 2;
+    public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5;
+    /** How far from the computer the manager app may set a point, in blocks per axis. */
+    public static final int PLACE_RANGE = 48;
     /** Bits of {@link State#apps}. */
     public static final int APP_MENU = 1, APP_SHOP = 2, APP_MANAGER = 4;
     /** Values of {@link MenuLine#state}. */
@@ -59,10 +62,15 @@ public class Computer extends Block {
 
     /**
      * Server to client. "open" opens the screen; without it only an open screen is updated.
-     * "found" is false when the computer is outside every restaurant area. "info" holds the lines of the manager app.
+     * "found" is false when no restaurant is near the computer (see {@link Restaurants#forComputer}). "info" holds the
+     * lines of the manager app. "area" is empty or {minX, minY, minZ, maxX, maxY, maxZ}; sign, spawn and delivery are
+     * there for the manager app's free camera.
      */
     public record State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance,
-            List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message) implements CustomPacketPayload {
+            List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message,
+            Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery) implements CustomPacketPayload {
+        static final StreamCodec<io.netty.buffer.ByteBuf, Optional<BlockPos>> OPTIONAL_POS = ByteBufCodecs.optional(BlockPos.STREAM_CODEC);
+        static final StreamCodec<io.netty.buffer.ByteBuf, List<Integer>> INTS = ByteBufCodecs.VAR_INT.apply(ByteBufCodecs.list(6));
         public static final Type<State> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "computer_state"));
         static final StreamCodec<RegistryFriendlyByteBuf, State> CODEC = StreamCodec.of((b, s) -> {
             b.writeBlockPos(s.pos);
@@ -75,9 +83,14 @@ public class Computer extends Block {
             ShopLine.CODEC.apply(ByteBufCodecs.list()).encode(b, s.shop);
             ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(b, s.info);
             ComponentSerialization.STREAM_CODEC.encode(b, s.message);
+            OPTIONAL_POS.encode(b, s.sign);
+            INTS.encode(b, s.area);
+            OPTIONAL_POS.encode(b, s.spawn);
+            OPTIONAL_POS.encode(b, s.delivery);
         }, b -> new State(b.readBlockPos(), b.readBoolean(), b.readBoolean(), b.readVarInt(), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(),
                 MenuLine.CODEC.apply(ByteBufCodecs.list()).decode(b), ShopLine.CODEC.apply(ByteBufCodecs.list()).decode(b),
-                ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(b), ComponentSerialization.STREAM_CODEC.decode(b)));
+                ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(b), ComponentSerialization.STREAM_CODEC.decode(b),
+                OPTIONAL_POS.decode(b), INTS.decode(b), OPTIONAL_POS.decode(b), OPTIONAL_POS.decode(b)));
 
         @Override
         public Type<State> type() { return TYPE; }
@@ -132,7 +145,7 @@ public class Computer extends Block {
     static void registerPayloads(RegisterPayloadHandlersEvent event) {
         event.registrar("1")
                 // The handler runs on the client only, so the client class is not loaded on a dedicated server.
-                .playToClient(State.TYPE, State.CODEC, (state, context) -> com.onemorestudios.onemoreclient.client.ComputerScreen.receive(state))
+                .playToClient(State.TYPE, State.CODEC, (state, context) -> com.onemorestudios.onemoreclient.client.ComputerCamera.receive(state))
                 .playToServer(Request.TYPE, Request.CODEC, (request, context) -> {
                     State state = handle(context.player(), request);
                     if (state != null) context.reply(state);
@@ -147,9 +160,24 @@ public class Computer extends Block {
     public static State handle(Player player, Request request) {
         if (!(player.level() instanceof ServerLevel level) || !level.isLoaded(request.pos)) return null;
         if (!player.canInteractWithBlock(request.pos, 4) || !level.getBlockState(request.pos).is(OneMoreClient.COMPUTER)) return null;
-        Restaurant r = Restaurants.get(level).containing(request.pos);
+        Restaurants all = Restaurants.get(level);
+        Restaurant r = all.forComputer(request.pos);
         Component message = Component.empty();
-        if (request.action == UNLOCK) {
+        if (request.action == SET_AREA || request.action == SET_SPAWN || request.action == SET_DELIVERY) {
+            if (r == null || !Config.APP_MANAGER.get()) return null;
+            int[] n = ints(request.id, request.action == SET_AREA ? 6 : 3);
+            if (n == null) return null;
+            BlockPos a = new BlockPos(n[0], n[1], n[2]);
+            BlockPos b = request.action == SET_AREA ? new BlockPos(n[3], n[4], n[5]) : a;
+            String key;
+            if (!near(request.pos, a) || !near(request.pos, b) || !level.isLoaded(a) || !level.isLoaded(b)) key = "too_far";
+            else if (r.isOpen()) key = "busy";
+            else if (request.action == SET_AREA) key = all.setArea(r, BoundingBox.fromCorners(a, b));
+            else if (request.action == SET_SPAWN) { r.setSpawn(a); key = "spawn_set"; }
+            else if (Restaurant.container(level, a) == null) key = "not_container";
+            else { r.setDelivery(a); key = "delivery_set"; }
+            message = Component.translatable("onemoreclient.tool." + key, key.equals("too_big") ? Config.MAX_AREA.get() : PLACE_RANGE);
+        } else if (request.action == UNLOCK) {
             Menu.Entry e = Menu.byId(request.id);
             if (r == null || e == null || !Config.APP_MENU.get()) return null;
             message = switch (r.unlock(e)) {
@@ -172,12 +200,32 @@ public class Computer extends Block {
         return state(level, request.pos, false, message);
     }
 
+    /** True if the point is at most PLACE_RANGE blocks from the computer in each axis. */
+    static boolean near(BlockPos computer, BlockPos p) {
+        return Math.abs(p.getX() - computer.getX()) <= PLACE_RANGE && Math.abs(p.getY() - computer.getY()) <= PLACE_RANGE
+                && Math.abs(p.getZ() - computer.getZ()) <= PLACE_RANGE;
+    }
+
+    /** Exactly `count` integers separated by commas, or null. */
+    static int[] ints(String text, int count) {
+        String[] parts = text.split(",", -1);
+        if (parts.length != count) return null;
+        int[] out = new int[count];
+        try {
+            for (int i = 0; i < count; i++) out[i] = Integer.parseInt(parts[i].trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        return out;
+    }
+
     /** Everything the screen shows. The menu and shop files exist on the server only. */
     static State state(ServerLevel level, BlockPos pos, boolean open, Component message) {
-        Restaurant r = Restaurants.get(level).containing(pos);
+        Restaurant r = Restaurants.get(level).forComputer(pos);
         int apps = (Config.APP_MENU.get() ? APP_MENU : 0) | (Config.APP_SHOP.get() ? APP_SHOP : 0) | (Config.APP_MANAGER.get() ? APP_MANAGER : 0);
         ItemStack currency = new ItemStack(Config.currency());
-        if (r == null) return new State(pos, open, false, apps, currency, 0, List.of(), List.of(), List.of(), message);
+        if (r == null) return new State(pos, open, false, apps, currency, 0, List.of(), List.of(), List.of(), message,
+                Optional.empty(), List.of(), Optional.empty(), Optional.empty());
         List<MenuLine> menu = new ArrayList<>();
         for (Menu.Entry e : Menu.entries) {
             ItemStack icon = e.tag() == null ? e.stack() : BuiltInRegistries.ITEM.getTag(e.tag())
@@ -188,17 +236,20 @@ public class Computer extends Block {
         for (Shop.Entry e : Shop.entries) shop.add(new ShopLine(e.id(), e.stack(), e.icon(), e.price()));
         BoundingBox a = r.area();
         // ponytail: scans the whole area on every sync of a closed restaurant; cache the seats if large areas make this slow.
-        int seats = r.isOpen() ? r.seats.size() : r.scanSeats(level).size();
+        int seats = a == null ? 0 : r.isOpen() ? r.seats.size() : r.scanSeats(level).size();
         Component none = Component.translatable("onemoreclient.computer.info.not_set");
         List<Component> info = List.of(
                 Component.translatable("onemoreclient.computer.info.day", r.day()),
                 Component.translatable(r.isOpen() ? "onemoreclient.computer.info.open" : "onemoreclient.computer.info.closed"),
                 Component.translatable("onemoreclient.computer.info.register", r.register()),
-                Component.translatable("onemoreclient.computer.info.area", a.minX(), a.minY(), a.minZ(), a.maxX(), a.maxY(), a.maxZ()),
+                a == null ? Component.translatable("onemoreclient.computer.info.area_none")
+                        : Component.translatable("onemoreclient.computer.info.area", a.minX(), a.minY(), a.minZ(), a.maxX(), a.maxY(), a.maxZ()),
                 Component.translatable("onemoreclient.computer.info.spawn", r.spawn() == null ? none : r.spawn().toShortString()),
                 Component.translatable("onemoreclient.computer.info.delivery", r.delivery() == null ? none : r.delivery().toShortString()),
                 Component.translatable("onemoreclient.computer.info.seats", seats),
                 Component.translatable("onemoreclient.computer.info.orders", r.deliveries.size()));
-        return new State(pos, open, true, apps, currency, r.register(), menu, shop, info, message);
+        return new State(pos, open, true, apps, currency, r.register(), menu, shop, info, message, Optional.of(r.sign),
+                a == null ? List.of() : List.of(a.minX(), a.minY(), a.minZ(), a.maxX(), a.maxY(), a.maxZ()),
+                Optional.ofNullable(r.spawn()), Optional.ofNullable(r.delivery()));
     }
 }

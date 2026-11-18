@@ -39,7 +39,7 @@ public class RestaurantHud {
         Minecraft mc = Minecraft.getInstance();
         Status s = Status.client;
         // The server sends a status every 10 ticks. One second without one: the player left the restaurant.
-        if (s == null || mc.options.hideGui || mc.getDebugOverlay().showDebugScreen() || System.currentTimeMillis() - Status.clientTime > 1500) return;
+        if (s == null || mc.options.hideGui || ComputerCamera.active() || mc.getDebugOverlay().showDebugScreen() || System.currentTimeMillis() - Status.clientTime > 1500) return;
         Font font = mc.font;
         Component day = text("day", s.day());
         Component state = s.open() ? text("open").withStyle(ChatFormatting.GREEN) : text("closed").withStyle(ChatFormatting.RED);
