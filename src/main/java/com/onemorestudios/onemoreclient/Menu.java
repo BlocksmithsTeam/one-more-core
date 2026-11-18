@@ -91,7 +91,7 @@ public class Menu {
                 out.add(new Entry(id, stack, tag,
                         money(o.get("price")),
                         match.equals("exact"),
-                        Math.max(1, GsonHelper.getAsInt(unlock, "day", 1)),
+                        Math.max(1, integer(unlock, "day", 1)),
                         unlock.has("cost") ? money(unlock.get("cost")) : 0));
             } catch (Exception e) {
                 OneMoreClient.LOGGER.error("Skipped bad menu entry {}: {}", el, e.getMessage());
@@ -104,13 +104,17 @@ public class Menu {
     static ItemStack stack(JsonElement item, HolderLookup.Provider registries) {
         if (item == null) throw new IllegalArgumentException("missing item");
         // The vanilla codec silently replaces an invalid count with 1.
-        if (item.isJsonObject() && GsonHelper.getAsInt(item.getAsJsonObject(), "count", 1) <= 0)
+        if (item.isJsonObject() && integer(item.getAsJsonObject(), "count", 1) <= 0)
             throw new IllegalArgumentException("empty item stack");
         ItemStack stack = item.isJsonObject() ? ItemStack.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, registries), item).getOrThrow()
                 : new ItemStack(BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(item.getAsString()))
                         .orElseThrow(() -> new IllegalArgumentException("unknown item " + item.getAsString())));
         if (stack.isEmpty()) throw new IllegalArgumentException("empty item stack");
         return stack;
+    }
+
+    static int integer(JsonObject object, String key, int fallback) {
+        return object.has(key) ? object.get(key).getAsBigDecimal().intValueExact() : fallback;
     }
 
     static int money(JsonElement value) {
