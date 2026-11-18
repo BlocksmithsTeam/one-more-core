@@ -134,7 +134,8 @@ public class Config {
     static double seatHeight(Block block) {
         String v = lookup(SEAT_HEIGHTS.get(), BuiltInRegistries.BLOCK.getKey(block));
         try {
-            return v == null ? SEAT_HEIGHT.get() : Double.parseDouble(v);
+            double height = v == null ? SEAT_HEIGHT.get() : Double.parseDouble(v);
+            return Double.isFinite(height) ? height : SEAT_HEIGHT.get();
         } catch (NumberFormatException e) {
             return SEAT_HEIGHT.get();
         }
