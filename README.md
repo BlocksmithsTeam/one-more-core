@@ -5,10 +5,11 @@ The mod does not add food. It works with the items of any mod.
 
 ## How to play
 
-1. Place an **Open/Closed Sign**.
-2. Click the sign with the **Restaurant Area Tool**. Click two corners to select the area. Sneak-click to set the customer spawn point.
+1. Place an **Open/Closed Sign** on the floor, on a wall or under a ceiling. It shows CLOSED or OPEN and turns when the restaurant opens or closes.
+2. Place a **Restaurant Computer** at most 32 blocks from the sign and use it. Open the **Manager** app and select "Edit the area and the points". The camera flies through walls; right click two corners of the area, the ground where customers arrive and a container for shop deliveries. Escape returns to the computer.
+   The **Restaurant Area Tool** does the same with clicks in the world: click the sign, then two corners; sneak-click the spawn point.
 3. Put seats next to serving surfaces inside the area.
-4. Get ready: hold **R** (key "Get ready (hold)") or click the sign. A panel shows every player inside the area. When all of them are ready, a short countdown starts the day. Hold the key again to cancel.
+4. Click the sign. A player alone in the area starts the day at once. With more players, a panel opens for every player inside the area: each one holds **R** (key "Get ready (hold)"). When all of them are ready, a short countdown starts the day. Hold the key again to cancel.
 5. Click a seated customer to take the order. Look at the customer to read the order.
 6. Hold the ordered item and click the customer, or the surface in front of the customer.
 7. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
@@ -23,20 +24,20 @@ One click takes the orders of the whole group. Each member gets its own food. Th
 
 ## Restaurant Computer
 
-Place a **Restaurant Computer** inside the restaurant area and click it. It has three apps:
+Use a **Restaurant Computer** inside the restaurant area, or at most 32 blocks from a sign that has no area yet. The camera moves to the monitor and a desktop opens. Click an app icon to open its window; the × closes it. Escape closes the window, then leaves the computer.
 
 - **Menu**: shows all menu entries and unlocks an entry with money from the register.
-- **Shop**: orders items with money from the register. The items arrive at the delivery point after a delay.
-- **Manager**: shows the state of the restaurant.
+- **Shop**: a catalog of the items of `shop.json`. Buy pays from the register; the items arrive at the delivery container after a delay.
+- **Manager**: shows the state of the restaurant and edits the area, the customer spawn point and the delivery container with a free camera (keys 1, 2, 3 choose the tool; WASD, Space and Shift fly; Ctrl flies fast). Points must be at most 48 blocks from the computer.
 
-To set the delivery point, sneak-click a container (chest, barrel) with the Restaurant Area Tool.
+The delivery container can also be set with the Restaurant Area Tool (sneak-click a chest or a barrel).
 The order goes into this container. If the container is full or gone, the items drop there.
 
 ## Configuration
 
 - `config/onemoreclient-common.toml`: currency item, patience, customer count, group size and chance, dirt, tip, seat heights, food display, shop delivery time, computer apps (`appMenu`, `appShop`, `appManager`).
 - `lostCustomerPenalty`: money lost per customer who leaves without food. Default: 0 (off). The register stays at or above 0.
-- `readyCountdownTicks`: ticks between "everyone is ready" and the start of the day. Default: 60. 0 starts at once.
+- `readyCountdownTicks`: ticks between "everyone is ready" and the start of the day, when more than one player is in the area. Default: 60. 0 starts at once.
 - `maxLostPerDay`: lost customers that fail the day. Default: 0 (off). A failed day repeats; earned money stays.
 - `config/onemoreclient/menu.json`: the orderable items. `/onemoreclient reload` reads it again.
 - `config/onemoreclient/shop.json`: the items of the Shop app. `/onemoreclient reload` reads it again.
