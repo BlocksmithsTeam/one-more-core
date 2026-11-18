@@ -140,7 +140,10 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         quad(vc, m, barL, barB, barR, barT, z + 0.005f, 28, 28, 32, 32, 0xFF4A3C32);
         int red = left < 0.5f ? 230 : (int) Mth.lerp((left - 0.5f) * 2, 230, 90);
         int green = left < 0.5f ? (int) Mth.lerp(left * 2, 60, 200) : 200;
-        quad(vc, m, barL, barB, barL + (barR - barL) * left, barT, z + 0.01f, 28, 28, 32, 32, 0xFF000000 | red << 16 | green << 8 | 70);
+        int blue = 70;
+        // Under a quarter of the patience the bar blinks white twice a second.
+        if (left < 0.25f && customer.tickCount % 10 < 5) red = green = blue = 255;
+        quad(vc, m, barL, barB, barL + (barR - barL) * left, barT, z + 0.01f, 28, 28, 32, 32, 0xFF000000 | red << 16 | green << 8 | blue);
         float itemsY = (barT + top) / 2;
         if (order.isEmpty()) {
             Font font = getFont();
