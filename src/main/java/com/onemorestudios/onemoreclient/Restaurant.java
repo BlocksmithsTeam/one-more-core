@@ -93,6 +93,10 @@ public class Restaurant {
         return day >= e.day() && (e.cost() == 0 || unlocked.contains(e.id()));
     }
 
+    private boolean canOrder(Menu.Entry e) {
+        return isAvailable(e) && (e.tag() == null || BuiltInRegistries.ITEM.getTag(e.tag()).filter(tag -> tag.size() > 0).isPresent());
+    }
+
     /** Result of {@link #unlock}. */
     public enum Unlock { OK, ALREADY, DAY, COST }
 
@@ -209,7 +213,7 @@ public class Restaurant {
     /** Why the day cannot start, as a lang key suffix, or null. Scans the seats. */
     private String problem(ServerLevel level) {
         String problem = area == null ? "no_area" : spawn == null ? "no_spawn"
-                : Menu.entries.stream().noneMatch(this::isAvailable) ? "no_menu" : null;
+                : Menu.entries.stream().noneMatch(this::canOrder) ? "no_menu" : null;
         if (problem == null && (seats = scanSeats(level)).isEmpty()) problem = "no_seats";
         return problem;
     }
@@ -284,7 +288,7 @@ public class Restaurant {
         open = true;
         served = lost = earned = 0;
         penalties = 0;
-        toSpawn = Config.CUSTOMERS_BASE.get() + Config.CUSTOMERS_PER_DAY.get() * (day - 1);
+        toSpawn = (int) Math.min(Integer.MAX_VALUE, Config.CUSTOMERS_BASE.get() + (long) Config.CUSTOMERS_PER_DAY.get() * (day - 1));
         spawnTimer = 40;
         announce(level, Component.translatable("onemoreclient.open.started.title", day),
                 Component.translatable("onemoreclient.open.started", day, toSpawn));
@@ -339,7 +343,7 @@ public class Restaurant {
         if (penalties > 0) message.append(Component.translatable("onemoreclient.day.penalty", penalties));
         announce(level, Component.translatable(failed ? "onemoreclient.day.failed.title" : "onemoreclient.day.end.title", day), message);
         level.playSound(null, sign, failed ? SoundEvents.ANVIL_LAND : SoundEvents.PLAYER_LEVELUP, SoundSource.BLOCKS, failed ? 0.5f : 1, 1);
-        if (!failed) day++;
+        if (!failed && day < Integer.MAX_VALUE) day++;
         owner.setDirty();
     }
 
@@ -363,7 +367,7 @@ public class Restaurant {
     }
 
     private List<Customer.Line> makeOrder(ServerLevel level) {
-        List<Menu.Entry> available = Menu.entries.stream().filter(this::isAvailable).toList();
+        List<Menu.Entry> available = Menu.entries.stream().filter(this::canOrder).toList();
         List<Customer.Line> order = new ArrayList<>();
         if (available.isEmpty()) return order;
         int n = 1 + level.random.nextInt(Config.MAX_ORDER_ITEMS.get());

@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import java.util.List;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -80,6 +81,7 @@ public class OpenSignBlock extends Block {
             Restaurant r = Restaurants.get(sl).remove(pos);
             if (r != null) {
                 r.open = false; // the customers remove themselves
+                for (BlockPos surface : List.copyOf(r.dirt.keySet())) r.setDirt(sl, surface, 0);
                 // Like a filled shulker box: the sign item keeps the money, the day, the unlocks and the paid orders.
                 popResource(level, pos, signItem(r));
             }

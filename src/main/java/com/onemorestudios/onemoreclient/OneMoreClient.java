@@ -102,6 +102,12 @@ public class OneMoreClient {
                 .playToClient(Status.TYPE, Status.CODEC, (status, context) -> { Status.client = status; Status.clientTime = System.currentTimeMillis(); })
                 .playToServer(ReadyRequest.TYPE, ReadyRequest.CODEC, (request, context) -> ReadyRequest.handle(request, (ServerPlayer) context.player())));
         NeoForge.EVENT_BUS.addListener((ChunkWatchEvent.Sent e) -> Restaurants.get(e.getLevel()).sendDirt(e.getPlayer(), e.getPos()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.level.LevelEvent.Unload e) -> {
+            if (e.getLevel().isClientSide()) {
+                Dirt.CLIENT.clear();
+                Status.client = null;
+            }
+        });
         NeoForge.EVENT_BUS.addListener(OneMoreClient::onRightClickBlock);
         NeoForge.EVENT_BUS.addListener(OneMoreClient::registerCommands);
         bus.addListener(Computer::registerPayloads);
