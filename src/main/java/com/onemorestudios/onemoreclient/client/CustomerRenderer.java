@@ -223,6 +223,18 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         if (left < 0.25f && customer.tickCount % 10 < 5) red = green = blue = 255;
         quad(vc, m, barL, barB, barL + (barR - barL) * left, barT, z + 0.01f, 28, 28, 32, 32, 0xFF000000 | red << 16 | green << 8 | blue);
         float itemsY = (barT + top) / 2;
+        // A badge on the top left corner of the bubble for special guests: a star (VIP), a heart (regular), a house (family).
+        var guest = customer.getGuestType();
+        if (guest != Customer.Type.NORMAL) {
+            String mark = guest == Customer.Type.VIP ? "\u2605" : guest == Customer.Type.REGULAR ? "\u2665" : "\u2302";
+            int color = guest == Customer.Type.VIP ? 0xFFFFD24A : guest == Customer.Type.REGULAR ? 0xFFFF6B7A : 0xFF8FD3FF;
+            Font font = getFont();
+            pose.pushPose();
+            pose.translate(-half + 0.06f, top - 0.03f, 0);
+            pose.scale(0.022f, -0.022f, 0.022f);
+            font.drawInBatch(mark, 0, 0, color, false, pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
+            pose.popPose();
+        }
         if (order.isEmpty()) {
             Font font = getFont();
             pose.pushPose();

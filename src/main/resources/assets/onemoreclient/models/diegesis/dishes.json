@@ -1,0 +1,214 @@
+{
+ "textures": {
+  "plate": "onemoreclient:block/dirty_plate_top",
+  "side": "onemoreclient:block/plate_side",
+  "glass": "onemoreclient:block/glass_cup",
+  "particle": "onemoreclient:block/plate_side"
+ },
+ "elements": [
+  {
+   "from": [
+    4.5,
+    0,
+    5
+   ],
+   "to": [
+    10.5,
+    0.5,
+    11
+   ],
+   "faces": {
+    "north": {
+     "texture": "#side",
+     "uv": [
+      5.5,
+      15.5,
+      11.5,
+      16
+     ]
+    },
+    "south": {
+     "texture": "#side",
+     "uv": [
+      4.5,
+      15.5,
+      10.5,
+      16
+     ]
+    },
+    "east": {
+     "texture": "#side",
+     "uv": [
+      5,
+      15.5,
+      11,
+      16
+     ]
+    },
+    "west": {
+     "texture": "#side",
+     "uv": [
+      5,
+      15.5,
+      11,
+      16
+     ]
+    },
+    "up": {
+     "texture": "#plate",
+     "uv": [
+      4.5,
+      5,
+      10.5,
+      11
+     ]
+    },
+    "down": {
+     "texture": "#side",
+     "uv": [
+      4.5,
+      5,
+      10.5,
+      11
+     ]
+    }
+   }
+  },
+  {
+   "from": [
+    3.5,
+    0.5,
+    4
+   ],
+   "to": [
+    11.5,
+    1.1,
+    12
+   ],
+   "faces": {
+    "north": {
+     "texture": "#side",
+     "uv": [
+      4.5,
+      14.9,
+      12.5,
+      15.5
+     ]
+    },
+    "south": {
+     "texture": "#side",
+     "uv": [
+      3.5,
+      14.9,
+      11.5,
+      15.5
+     ]
+    },
+    "east": {
+     "texture": "#side",
+     "uv": [
+      4,
+      14.9,
+      12,
+      15.5
+     ]
+    },
+    "west": {
+     "texture": "#side",
+     "uv": [
+      4,
+      14.9,
+      12,
+      15.5
+     ]
+    },
+    "up": {
+     "texture": "#plate",
+     "uv": [
+      3.5,
+      4,
+      11.5,
+      12
+     ]
+    },
+    "down": {
+     "texture": "#side",
+     "uv": [
+      3.5,
+      4,
+      11.5,
+      12
+     ]
+    }
+   }
+  },
+  {
+   "from": [
+    12,
+    0,
+    6
+   ],
+   "to": [
+    14,
+    3.5,
+    8
+   ],
+   "faces": {
+    "north": {
+     "texture": "#glass",
+     "uv": [
+      2,
+      12.5,
+      4,
+      16
+     ]
+    },
+    "south": {
+     "texture": "#glass",
+     "uv": [
+      12,
+      12.5,
+      14,
+      16
+     ]
+    },
+    "east": {
+     "texture": "#glass",
+     "uv": [
+      8,
+      12.5,
+      10,
+      16
+     ]
+    },
+    "west": {
+     "texture": "#glass",
+     "uv": [
+      6,
+      12.5,
+      8,
+      16
+     ]
+    },
+    "up": {
+     "texture": "#glass",
+     "uv": [
+      12,
+      6,
+      14,
+      8
+     ]
+    },
+    "down": {
+     "texture": "#glass",
+     "uv": [
+      12,
+      8,
+      14,
+      10
+     ]
+    }
+   }
+  }
+ ]
+}

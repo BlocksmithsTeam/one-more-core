@@ -85,6 +85,17 @@ public class RestaurantHud {
         g.pose().popPose();
         g.drawString(font, money, x + 12, y + 1, WHITE, false);
         if (!earned.isEmpty()) g.drawString(font, earned, x + 16 + font.width(money), y + 1, GREY, false);
+        // Collected coins: "+N" next to the register, rising and fading for 1.5 seconds, like the pickup notices of items.
+        long now = System.currentTimeMillis();
+        var notices = com.onemorestudios.onemoreclient.TableItems.Collected.NOTICES;
+        notices.removeIf(n -> now - n[1] > 1500);
+        int nx = x + 16 + font.width(money) + (earned.isEmpty() ? 0 : font.width(earned) + 4);
+        for (long[] n : notices) {
+            float t = (now - n[1]) / 1500f;
+            int alpha = (int) (255 * (1 - t * t));
+            if (alpha < 8) continue;
+            g.drawString(font, "+" + n[0], nx, (int) (y + 1 - 8 * t), (alpha << 24) | 0x7ADB64, true);
+        }
         y += LINE;
 
         if (hint != null) g.drawString(font, hint, x, y + 1, GREY, false);

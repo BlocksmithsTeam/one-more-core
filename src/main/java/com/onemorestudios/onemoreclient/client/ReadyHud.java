@@ -36,7 +36,7 @@ public class ReadyHud {
     /** Ticks the key must be held. */
     static final int HOLD = 20;
     private static final ResourceLocation CARD = sprite("card"), CARD_READY = sprite("card_ready"),
-            KEYCAP = sprite("key"), CHECK = ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "hud/served"),
+            CHECK = ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "hud/served"),
             PANEL = ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "hud/panel");
     private static final int CARD_H = 22;
 
@@ -117,8 +117,8 @@ public class ReadyHud {
         // Bottom centre, above the hotbar and the action bar text.
         Component title = Component.translatable("onemoreclient.ready.title", s.day());
         Component prompt = Component.translatable(me.ready() ? "onemoreclient.ready.cancel" : "onemoreclient.ready.hold");
-        String keyName = KEY.getTranslatedKeyMessage().getString();
-        int keyW = Math.max(12, font.width(keyName) + 8);
+        // The key as a glyph (a key cap, or a mouse if the player bound a mouse button), then the action.
+        int keyW = KeyGlyphs.width(font, KEY);
         int promptW = keyW + 4 + font.width(prompt);
         // Cards: face, ready mark and name side by side; the cards wrap into rows that fit the screen.
         int maxRow = Math.max(80, g.guiWidth() - 40);
@@ -155,8 +155,7 @@ public class ReadyHud {
 
         // The key prompt and the progress of the hold under it. The countdown is the large number above the panel.
         int py = cy + CARD_H + 4, px = x + (w - promptW) / 2;
-        g.blitSprite(KEYCAP, px, py, keyW, 14);
-        g.drawString(font, keyName, px + (keyW - font.width(keyName)) / 2, py + 3, 0xFFFFFFFF, false);
+        KeyGlyphs.draw(g, font, px, py, KEY, 0xFFFFFFFF);
         g.drawString(font, prompt, px + keyW + 4, py + 3, 0xFFB0B0B0, false);
         float progress = sent ? 1 : Mth.clamp((held + (KEY.isDown() && !sent ? delta.getGameTimeDeltaPartialTick(false) : 0)) / HOLD, 0, 1);
         g.fill(px, py + 15, px + promptW, py + 16, 0x40FFFFFF);

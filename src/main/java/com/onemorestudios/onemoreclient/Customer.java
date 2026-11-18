@@ -45,7 +45,15 @@ public class Customer extends PathfinderMob {
     public enum State { WALKING_IN, WAITING_ORDER, WAITING_FOOD, EATING, LEAVING }
 
     /** One wanted item of an order. */
-    public record Line(ItemStack stack, int price, boolean exact) {
+    /**
+     * One wanted item of an order. tipPercent scales the tip of this line (a price far above the suggested price gets
+     * less); drink: it is served in a glass, not on a plate.
+     */
+    public record Line(ItemStack stack, int price, boolean exact, int tipPercent, boolean drink) {
+        public Line(ItemStack stack, int price, boolean exact) {
+            this(stack, price, exact, 100, false);
+        }
+
         boolean matches(ItemStack held) {
             return exact ? ItemStack.isSameItemSameComponents(stack, held) : ItemStack.isSameItem(stack, held);
         }
@@ -57,6 +65,7 @@ public class Customer extends PathfinderMob {
     private static final EntityDataAccessor<List<ItemStack>> SERVED = SynchedEntityData.defineId(Customer.class, OneMoreClient.STACKS.get());
     private static final EntityDataAccessor<Optional<BlockPos>> SURFACE = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.OPTIONAL_BLOCK_POS);
     private static final EntityDataAccessor<String> SKIN_NAME = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<Byte> GUEST = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.BYTE);
 
     // A customer that stands still this long, or walks longer than the timeout, is moved to its target.
     private static final int WALK_TIMEOUT = 600, STUCK_TICKS = 40;
@@ -69,6 +78,12 @@ public class Customer extends PathfinderMob {
     /** Where the customer was at the last progress check while the navigation was moving. */
     private Vec3 lastProgress;
     private long bill;
+    /** Price times tipPercent of the served lines: the base of the tip. */
+    private long tipBase;
+    /** Served lines on a plate and in a glass; dirty after eating. Server only. */
+    int servedPlates, servedGlasses;
+    /** Ids of the dishes that this customer ordered, for the favourites of the restaurant. Server only. */
+    final List<String> dishIds = new ArrayList<>();
     private Party party;
     private Vec3 standPos;
     SkinPool.Entry identity;
@@ -77,11 +92,31 @@ public class Customer extends PathfinderMob {
      * Customers that sit together at one table. A single customer is a party of one.
      * The party has one patience and pays one bill. The first member runs the party.
      */
+    /** Kinds of guests. patience: factor of the patience; tip: percent of the normal tip. */
+    public enum Type {
+        NORMAL(1, 100), REGULAR(1.2, 150), VIP(0.6, 200), FAMILY(1.2, 100);
+
+        final double patience;
+        final int tip;
+
+        Type(double patience, int tip) {
+            this.patience = patience;
+            this.tip = tip;
+        }
+    }
+
+    /** A party that waited well (more than half of its patience left) makes its dishes favourites of the restaurant. */
+    void rememberFavourites(Restaurant restaurant) {
+        if (party.patienceMax > 0 && party.patience * 2 > party.patienceMax) restaurant.favourites.addAll(dishIds);
+    }
+
     static class Party {
         final List<Customer> members = new ArrayList<>();
         // patience 0: the party does not wait yet (a member still walks).
         int patience, patienceMax = 1, bill;
         boolean settled;
+        /** What kind of guests the party is; it changes the patience and the tip. */
+        Type type = Type.NORMAL;
 
         void settle(Restaurant restaurant, boolean paid) {
             if (settled) return;
@@ -89,7 +124,10 @@ public class Customer extends PathfinderMob {
             if (paid) {
                 restaurant.served += members.size();
                 restaurant.earned = (int) Math.min(Integer.MAX_VALUE, (long) restaurant.earned + bill);
-                restaurant.addMoney(bill);
+                // The bill stays on the table as coins until a player collects it (collectPayments), or goes to the register.
+                if (Config.COLLECT_PAYMENTS.get() && members.get(0).getSurface() != null) restaurant.addCoins(members.get(0).getSurface(), bill);
+                else restaurant.addMoney(bill);
+                for (Customer m : members) m.rememberFavourites(restaurant);
             } else {
                 restaurant.lost += members.size();
                 long penalty = Math.min(restaurant.register(), (long) members.size() * Config.LOST_CUSTOMER_PENALTY.get());
@@ -101,6 +139,10 @@ public class Customer extends PathfinderMob {
         }
 
         void start(int ticks) {
+            // Decor upgrades give more patience; the type of guests changes it too.
+            Restaurant r = members.isEmpty() ? null : members.get(0).restaurant;
+            double decor = r == null ? 1 : 1 + 0.1 * r.upgrade("decor");
+            ticks = (int) Math.max(1, Math.min(Integer.MAX_VALUE, Math.round(ticks * decor * type.patience)));
             patience = patienceMax = ticks;
             members.forEach(m -> m.entityData.set(PATIENCE, 1f));
         }
@@ -129,6 +171,8 @@ public class Customer extends PathfinderMob {
                 for (Customer m : List.copyOf(members)) {
                     m.effect(null, ParticleTypes.HAPPY_VILLAGER);
                     if (Config.DIRT_ENABLED.get()) restaurant.setDirt((ServerLevel) m.level(), m.getSurface(), Dirt.FULL);
+                    // The plates and glasses of the eaten food stay on the table, dirty.
+                    if (Config.USE_PLATES.get()) restaurant.addDishes((ServerLevel) m.level(), m.getSurface(), m.servedPlates, m.servedGlasses);
                     m.leave();
                 }
             }
@@ -216,6 +260,7 @@ public class Customer extends PathfinderMob {
         builder.define(SERVED, List.of());
         builder.define(SURFACE, Optional.empty());
         builder.define(SKIN_NAME, "");
+        builder.define(GUEST, (byte) 0);
     }
 
     @Override
@@ -224,6 +269,9 @@ public class Customer extends PathfinderMob {
     }
 
     public State getState() { return State.values()[entityData.get(STATE)]; }
+    /** The kind of guests of the customer's party; the client shows a badge for regulars, VIPs and families. */
+    public Type getGuestType() { return Type.values()[Math.floorMod(entityData.get(GUEST), Type.values().length)]; }
+    void setType(Type type) { entityData.set(GUEST, (byte) type.ordinal()); }
     /** Patience that is left, from 0 to 1. */
     public float getPatience() { return entityData.get(PATIENCE); }
     /** The items the customer still waits for. Empty until a player takes the order. */
@@ -360,8 +408,20 @@ public class Customer extends PathfinderMob {
     public boolean deliver(Player player, ItemStack held) {
         if (!wants(held)) return false;
         Line line = wanted.stream().filter(l -> l.matches(held)).findFirst().orElseThrow();
+        // A dish goes on a clean plate, a drink in a clean glass, from the player's inventory.
+        if (Config.USE_PLATES.get() && !player.getAbilities().instabuild) {
+            net.minecraft.world.item.Item need = line.drink() ? OneMoreClient.GLASS.get() : OneMoreClient.PLATE.get();
+            int slot = player.getInventory().findSlotMatchingItem(new ItemStack(need));
+            if (slot < 0) {
+                player.displayClientMessage(Component.translatable(line.drink() ? "onemoreclient.customer.no_glass" : "onemoreclient.customer.no_plate"), true);
+                return false;
+            }
+            player.getInventory().getItem(slot).shrink(1);
+        }
+        if (line.drink()) servedGlasses++; else servedPlates++;
         wanted.remove(line);
         bill += line.price();
+        tipBase += (long) line.price() * line.tipPercent();
         List<ItemStack> served = new ArrayList<>(getServed());
         served.add(held.copyWithCount(1));
         entityData.set(SERVED, served);
@@ -371,7 +431,15 @@ public class Customer extends PathfinderMob {
         // A member that has all its food waits until every member is served.
         if (party.members.stream().allMatch(m -> m.wanted.isEmpty())) {
             long price = party.members.stream().mapToLong(m -> m.bill).sum();
-            party.bill = payment(price, party.patience, party.patienceMax, Config.MAX_TIP.get());
+            long base = party.members.stream().mapToLong(m -> m.tipBase).sum();
+            // The tip: maxTipPercent of the tip base (prices weighted by their tipPercent), scaled by the patience left and
+            // by the type of guests. Without weights (all 100 percent) this is the old formula.
+            // tip = base * maxTip * typeTip * patience / (100 * 100 * 100 * patienceMax). The product can pass 2^63 (base up
+            // to 9.6e9, maxTip 1000, typeTip 200, patience 72000), so it is computed exactly with BigInteger.
+            java.math.BigInteger tip = java.math.BigInteger.valueOf(base).multiply(java.math.BigInteger.valueOf((long) Config.MAX_TIP.get() * party.type.tip))
+                    .multiply(java.math.BigInteger.valueOf(Mth.clamp(party.patience, 0, party.patienceMax)))
+                    .divide(java.math.BigInteger.valueOf(1_000_000L * party.patienceMax));
+            party.bill = (int) Math.min(Integer.MAX_VALUE, java.math.BigInteger.valueOf(price).add(tip).min(java.math.BigInteger.valueOf(Integer.MAX_VALUE)).longValue());
             party.members.forEach(m -> m.setState(State.EATING));
         }
         return true;

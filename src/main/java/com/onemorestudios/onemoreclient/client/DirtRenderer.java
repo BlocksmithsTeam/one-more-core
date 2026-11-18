@@ -47,8 +47,36 @@ class DirtRenderer {
     private static final Map<BlockPos, Surface> SURFACES = new HashMap<>();
     private static NativeImage stain;
 
+    private static final ModelResourceLocation COINS = ModelResourceLocation.standalone(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "diegesis/coins")),
+            DISHES = ModelResourceLocation.standalone(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "diegesis/dishes"));
+
     static void registerModels(ModelEvent.RegisterAdditional event) {
         event.register(CLOTH);
+        event.register(COINS);
+        event.register(DISHES);
+    }
+
+    /** The coins and dirty dishes that customers left on the tables, in the world. */
+    private static void renderTableItems(PoseStack pose, MultiBufferSource.BufferSource buffers, Vec3 cam) {
+        Minecraft mc = Minecraft.getInstance();
+        com.onemorestudios.onemoreclient.TableItems.CLIENT.forEach((pos, t) -> {
+            if (!mc.level.getBlockState(pos).is(OneMoreClient.SURFACES) || pos.distToCenterSqr(cam) > 64 * 64) return;
+            int light = LevelRenderer.getLightColor(mc.level, pos.above());
+            pose.pushPose();
+            pose.translate(pos.getX() - cam.x, pos.getY() + Dirt.top(mc.level, pos) + 0.004 - cam.y, pos.getZ() - cam.z);
+            var renderer = mc.getBlockRenderer().getModelRenderer();
+            // Coins to one side, dishes to the other.
+            pose.pushPose();
+            pose.translate(0.18, 0, 0.15);
+            if (t.coins() > 0) renderer.renderModel(pose.last(), buffers.getBuffer(Sheets.cutoutBlockSheet()), null, mc.getModelManager().getModel(COINS),
+                    1, 1, 1, light, OverlayTexture.NO_OVERLAY, ModelData.EMPTY, RenderType.cutout());
+            pose.popPose();
+            pose.translate(-0.2, 0, -0.12);
+            if (t.plates() > 0 || t.glasses() > 0) renderer.renderModel(pose.last(), buffers.getBuffer(Sheets.cutoutBlockSheet()), null,
+                    mc.getModelManager().getModel(DISHES), 1, 1, 1, light, OverlayTexture.NO_OVERLAY, ModelData.EMPTY, RenderType.cutout());
+            pose.popPose();
+        });
+        buffers.endBatch(Sheets.cutoutBlockSheet());
     }
 
     static void register() {
@@ -56,7 +84,7 @@ class DirtRenderer {
         NeoForge.EVENT_BUS.addListener((ChunkEvent.Unload e) -> {
             if (e.getLevel().isClientSide()) Dirt.CLIENT.keySet().removeIf(pos -> e.getChunk().getPos().equals(new ChunkPos(pos)));
         });
-        NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut e) -> Dirt.CLIENT.clear());
+        NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut e) -> { Dirt.CLIENT.clear(); com.onemorestudios.onemoreclient.TableItems.CLIENT.clear(); });
     }
 
     private static NativeImage stain() {
@@ -128,6 +156,7 @@ class DirtRenderer {
             mc.getTextureManager().release(e.getValue().id());
             return true;
         });
+        if (!com.onemorestudios.onemoreclient.TableItems.CLIENT.isEmpty()) renderTableItems(event.getPoseStack(), mc.renderBuffers().bufferSource(), event.getCamera().getPosition());
         if (Dirt.CLIENT.isEmpty()) return;
         PoseStack pose = event.getPoseStack();
         Vec3 cam = event.getCamera().getPosition();

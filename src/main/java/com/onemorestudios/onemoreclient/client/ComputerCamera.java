@@ -376,36 +376,55 @@ public final class ComputerCamera {
         Minecraft mc = Minecraft.getInstance();
         GuiGraphics g = event.getGuiGraphics();
         var font = mc.font;
+        var o = mc.options;
         Component[] tools = {Component.translatable("onemoreclient.free.area"), Component.translatable("onemoreclient.free.spawn"),
                 Component.translatable("onemoreclient.free.delivery"), Component.translatable("onemoreclient.free.tables")};
         int[] colors = {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A, 0xFFE05555};
-        Component help = altDown() ? Component.translatable("onemoreclient.free.help_alt", (int) reach)
-                : Component.translatable(tool == Tool.AREA ? (corner == null ? "onemoreclient.free.help_area1" : "onemoreclient.free.help_area2")
-                : tool == Tool.SPAWN ? "onemoreclient.free.help_spawn" : tool == Tool.DELIVERY ? "onemoreclient.free.help_delivery"
-                : "onemoreclient.free.help_tables");
-        // Tool tabs, then one line of help, then the last answer of the server.
+        // One prompt row for the current tool: the mouse buttons and what they do.
+        List<Object> help = new java.util.ArrayList<>();
+        if (altDown()) {
+            help.add(KeyGlyphs.Mouse.MIDDLE);
+            help.add(Component.translatable("onemoreclient.free.distance", (int) reach));
+        } else if (tool == Tool.AREA && corner != null) {
+            help.add(o.keyUse); help.add(Component.translatable("onemoreclient.free.corner2"));
+            help.add(o.keyAttack); help.add(Component.translatable("onemoreclient.free.cancel"));
+        } else {
+            help.add(o.keyUse);
+            help.add(Component.translatable(switch (tool) {
+                case AREA -> "onemoreclient.free.corner1";
+                case SPAWN -> "onemoreclient.free.place_spawn";
+                case DELIVERY -> "onemoreclient.free.place_delivery";
+                case TABLES -> "onemoreclient.free.toggle_table";
+            }));
+            if (tool == Tool.AREA) { help.add("Alt"); help.add(Component.translatable("onemoreclient.free.in_air")); }
+        }
+        List<Object> keys = List.of(o.keyUp, o.keyLeft, o.keyDown, o.keyRight, Component.translatable("onemoreclient.free.fly"),
+                o.keyJump, o.keyShift, Component.translatable("onemoreclient.free.up_down"), o.keySprint, Component.translatable("onemoreclient.free.fast"),
+                "Esc", Component.translatable("onemoreclient.free.done"));
+        // Tabs: a key cap with the number, a colour mark and the name.
         int toolsW = -4;
-        for (Component t : tools) toolsW += font.width(t) + 24 + 4;
-        int w = Math.min(g.guiWidth() - 12, Math.max(toolsW, font.width(help)) + 12);
+        for (Component t : tools) toolsW += 16 + 4 + 8 + font.width(t) + 6 + 4;
+        int helpW = KeyGlyphs.width(font, help), keysW = KeyGlyphs.width(font, keys);
+        int w = Math.min(g.guiWidth() - 12, Math.max(toolsW, Math.max(helpW, keysW)) + 12);
         boolean showMessage = System.currentTimeMillis() - messageTime < 4000 && !message.getString().isEmpty();
-        int h = 4 + 14 + 4 + 10 + (showMessage ? 10 : 0) + 4;
+        int h = 4 + 16 + 4 + KeyGlyphs.HEIGHT + 4 + KeyGlyphs.HEIGHT + 4 + (showMessage ? 12 : 0);
         // At the bottom, above the hotbar: the top of the screen belongs to block tooltips of other mods (Jade).
-        int x = (g.guiWidth() - w) / 2, y = g.guiHeight() - 62 - h;
+        int x = (g.guiWidth() - w) / 2, y = g.guiHeight() - 60 - h;
         g.fill(x + 1, y, x + w - 1, y + h, 0x8C0C0C0C);
         g.fill(x, y + 1, x + w, y + h - 1, 0x8C0C0C0C);
         int tx = x + (w - toolsW) / 2, ty = y + 4;
         for (int i = 0; i < tools.length; i++) {
-            int tw = font.width(tools[i]) + 24;
+            int tw = 16 + 4 + 8 + font.width(tools[i]) + 6;
             boolean on = tool.ordinal() == i;
-            g.fill(tx, ty, tx + tw, ty + 14, on ? 0x55FFFFFF : 0x1AFFFFFF);
-            g.drawString(font, String.valueOf(i + 1), tx + 4, ty + 3, 0xFF9AA3AD, false);
-            g.fill(tx + 11, ty + 4, tx + 17, ty + 10, colors[i]);
-            g.drawString(font, tools[i], tx + 20, ty + 3, on ? 0xFFFFFFFF : 0xFF9AA3AD, false);
+            g.fill(tx, ty, tx + tw, ty + 16, on ? 0x55FFFFFF : 0x1AFFFFFF);
+            KeyGlyphs.draw(g, font, tx + 1, ty + 1, String.valueOf(i + 1), 0xFFFFFFFF);
+            g.fill(tx + 18, ty + 5, tx + 24, ty + 11, colors[i]);
+            g.drawString(font, tools[i], tx + 28, ty + 4, on ? 0xFFFFFFFF : 0xFF9AA3AD, false);
             tx += tw + 4;
         }
-        g.drawString(font, help, x + (w - font.width(help)) / 2, ty + 18, 0xFFFFFFFF, false);
-        if (showMessage) g.drawString(font, message, x + (w - font.width(message)) / 2, ty + 28, 0xFFFFE27A, false);
-        Component keys = Component.translatable("onemoreclient.free.keys");
-        g.drawString(font, keys, (g.guiWidth() - font.width(keys)) / 2, y - 11, 0xFFC0C6CC, true);
+        int ry = ty + 20;
+        KeyGlyphs.draw(g, font, x + (w - helpW) / 2, ry, help, 0xFFFFFFFF);
+        KeyGlyphs.draw(g, font, x + (w - keysW) / 2, ry + KeyGlyphs.HEIGHT + 4, keys, 0xFFB8BEC6);
+        if (showMessage) g.drawString(font, message, x + (w - font.width(message)) / 2, ry + 2 * KeyGlyphs.HEIGHT + 8, 0xFFFFE27A, false);
     }
 }

@@ -68,6 +68,16 @@ public class OneMoreClient {
     public static final DeferredBlock<MenuBoardBlock> MENU_BOARD = BLOCKS.register("menu_board",
             () -> new MenuBoardBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.WOOD)));
     public static final DeferredItem<BlockItem> MENU_BOARD_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOARD);
+    /** Plates and glasses: a clean one is needed to serve (usePlates); customers leave them dirty; a sink washes them. */
+    /** The default money of the mod (currencyItem). */
+    public static final DeferredItem<Item> COIN = ITEMS.registerSimpleItem("coin", new Item.Properties().stacksTo(99));
+    public static final DeferredItem<Item> PLATE = ITEMS.registerSimpleItem("plate", new Item.Properties().stacksTo(64));
+    public static final DeferredItem<Item> GLASS = ITEMS.registerSimpleItem("glass", new Item.Properties().stacksTo(64));
+    public static final DeferredItem<Item> DIRTY_PLATE = ITEMS.registerSimpleItem("dirty_plate", new Item.Properties().stacksTo(64));
+    public static final DeferredItem<Item> DIRTY_GLASS = ITEMS.registerSimpleItem("dirty_glass", new Item.Properties().stacksTo(64));
+    public static final DeferredBlock<SinkBlock> SINK = BLOCKS.register("sink",
+            () -> new SinkBlock(BlockBehaviour.Properties.of().strength(2f).noOcclusion().sound(SoundType.STONE)));
+    public static final DeferredItem<BlockItem> SINK_ITEM = ITEMS.registerSimpleBlockItem(SINK);
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OpenSignBlockEntity>> OPEN_SIGN_ENTITY = BLOCK_ENTITIES.register("open_sign",
             () -> BlockEntityType.Builder.of(OpenSignBlockEntity::new, OPEN_SIGN.get()).build(null));
@@ -89,6 +99,12 @@ public class OneMoreClient {
                 output.accept(OPEN_SIGN_ITEM);
                 output.accept(COMPUTER_ITEM);
                 output.accept(MENU_BOARD_ITEM);
+                output.accept(SINK_ITEM);
+                output.accept(COIN);
+                output.accept(PLATE);
+                output.accept(GLASS);
+                output.accept(DIRTY_PLATE);
+                output.accept(DIRTY_GLASS);
             }).build());
 
     /** Blocks a customer can sit on. */
@@ -114,11 +130,18 @@ public class OneMoreClient {
         });
         bus.addListener((RegisterPayloadHandlersEvent e) -> e.registrar("1").playToClient(Dirt.TYPE, Dirt.CODEC, (dirt, context) -> Dirt.receive(dirt))
                 .playToClient(Status.TYPE, Status.CODEC, (status, context) -> { Status.client = status; Status.clientTime = System.currentTimeMillis(); })
+                .playToClient(TableItems.TYPE, TableItems.CODEC, (t, context) -> TableItems.receive(t))
+                .playToClient(TableItems.Collected.TYPE, TableItems.Collected.CODEC, (c, context) -> TableItems.Collected.receive(c))
                 .playToServer(ReadyRequest.TYPE, ReadyRequest.CODEC, (request, context) -> ReadyRequest.handle(request, (ServerPlayer) context.player())));
-        NeoForge.EVENT_BUS.addListener((ChunkWatchEvent.Sent e) -> Restaurants.get(e.getLevel()).sendDirt(e.getPlayer(), e.getPos()));
+        NeoForge.EVENT_BUS.addListener((ChunkWatchEvent.Sent e) -> {
+            Restaurants all = Restaurants.get(e.getLevel());
+            all.sendDirt(e.getPlayer(), e.getPos());
+            all.sendTableItems(e.getPlayer(), e.getPos());
+        });
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.level.LevelEvent.Unload e) -> {
             if (e.getLevel().isClientSide()) {
                 Dirt.CLIENT.clear();
+                TableItems.CLIENT.clear();
                 Status.client = null;
             }
         });
@@ -153,6 +176,30 @@ public class OneMoreClient {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
             return;
+        }
+        // A bell in the area of an open restaurant with the bell upgrade calls the next group; the bell rings as usual.
+        if (event.getLevel() instanceof ServerLevel level && event.getHand() == InteractionHand.MAIN_HAND
+                && level.getBlockState(event.getPos()).is(net.minecraft.world.level.block.Blocks.BELL)) {
+            Restaurant r = Restaurants.get(level).containing(event.getPos());
+            if (r != null && r.ringBell(level)) event.getEntity().displayClientMessage(Component.translatable("onemoreclient.bell.called"), true);
+            return;
+        }
+        // Coins and dirty dishes on a table: an empty hand collects them first (without Diegesis; with it, in the station).
+        if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND && event.getLevel().getBlockState(event.getPos()).is(SURFACES)
+                && !(net.neoforged.fml.ModList.get().isLoaded("diegesis"))) {
+            boolean has;
+            if (event.getLevel() instanceof ServerLevel level) {
+                Restaurant r = Restaurants.get(level).containing(event.getPos());
+                has = r != null && !r.tableAt(level, event.getPos()).stream().filter(r::hasTableItems).toList().isEmpty();
+                if (has) r.collect(level, event.getEntity(), event.getPos());
+            } else {
+                has = TableItems.CLIENT.containsKey(event.getPos());
+            }
+            if (has) {
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.SUCCESS);
+                return;
+            }
         }
         // Wiping: an empty main hand on a dirty surface. Vanilla sends the click again every 4 ticks while the button is down,
         // with the hit position, and checks the reach. No own packet is necessary.

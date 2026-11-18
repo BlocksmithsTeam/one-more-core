@@ -36,13 +36,20 @@ public final class WipingStation implements StationLogic {
                 || player.isSpectator() || !player.canInteractWithBlock(pos, 1)) return false;
         if (player.level() instanceof ServerLevel level) {
             Restaurant r = Restaurants.get(level).containing(pos);
-            return r != null && r.dirt.containsKey(pos);
+            return r != null && (r.dirt.containsKey(pos) || r.hasTableItems(pos));
         }
-        return Dirt.CLIENT.containsKey(pos);
+        return Dirt.CLIENT.containsKey(pos) || TableItems.CLIENT.containsKey(pos);
     }
 
     @Override
     public void onCustomAction(StationContext station, Player player, String action, CompoundTag data) {
+        // "collect": the coins and the dirty dishes of the table.
+        if ("collect".equals(action) && station.level() instanceof ServerLevel cl && player.level() == cl && station.users().contains(player)
+                && player.canInteractWithBlock(station.pos(), 1)) {
+            Restaurant r = Restaurants.get(cl).containing(station.pos());
+            if (r != null) r.collect(cl, player, station.pos());
+            return;
+        }
         if (!"wipe".equals(action) || !(station.level() instanceof ServerLevel level)
                 || player.level() != level || !station.users().contains(player)
                 || !opens(player, station.pos(), station.blockState())

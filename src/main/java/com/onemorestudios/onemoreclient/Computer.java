@@ -42,11 +42,19 @@ public class Computer extends Block {
             new double[] {2, 0, 0.5, 14, 1.5, 3.5});
     public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
             TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9, SET_KIND = 10, ADD_COMBO = 11, REMOVE_COMBO = 12,
-            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14;
+            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15;
     /** How far from the computer the manager app may set a point, in blocks per axis. */
     public static final int PLACE_RANGE = 48;
     /** Bits of {@link State#apps}. */
-    public static final int APP_MENU = 1, APP_SHOP = 2, APP_MANAGER = 4;
+    public static final int APP_MENU = 1, APP_SHOP = 2, APP_MANAGER = 4, APP_UPGRADES = 8;
+    /** The upgrades of the upgrades app, in order. */
+    public static final List<String> UPGRADES = List.of("decor", "delivery", "bell");
+
+    /** An upgrade: its level, its last level and the price of the next level (0 at the last level). */
+    public record UpgradeLine(String id, int level, int max, int nextCost) {
+        static final StreamCodec<RegistryFriendlyByteBuf, UpgradeLine> CODEC = StreamCodec.composite(ByteBufCodecs.STRING_UTF8, UpgradeLine::id,
+                ByteBufCodecs.VAR_INT, UpgradeLine::level, ByteBufCodecs.VAR_INT, UpgradeLine::max, ByteBufCodecs.VAR_INT, UpgradeLine::nextCost, UpgradeLine::new);
+    }
     /** Values of {@link MenuLine#state}. */
     public static final int AVAILABLE = 0, LOCKED_DAY = 1, BUYABLE = 2;
 
@@ -88,10 +96,15 @@ public class Computer extends Block {
     public record State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance,
             List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message,
             Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
-            List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces) implements CustomPacketPayload {
+            List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades) implements CustomPacketPayload {
+        public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, List<MenuLine> menu, List<ShopLine> shop,
+                List<Component> info, Component message, Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
+                List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces) {
+            this(pos, open, found, apps, currency, balance, menu, shop, info, message, sign, area, spawn, delivery, combos, surfaces, offSurfaces, List.of());
+        }
         public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, List<MenuLine> menu, List<ShopLine> shop,
                 List<Component> info, Component message, Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery) {
-            this(pos, open, found, apps, currency, balance, menu, shop, info, message, sign, area, spawn, delivery, List.of(), List.of(), List.of());
+            this(pos, open, found, apps, currency, balance, menu, shop, info, message, sign, area, spawn, delivery, List.of(), List.of(), List.of(), List.of());
         }
         static final StreamCodec<io.netty.buffer.ByteBuf, List<BlockPos>> POSITIONS = BlockPos.STREAM_CODEC.apply(ByteBufCodecs.list(4096));
         static final StreamCodec<io.netty.buffer.ByteBuf, Optional<BlockPos>> OPTIONAL_POS = ByteBufCodecs.optional(BlockPos.STREAM_CODEC);
@@ -115,11 +128,13 @@ public class Computer extends Block {
             ComboLine.CODEC.apply(ByteBufCodecs.list()).encode(b, s.combos);
             POSITIONS.encode(b, s.surfaces);
             POSITIONS.encode(b, s.offSurfaces);
+            UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).encode(b, s.upgrades);
         }, b -> new State(b.readBlockPos(), b.readBoolean(), b.readBoolean(), b.readVarInt(), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(),
                 MenuLine.CODEC.apply(ByteBufCodecs.list()).decode(b), ShopLine.CODEC.apply(ByteBufCodecs.list()).decode(b),
                 ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(b), ComponentSerialization.STREAM_CODEC.decode(b),
                 OPTIONAL_POS.decode(b), INTS.decode(b), OPTIONAL_POS.decode(b), OPTIONAL_POS.decode(b),
-                ComboLine.CODEC.apply(ByteBufCodecs.list()).decode(b), POSITIONS.decode(b), POSITIONS.decode(b)));
+                ComboLine.CODEC.apply(ByteBufCodecs.list()).decode(b), POSITIONS.decode(b), POSITIONS.decode(b),
+                UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).decode(b)));
 
         @Override
         public Type<State> type() { return TYPE; }
@@ -206,6 +221,11 @@ public class Computer extends Block {
             else if (Restaurant.container(level, a) == null) key = "not_container";
             else { r.setDelivery(a); key = "delivery_set"; }
             message = Component.translatable("onemoreclient.tool." + key, key.equals("too_big") ? Config.MAX_AREA.get() : PLACE_RANGE);
+        } else if (request.action == BUY_UPGRADE) {
+            if (r == null || !Config.APP_UPGRADES.get()) return null;
+            Restaurant.Upgrade result = r.buyUpgrade(request.id);
+            if (result == Restaurant.Upgrade.UNKNOWN) return null;
+            message = Component.translatable("onemoreclient.upgrade." + result.name().toLowerCase(java.util.Locale.ROOT));
         } else if (request.action == TOGGLE_TABLE) {
             if (r == null || !Config.APP_MANAGER.get()) return null;
             int[] n = ints(request.id, 3);
@@ -284,7 +304,7 @@ public class Computer extends Block {
             Shop.Entry e = Shop.byId(request.id);
             if (r == null || e == null || !Config.APP_SHOP.get()) return null;
             message = switch (r.buy(e)) {
-                case OK -> Component.translatable("onemoreclient.computer.ordered", e.stack().getHoverName(), Config.SHOP_DELIVERY.get() / 20);
+                case OK -> Component.translatable("onemoreclient.computer.ordered", e.stack().getHoverName(), r.deliveryTicks() / 20);
                 case COST -> Component.translatable("onemoreclient.cmd.cost", e.id(), e.price(), r.register());
                 case NO_DELIVERY -> Component.translatable("onemoreclient.computer.no_delivery");
             };
@@ -316,7 +336,8 @@ public class Computer extends Block {
     /** Everything the screen shows. The menu and shop files exist on the server only. */
     static State state(ServerLevel level, BlockPos pos, boolean open, Component message) {
         Restaurant r = Restaurants.get(level).forComputer(pos);
-        int apps = (Config.APP_MENU.get() ? APP_MENU : 0) | (Config.APP_SHOP.get() ? APP_SHOP : 0) | (Config.APP_MANAGER.get() ? APP_MANAGER : 0);
+        int apps = (Config.APP_MENU.get() ? APP_MENU : 0) | (Config.APP_SHOP.get() ? APP_SHOP : 0) | (Config.APP_MANAGER.get() ? APP_MANAGER : 0)
+                | (Config.APP_UPGRADES.get() ? APP_UPGRADES : 0);
         ItemStack currency = new ItemStack(Config.currency());
         if (r == null) return new State(pos, open, false, apps, currency, 0, List.of(), List.of(), List.of(), message,
                 Optional.empty(), List.of(), Optional.empty(), Optional.empty());
@@ -356,6 +377,11 @@ public class Computer extends Block {
         return new State(pos, open, true, apps, currency, r.register(), menu, shop, info, message, Optional.of(r.sign),
                 a == null ? List.of() : List.of(a.minX(), a.minY(), a.minZ(), a.maxX(), a.maxY(), a.maxZ()),
                 Optional.ofNullable(r.spawn()), Optional.ofNullable(r.delivery()), combos,
-                surfaces.size() > 4096 ? surfaces.subList(0, 4096) : surfaces, off.size() > 4096 ? off.subList(0, 4096) : off);
+                surfaces.size() > 4096 ? surfaces.subList(0, 4096) : surfaces, off.size() > 4096 ? off.subList(0, 4096) : off,
+                UPGRADES.stream().map(id -> {
+                    var costs = Restaurant.upgradeCosts(id);
+                    int lv = r.upgrade(id);
+                    return new UpgradeLine(id, lv, costs.size(), lv < costs.size() ? costs.get(lv) : 0);
+                }).toList());
     }
 }

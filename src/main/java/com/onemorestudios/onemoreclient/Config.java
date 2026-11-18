@@ -16,7 +16,7 @@ public class Config {
 
     static final ModConfigSpec.ConfigValue<String> CURRENCY = B
             .comment("Item that customers pay with.")
-            .define("currencyItem", "minecraft:emerald");
+            .define("currencyItem", "onemoreclient:coin");
     static final ModConfigSpec.IntValue MAX_AREA = B
             .comment("Maximum restaurant area size per axis, in blocks.")
             .defineInRange("maxAreaSize", 64, 4, 256);
@@ -113,6 +113,37 @@ public class Config {
             .define("appMenu", true);
     static final ModConfigSpec.BooleanValue APP_SHOP = B.define("appShop", true);
     static final ModConfigSpec.BooleanValue APP_MANAGER = B.define("appManager", true);
+    static final ModConfigSpec.BooleanValue APP_UPGRADES = B.define("appUpgrades", true);
+    static final ModConfigSpec.BooleanValue COLLECT_PAYMENTS = B
+            .comment("Customers leave their bill as coins on the table; a player collects them for the register. Off: the money goes",
+                    "straight into the register.")
+            .define("collectPayments", true);
+    static final ModConfigSpec.BooleanValue USE_PLATES = B
+            .comment("Serving a dish needs a clean plate (a drink: a clean glass) from the player's inventory. Customers leave them",
+                    "dirty on the table; a sink washes them.")
+            .define("usePlates", true);
+    static final ModConfigSpec.ConfigValue<List<? extends Integer>> DECOR_COSTS = B
+            .comment("Prices of the upgrade levels. Decor: each level gives 10 percent more patience.")
+            .defineListAllowEmpty("upgradeDecorCosts", List.of(30, 60, 120), () -> 30, o -> o instanceof Integer i && i >= 0);
+    static final ModConfigSpec.ConfigValue<List<? extends Integer>> DELIVERY_COSTS = B
+            .comment("Faster delivery: each level makes shop deliveries 40 percent faster.")
+            .defineListAllowEmpty("upgradeDeliveryCosts", List.of(40, 80), () -> 40, o -> o instanceof Integer i && i >= 0);
+    static final ModConfigSpec.ConfigValue<List<? extends Integer>> BELL_COSTS = B
+            .comment("Call bell: ringing a bell in the area during the service calls the next group at once (every 10 seconds at most).")
+            .defineListAllowEmpty("upgradeBellCosts", List.of(50), () -> 50, o -> o instanceof Integer i && i >= 0);
+    static final ModConfigSpec.BooleanValue PRICE_EFFECT = B
+            .comment("A price above 1.5 times a dish's worth (nutrition + saturation) makes customers order it less and tip less.")
+            .define("priceEffect", true);
+    static final ModConfigSpec.DoubleValue VIP_CHANCE = B
+            .comment("Chance that a group of 1 or 2 is a VIP: twice the tip, 60 percent of the patience.")
+            .defineInRange("vipChance", 0.1, 0, 1);
+    static final ModConfigSpec.DoubleValue REGULAR_CHANCE = B
+            .comment("Chance that a group of 1 or 2 is a regular, when the restaurant has favourite dishes: it orders a favourite,",
+                    "has 20 percent more patience and gives 50 percent more tip.")
+            .defineInRange("regularChance", 0.2, 0, 1);
+    static final ModConfigSpec.DoubleValue FAMILY_CHANCE = B
+            .comment("Chance that a group of 3 or more is a family: 20 percent more patience, a dessert in each order when there is one.")
+            .defineInRange("familyChance", 0.7, 0, 1);
 
     static final ModConfigSpec SPEC = B.build();
 

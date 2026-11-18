@@ -87,6 +87,10 @@ public class Restaurants extends SavedData {
         return bySign.remove(sign);
     }
 
+    void sendTableItems(ServerPlayer player, ChunkPos chunk) {
+        for (Restaurant r : bySign.values()) r.sendTableItems(player, chunk);
+    }
+
     /** Sends the dirt of a chunk to a player that starts to see the chunk. */
     void sendDirt(ServerPlayer player, ChunkPos chunk) {
         for (Restaurant r : bySign.values())

@@ -66,6 +66,133 @@ public class Restaurant {
     /** Ticks of service left today; 0 ends the arrivals. Only with dayLengthTicks > 0. */
     int serviceLeft;
 
+    /** Upgrade levels bought on the computer: "decor", "delivery", "bell". */
+    final Map<String, Integer> upgrades = new HashMap<>();
+    /** Coins (the bills) and dirty plates and glasses on the serving surfaces; a player collects them. */
+    final Map<BlockPos, Integer> coins = new HashMap<>();
+    final Map<BlockPos, int[]> dishesOnTable = new HashMap<>();
+    /** Game time when the call bell may ring again. */
+    private long bellReady;
+
+    public int upgrade(String id) {
+        return upgrades.getOrDefault(id, 0);
+    }
+
+    /** The prices of the levels of an upgrade, from the config; null for an unknown upgrade. */
+    static List<? extends Integer> upgradeCosts(String id) {
+        return switch (id) {
+            case "decor" -> Config.DECOR_COSTS.get();
+            case "delivery" -> Config.DELIVERY_COSTS.get();
+            case "bell" -> Config.BELL_COSTS.get();
+            default -> null;
+        };
+    }
+
+    /** Result of {@link #buyUpgrade}. */
+    public enum Upgrade { OK, MAX, COST, UNKNOWN }
+
+    /** Buys the next level of an upgrade with money from the register. */
+    Upgrade buyUpgrade(String id) {
+        List<? extends Integer> costs = upgradeCosts(id);
+        if (costs == null) return Upgrade.UNKNOWN;
+        int level = upgrade(id);
+        if (level >= costs.size()) return Upgrade.MAX;
+        int cost = costs.get(level);
+        if (register < cost) return Upgrade.COST;
+        register -= cost;
+        upgrades.put(id, level + 1);
+        owner.setDirty();
+        return Upgrade.OK;
+    }
+
+    /** Shop deliveries: each delivery level makes them 40 percent faster. */
+    int deliveryTicks() {
+        return (int) Math.round(Config.SHOP_DELIVERY.get() * Math.pow(0.6, upgrade("delivery")));
+    }
+
+    /**
+     * A player rang a bell in the area. With the bell upgrade and during the service, the next group comes at once; the
+     * bell rests 200 ticks. True if it called a group.
+     */
+    boolean ringBell(ServerLevel level) {
+        if (!open || upgrade("bell") == 0 || toSpawn <= 0 || level.getGameTime() < bellReady) return false;
+        bellReady = level.getGameTime() + 200;
+        spawnTimer = 1;
+        return true;
+    }
+
+    /** The bill of a party lies on its table as coins. */
+    void addCoins(BlockPos surface, int amount) {
+        coins.merge(surface.immutable(), amount, (a, b) -> (int) Math.min(Integer.MAX_VALUE, (long) a + b));
+        owner.setDirty();
+        sendTable(surface);
+    }
+
+    /** Dirty plates and glasses on a surface. */
+    void addDishes(ServerLevel level, BlockPos surface, int plates, int glasses) {
+        if (plates <= 0 && glasses <= 0) return;
+        int[] d = dishesOnTable.computeIfAbsent(surface.immutable(), p -> new int[2]);
+        d[0] = Math.min(64, d[0] + plates);
+        d[1] = Math.min(64, d[1] + glasses);
+        owner.setDirty();
+        sendTable(surface);
+    }
+
+    private ServerLevel serverLevel;
+
+    private void sendTable(BlockPos pos) {
+        if (serverLevel == null) return;
+        int[] d = dishesOnTable.getOrDefault(pos, new int[2]);
+        PacketDistributor.sendToPlayersTrackingChunk(serverLevel, new ChunkPos(pos), new TableItems(pos, coins.getOrDefault(pos, 0), d[0], d[1]));
+    }
+
+    /**
+     * A player collects the coins and the dirty dishes of the whole table of a surface: the coins go to the register
+     * with a pop and a "+N" notice for the player, the dishes into the player's inventory. Returns the coins collected.
+     */
+    int collect(ServerLevel level, Player player, BlockPos pos) {
+        int money = 0, plates = 0, glasses = 0;
+        Set<BlockPos> table = tableAt(level, pos);
+        table.add(pos.immutable());
+        for (BlockPos p : table) {
+            Integer c = coins.remove(p);
+            int[] d = dishesOnTable.remove(p);
+            if (c == null && d == null) continue;
+            if (c != null) money = (int) Math.min(Integer.MAX_VALUE, (long) money + c);
+            if (d != null) { plates += d[0]; glasses += d[1]; }
+            sendTable(p);
+        }
+        if (money > 0) {
+            addMoney(money);
+            level.playSound(null, pos, SoundEvents.CHICKEN_EGG, SoundSource.PLAYERS, 0.8f, 1.6f);
+            if (player instanceof ServerPlayer sp) PacketDistributor.sendToPlayer(sp, new TableItems.Collected(money));
+        }
+        give(player, new ItemStack(OneMoreClient.DIRTY_PLATE.get(), plates));
+        give(player, new ItemStack(OneMoreClient.DIRTY_GLASS.get(), glasses));
+        if (money > 0 || plates > 0 || glasses > 0) owner.setDirty();
+        return money;
+    }
+
+    private static void give(Player player, ItemStack stack) {
+        while (!stack.isEmpty()) {
+            ItemStack part = stack.split(stack.getMaxStackSize());
+            if (!player.getInventory().add(part)) player.drop(part, false);
+        }
+    }
+
+    boolean hasTableItems(BlockPos pos) {
+        return coins.containsKey(pos) || dishesOnTable.containsKey(pos);
+    }
+
+    /** Sends the coins and dishes of a chunk to a player that starts to see it. */
+    void sendTableItems(ServerPlayer player, ChunkPos chunk) {
+        for (BlockPos p : java.util.stream.Stream.concat(coins.keySet().stream(), dishesOnTable.keySet().stream()).distinct().toList()) {
+            if (!chunk.equals(new ChunkPos(p))) continue;
+            int[] d = dishesOnTable.getOrDefault(p, new int[2]);
+            PacketDistributor.sendToPlayer(player, new TableItems(p, coins.getOrDefault(p, 0), d[0], d[1]));
+        }
+    }
+
     /** A combo: dish ids and the price of all of them together. */
     public record Combo(String id, List<String> dishes, int price) {}
     /** Dishes that the players added, ids "custom:<item id>". */
@@ -328,7 +455,7 @@ public class Restaurant {
         if (delivery == null) return Buy.NO_DELIVERY;
         if (register < e.price()) return Buy.COST;
         register -= e.price();
-        deliveries.add(new Delivery(e.stack().copy(), Config.SHOP_DELIVERY.get()));
+        deliveries.add(new Delivery(e.stack().copy(), deliveryTicks()));
         owner.setDirty();
         return Buy.OK;
     }
@@ -381,12 +508,12 @@ public class Restaurant {
     /** Day, register, unlocks and paid orders: what the sign item keeps when the sign is broken. Positions are not kept. */
     CompoundTag progress() {
         CompoundTag tag = save();
-        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "tables_off")) tag.remove(key);
+        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "tables_off", "table_items")) tag.remove(key);
         return tag;
     }
 
     boolean hasProgress() {
-        return day > 1 || register > 0 || !unlocked.isEmpty() || !deliveries.isEmpty() || !off.isEmpty() || !custom.isEmpty() || !kinds.isEmpty() || !combos.isEmpty();
+        return day > 1 || register > 0 || !unlocked.isEmpty() || !deliveries.isEmpty() || !off.isEmpty() || !custom.isEmpty() || !kinds.isEmpty() || !combos.isEmpty() || !upgrades.isEmpty();
     }
 
     void restore(CompoundTag progress) {
@@ -399,6 +526,8 @@ public class Restaurant {
         custom.addAll(from.custom);
         kinds.putAll(from.kinds);
         combos.addAll(from.combos);
+        upgrades.putAll(from.upgrades);
+        favourites.addAll(from.favourites);
         deliveries.addAll(from.deliveries);
         owner.setDirty();
     }
@@ -500,6 +629,7 @@ public class Restaurant {
     }
 
     void tick(ServerLevel level) {
+        serverLevel = level;
         // Hidden chunks can unload entities without calling Customer.remove or a second tracking callback.
         for (Customer c : List.copyOf(customers)) if (c.isRemoved()) c.removeFromRestaurant();
         if (!level.isLoaded(sign)) return;
@@ -567,11 +697,21 @@ public class Restaurant {
      */
     int spawnParty(ServerLevel level, int size) {
         Customer.Party party = new Customer.Party();
-        for (Seat seat : freeSeats(level, Math.min(size, toSpawn))) {
-            List<Customer.Line> order = makeOrder(level);
+        List<Seat> chosen = freeSeats(level, Math.min(size, toSpawn));
+        // The kind of guests: a family is a group of 3 or more; 1 or 2 can be a VIP or, when the restaurant has
+        // favourite dishes, a regular.
+        double roll = level.random.nextDouble();
+        if (chosen.size() >= 3) party.type = roll < Config.FAMILY_CHANCE.get() ? Customer.Type.FAMILY : Customer.Type.NORMAL;
+        else if (roll < Config.VIP_CHANCE.get()) party.type = Customer.Type.VIP;
+        else if (!favourites.isEmpty() && roll < Config.VIP_CHANCE.get() + Config.REGULAR_CHANCE.get()) party.type = Customer.Type.REGULAR;
+        for (Seat seat : chosen) {
+            List<String> ids = new ArrayList<>();
+            List<Customer.Line> order = makeOrder(level, party.type, ids);
             if (order.isEmpty()) { toSpawn = 0; break; }
             Customer c = new Customer(OneMoreClient.CUSTOMER.get(), level);
             c.setup(this, seat, order, party);
+            c.dishIds.addAll(ids);
+            c.setType(party.type);
             c.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, 0, 0);
             arriving.add(c);
             customers.add(c);
@@ -580,7 +720,49 @@ public class Restaurant {
         return party.members.size();
     }
 
+    /** Dish ids that parties enjoyed (served with more than half of the patience left); regulars order them. */
+    final Set<String> favourites = new HashSet<>();
+
+    /** The price that a dish is worth: its nutrition plus its saturation; a drink without food values is worth 3. */
+    static int suggestedPrice(Menu.Entry e) {
+        ItemStack stack = e.stack() != null ? e.stack() : e.pick(net.minecraft.util.RandomSource.create(0));
+        var food = stack.get(net.minecraft.core.component.DataComponents.FOOD);
+        return food == null ? 3 : Math.max(1, food.nutrition() + Math.round(food.saturation()));
+    }
+
+    /**
+     * How much a price above the worth puts customers off. Up to 1.5 times the worth: no effect. Above it the order weight
+     * falls to 1 / (1 + 2 (r - 1.5)) and the tip to (1 - (r - 1.5)) of normal, where r is price / worth.
+     */
+    static double orderWeight(Menu.Entry e) {
+        if (!Config.PRICE_EFFECT.get()) return 1;
+        double r = e.price() / (double) suggestedPrice(e);
+        return r <= 1.5 ? 1 : 1 / (1 + 2 * (r - 1.5));
+    }
+
+    static int tipPercent(Menu.Entry e) {
+        if (!Config.PRICE_EFFECT.get()) return 100;
+        double r = e.price() / (double) suggestedPrice(e);
+        return r <= 1.5 ? 100 : (int) Math.round(100 * Math.max(0, 1 - (r - 1.5)));
+    }
+
+    private Menu.Entry weighted(List<Menu.Entry> of, ServerLevel level) {
+        double total = 0;
+        for (Menu.Entry e : of) total += orderWeight(e);
+        double x = level.random.nextDouble() * total;
+        for (Menu.Entry e : of) if ((x -= orderWeight(e)) < 0) return e;
+        return of.get(of.size() - 1);
+    }
+
+    private Customer.Line line(Menu.Entry e, ItemStack stack, int price) {
+        return new Customer.Line(stack, price, e.exact(), tipPercent(e), kind(e).equals("drink"));
+    }
+
     private List<Customer.Line> makeOrder(ServerLevel level) {
+        return makeOrder(level, Customer.Type.NORMAL, new ArrayList<>());
+    }
+
+    private List<Customer.Line> makeOrder(ServerLevel level, Customer.Type type, List<String> ids) {
         List<Menu.Entry> available = dishes().stream().filter(this::canOrder).toList();
         List<Customer.Line> order = new ArrayList<>();
         if (available.isEmpty()) return order;
@@ -593,7 +775,8 @@ public class Restaurant {
                 Menu.Entry e = dish(c.dishes().get(i));
                 ItemStack stack = e.pick(level.random);
                 if (stack.isEmpty()) return new ArrayList<>();
-                order.add(new Customer.Line(stack, share + (i == 0 ? rest : 0), e.exact()));
+                order.add(new Customer.Line(stack, share + (i == 0 ? rest : 0), e.exact(), 100, kind(e).equals("drink")));
+                ids.add(e.id());
             }
             return order;
         }
@@ -605,11 +788,24 @@ public class Restaurant {
         Util.shuffle(kinds, level.random);
         if (kinds.remove("main")) kinds.add(0, "main");
         int n = Math.min(kinds.size(), 1 + level.random.nextInt(Config.MAX_ORDER_ITEMS.get()));
-        for (int i = 0; i < n; i++) {
-            List<Menu.Entry> of = byKind.get(kinds.get(i));
-            Menu.Entry e = of.get(level.random.nextInt(of.size()));
+        List<String> chosen = new ArrayList<>(kinds.subList(0, n));
+        // A family takes a dessert too.
+        if (type == Customer.Type.FAMILY && byKind.containsKey("dessert") && !chosen.contains("dessert")) chosen.add("dessert");
+        // A regular orders one of its favourites.
+        Menu.Entry favourite = null;
+        if (type == Customer.Type.REGULAR) {
+            List<Menu.Entry> fav = available.stream().filter(e -> favourites.contains(e.id())).toList();
+            if (!fav.isEmpty()) {
+                favourite = fav.get(level.random.nextInt(fav.size()));
+                if (!chosen.contains(kind(favourite))) chosen.add(0, kind(favourite));
+            }
+        }
+        for (String k : chosen) {
+            Menu.Entry e = favourite != null && kind(favourite).equals(k) ? favourite : weighted(byKind.get(k), level);
             ItemStack stack = e.pick(level.random);
-            if (!stack.isEmpty()) order.add(new Customer.Line(stack, e.price(), e.exact()));
+            if (stack.isEmpty()) continue;
+            order.add(line(e, stack, e.price()));
+            ids.add(e.id());
         }
         return order;
     }
@@ -626,7 +822,7 @@ public class Restaurant {
         long now = level.getGameTime();
         for (List<Seat> table : tables) {
             if (table.stream().anyMatch(s -> customers.stream().anyMatch(c -> s.seat().equals(c.seat)))) continue;
-            if (table.stream().anyMatch(s -> dirt.containsKey(s.surface()) || offTables.contains(s.surface())
+            if (table.stream().anyMatch(s -> dirt.containsKey(s.surface()) || offTables.contains(s.surface()) || hasTableItems(s.surface())
                     || now - freedAt.getOrDefault(s.surface(), Long.MIN_VALUE / 2) < Config.TABLE_PAUSE.get())) continue;
             List<Seat> seated = new ArrayList<>(table.stream().filter(s -> isSeat(level, s)).toList());
             if (seated.isEmpty() || !isTableOn(tableSurfaces(table))) continue;
@@ -794,6 +990,23 @@ public class Restaurant {
             comboList.add(t);
         }
         tag.put("combos", comboList);
+        CompoundTag up = new CompoundTag();
+        upgrades.forEach(up::putInt);
+        tag.put("upgrades", up);
+        ListTag favs = new ListTag();
+        for (String id : favourites) favs.add(StringTag.valueOf(id));
+        tag.put("favourites", favs);
+        ListTag table = new ListTag();
+        for (BlockPos p : java.util.stream.Stream.concat(coins.keySet().stream(), dishesOnTable.keySet().stream()).distinct().toList()) {
+            CompoundTag t = new CompoundTag();
+            t.putLong("pos", p.asLong());
+            t.putInt("coins", coins.getOrDefault(p, 0));
+            int[] d = dishesOnTable.getOrDefault(p, new int[2]);
+            t.putInt("plates", d[0]);
+            t.putInt("glasses", d[1]);
+            table.add(t);
+        }
+        tag.put("table_items", table);
         long[] tablesOff = offTables.stream().mapToLong(BlockPos::asLong).toArray();
         tag.putLongArray("tables_off", tablesOff);
         if (delivery != null) tag.putLong("delivery", delivery.asLong());
@@ -836,6 +1049,16 @@ public class Restaurant {
                 r.combos.add(new Combo(c.getString("id"), List.copyOf(ids), Math.max(1, c.getInt("price"))));
         }
         for (long p : tag.getLongArray("tables_off")) r.offTables.add(BlockPos.of(p));
+        CompoundTag up = tag.getCompound("upgrades");
+        for (String id : up.getAllKeys()) if (upgradeCosts(id) != null) r.upgrades.put(id, Math.max(0, Math.min(upgradeCosts(id).size(), up.getInt(id))));
+        for (Tag t : tag.getList("favourites", Tag.TAG_STRING)) r.favourites.add(t.getAsString());
+        for (Tag t : tag.getList("table_items", Tag.TAG_COMPOUND)) {
+            CompoundTag c = (CompoundTag) t;
+            BlockPos p = BlockPos.of(c.getLong("pos"));
+            if (c.getInt("coins") > 0) r.coins.put(p, c.getInt("coins"));
+            int pl = Math.max(0, Math.min(64, c.getInt("plates"))), gl = Math.max(0, Math.min(64, c.getInt("glasses")));
+            if (pl > 0 || gl > 0) r.dishesOnTable.put(p, new int[] {pl, gl});
+        }
         for (Tag t : tag.getList("custom", Tag.TAG_COMPOUND)) {
             CompoundTag c = (CompoundTag) t;
             // An item of a mod that was removed is skipped. A price out of range is clamped to the allowed range.

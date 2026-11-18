@@ -22,6 +22,9 @@ final class WipingBehavior implements StationBehavior {
         height = (float) (Dirt.top(view.level(), view.pos()) * 16);
         float offset = height - 16;
         view.node("cloth").ifPresent(node -> node.moveTo(0, offset, 0, 0));
+        // Coins and dishes lie on the real table top too.
+        for (String id : new String[] {"coins", "dishes"}) view.node(id).ifPresent(node -> node.moveTo(0, offset, 0, 0));
+        collected = false;
         view.moveCamera(0, offset, 0);
     }
 
@@ -38,8 +41,37 @@ final class WipingBehavior implements StationBehavior {
         }));
     }
 
+    /** True after a click sent "collect": the coins and dishes hop up and go, before the server's answer comes. */
+    private boolean collected;
+
+    /** Shows the coins and the dishes that lie on this surface. */
+    private void showTableItems(StationView view) {
+        var items = com.onemorestudios.onemoreclient.TableItems.CLIENT.get(view.pos());
+        boolean coins = !collected && items != null && items.coins() > 0, dishes = !collected && items != null && (items.plates() > 0 || items.glasses() > 0);
+        show(view, "coins", coins);
+        show(view, "dishes", dishes);
+    }
+
+    /** A node that comes back starts on the table top again (it may have hopped away before). */
+    private void show(StationView view, String id, boolean on) {
+        view.node(id).ifPresent(n -> {
+            if (n.isVisible() == on || n.isMoving()) return;
+            if (on) n.moveTo(0, height - 16, 0, 0);
+            n.setVisible(on);
+        });
+    }
+
     @Override
     public void onEvent(StationView view, SceneEvent event) {
+        // A click on the coins or the dishes collects both: the coins hop up towards the register with a pop.
+        if (event instanceof SceneEvent.Click click && ("coins".equals(click.node()) || "dishes".equals(click.node())) && !collected) {
+            collected = true;
+            view.sendAction("collect", new CompoundTag());
+            float lift = height - 16;
+            for (String id : new String[] {"coins", "dishes"})
+                view.node(id).filter(n -> n.isVisible()).ifPresent(n -> n.hopTo(0, lift + 10, 0, 6, 0.35f));
+            return;
+        }
         if (event instanceof SceneEvent.Contact contact && "cloth".equals(contact.node()) && "table".equals(contact.other()))
             touching = contact.touching();
         if (event instanceof SceneEvent.Release) touching = false;
@@ -50,8 +82,10 @@ final class WipingBehavior implements StationBehavior {
 
     @Override
     public void tick(StationView view) {
+        showTableItems(view);
+        if (collected && !com.onemorestudios.onemoreclient.TableItems.CLIENT.containsKey(view.pos())) collected = false;
         // Clean (the server cleaned it at dirtCleanFraction): a short look at the clean table, then the station closes.
-        if (view.isFocused() && !Dirt.CLIENT.containsKey(view.pos())) {
+        if (view.isFocused() && !Dirt.CLIENT.containsKey(view.pos()) && !com.onemorestudios.onemoreclient.TableItems.CLIENT.containsKey(view.pos())) {
             if (++cleanTicks == 12) {
                 var mc = net.minecraft.client.Minecraft.getInstance();
                 if (mc.screen != null && com.pockyl.diegesis.api.client.DiegesisClient.isStationScreen(mc.screen)) mc.screen.onClose();
