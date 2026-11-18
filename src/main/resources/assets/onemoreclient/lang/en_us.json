@@ -72,7 +72,6 @@
   "onemoreclient.hud.day": "Day %s",
   "onemoreclient.hud.open": "OPEN",
   "onemoreclient.hud.closed": "CLOSED",
-  "onemoreclient.hud.left": "Customers left: %s",
   "onemoreclient.hud.ready": "Ready: %s/%s",
   "onemoreclient.hud.click_sign": "Get ready to open",
   "key.categories.onemoreclient": "One More Client",
@@ -80,6 +79,5 @@
   "onemoreclient.ready.title": "Day %s: get ready",
   "onemoreclient.ready.hold": "Hold to get ready",
   "onemoreclient.ready.cancel": "Hold to cancel",
-  "onemoreclient.ready.starting": "Starting in %s...",
   "onemoreclient.open.stopped": "The countdown stopped. A player is not ready."
 }

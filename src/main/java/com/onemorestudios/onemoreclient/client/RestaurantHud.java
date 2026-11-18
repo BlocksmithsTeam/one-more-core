@@ -18,8 +18,8 @@ import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 /** The restaurant panel at the top left. It shows while the server sends a {@link Status}, that is, near a restaurant. */
 public class RestaurantHud {
     private static final ResourceLocation PANEL = sprite("panel"), DAY = sprite("day"), CUSTOMER = sprite("customer"),
-            SERVED = sprite("served"), LOST = sprite("lost"), READY = sprite("ready");
-    private static final int WIDTH = 112, LINE = 11;
+            SERVED = sprite("served"), LOST = sprite("lost");
+    private static final int LINE = 11;
 
     private static ResourceLocation sprite(String name) {
         return ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "hud/" + name);
@@ -33,49 +33,63 @@ public class RestaurantHud {
         return Component.translatable("onemoreclient.hud." + key, args);
     }
 
+    private static final int WHITE = 0xFFFFFFFF, GREY = 0xFFB0B0B0, PAD = 5;
+
     private static void render(GuiGraphics g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
         Status s = Status.client;
         // The server sends a status every 10 ticks. One second without one: the player left the restaurant.
         if (s == null || mc.options.hideGui || mc.getDebugOverlay().showDebugScreen() || System.currentTimeMillis() - Status.clientTime > 1500) return;
         Font font = mc.font;
-        // Open: day, customers, served and lost, register. Closed: day, what to do next, register.
-        int x = 4, y = 4, lines = s.open() ? 4 : 3;
-        Component hint = s.readyCount() > 0 ? text("ready", s.readyCount(), s.players().size()) : text("click_sign");
-        int width = Math.max(WIDTH, font.width(s.open() ? text("left", s.left()) : hint) + 24);
-        g.blitSprite(PANEL, x, y, width, 8 + lines * LINE);
-        x += 6;
-        y += 5;
+        Component day = text("day", s.day());
+        Component state = s.open() ? text("open").withStyle(ChatFormatting.GREEN) : text("closed").withStyle(ChatFormatting.RED);
+        String money = String.valueOf(s.register()), earned = s.open() && s.earned() > 0 ? "+" + s.earned() : "";
+        String left = String.valueOf(s.left()), served = String.valueOf(s.served());
+        String lost = s.maxLost() > 0 ? s.lost() + "/" + s.maxLost() : String.valueOf(s.lost());
+        // Closed and outside the ready panel: one grey line that says what to do.
+        Component hint = s.open() || ReadyHud.status() != null ? null
+                : s.readyCount() > 0 ? text("ready", s.readyCount(), s.players().size()) : text("click_sign");
+
+        // Lines: day and state; when open, the counters; the register; the hint.
+        int counters = 3 * 12 + font.width(left) + font.width(served) + font.width(lost) + 2 * 8;
+        int inner = Math.max(12 + font.width(day) + 12 + font.width(state), 12 + font.width(money) + (earned.isEmpty() ? 0 : 4 + font.width(earned)));
+        if (s.open()) inner = Math.max(inner, counters);
+        if (hint != null) inner = Math.max(inner, font.width(hint));
+        int lines = 2 + (s.open() ? 1 : 0) + (hint != null ? 1 : 0);
+        int x = 4, y = 4, width = inner + 2 * PAD;
+        g.blitSprite(PANEL, x, y, width, 2 * PAD - 2 + lines * LINE);
+        x += PAD;
+        y += PAD;
 
         g.blitSprite(DAY, x, y, 9, 9);
-        g.drawString(font, text("day", s.day()), x + 12, y + 1, 0xFFF3E2C7, false);
-        Component state = s.open() ? text("open").withStyle(ChatFormatting.GREEN) : text("closed").withStyle(ChatFormatting.RED);
-        g.drawString(font, state, x + width - 12 - font.width(state), y + 1, 0xFFFFFFFF, false);
+        g.drawString(font, day, x + 12, y + 1, WHITE, false);
+        g.drawString(font, state, x + inner - font.width(state), y + 1, WHITE, false);
         y += LINE;
 
         if (s.open()) {
-            g.blitSprite(CUSTOMER, x, y, 9, 9);
-            g.drawString(font, text("left", s.left()), x + 12, y + 1, 0xFFF3E2C7, false);
+            int cx = x;
+            cx = counter(g, font, CUSTOMER, left, cx, y, WHITE) + 8;
+            cx = counter(g, font, SERVED, served, cx, y, WHITE) + 8;
+            counter(g, font, LOST, lost, cx, y, s.maxLost() > 0 && s.lost() * 2 >= s.maxLost() ? 0xFFFF6A5A : WHITE);
             y += LINE;
-            g.blitSprite(SERVED, x, y, 9, 9);
-            g.drawString(font, String.valueOf(s.served()), x + 12, y + 1, 0xFF8EE07A, false);
-            int half = x + WIDTH / 2 - 4;
-            g.blitSprite(LOST, half, y, 9, 9);
-            String lost = s.maxLost() > 0 ? s.lost() + "/" + s.maxLost() : String.valueOf(s.lost());
-            g.drawString(font, lost, half + 12, y + 1, s.maxLost() > 0 && s.lost() * 2 >= s.maxLost() ? 0xFFFF6A5A : 0xFFE8B0A0, false);
-        } else {
-            g.blitSprite(READY, x, y, 9, 9);
-            g.drawString(font, hint, x + 12, y + 1, s.readyCount() > 0 ? 0xFFFFE27A : 0xFFB8A58A, false);
         }
-        y += LINE;
 
         g.pose().pushPose();
         g.pose().translate(x - 1, y - 1, 0);
         g.pose().scale(0.6875f, 0.6875f, 1);
         g.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(s.currency())), 0, 0);
         g.pose().popPose();
-        String money = String.valueOf(s.register());
-        g.drawString(font, money, x + 12, y + 1, 0xFFFFE27A, false);
-        if (s.open() && s.earned() > 0) g.drawString(font, "+" + s.earned(), x + 16 + font.width(money), y + 1, 0xFF8EE07A, false);
+        g.drawString(font, money, x + 12, y + 1, WHITE, false);
+        if (!earned.isEmpty()) g.drawString(font, earned, x + 16 + font.width(money), y + 1, GREY, false);
+        y += LINE;
+
+        if (hint != null) g.drawString(font, hint, x, y + 1, GREY, false);
+    }
+
+    /** An icon and a number. Returns the x after the number. */
+    private static int counter(GuiGraphics g, Font font, ResourceLocation icon, String value, int x, int y, int color) {
+        g.blitSprite(icon, x, y, 9, 9);
+        g.drawString(font, value, x + 12, y + 1, color, false);
+        return x + 12 + font.width(value);
     }
 }
