@@ -12,9 +12,10 @@ The mod does not add food. It works with the items of any mod.
 4. Click the sign. A player alone in the area starts the day at once. With more players, a panel opens for every player inside the area: each one holds **R** (key "Get ready (hold)"). When all of them are ready, a short countdown starts the day. Hold the key again to cancel.
 5. Click a seated customer to take the order. Look at an item in the speech bubble to read its tooltip.
 6. Hold the ordered item and click the customer, or the surface in front of the customer.
-7. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
+7. Serve food on a clean **Plate** and drinks in a clean **Glass** (one is used from the inventory per dish). A party leaves its bill as **Coins** and its dirty dishes on the table. Click the table with an empty hand (with Diegesis: click the coins in the table view) to put the coins in the register and take the dishes. A table with coins or dishes gets no new party. Wash dirty dishes at a **Sink**: use a dirty plate or glass on it. `usePlates` and `collectPayments` turn this off.
+8. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
    A broken sign keeps the money, the day, the unlocks and the paid orders in the item, like a shulker box. Place it again and set the area again.
-8. Customers leave a stain on the table. A dirty surface gets no customer until `dirtCleanFraction` of it is clean.
+9. Customers leave a stain on the table. A dirty surface gets no customer until `dirtCleanFraction` of it is clean.
 
 Optional [Diegesis](https://github.com/Pocky-l/diegesis) adds a camera above the table and a folded 3D cloth.
 Use NeoForge 1.21.1 with Diegesis beta.11 or newer on the client and server.
@@ -28,6 +29,9 @@ A day is a work shift (`dayLengthTicks`, default 6000 = 5 minutes): groups keep 
 Near a restaurant, a panel at the top left shows the day, the customers left, the served and lost customers and the register.
 The start and the end of a day show as a title. A customer shows a speech bubble: a "!" when it waits for a player, then the ordered items and its patience bar.
 
+Some parties are special guests, with a mark on the speech bubble: a **VIP** (star) waits less and tips more, a **regular** (heart) waits longer and often orders a dish it had before, a **family** (house) is a group of three or more that orders a dessert too (`vipChance`, `regularChance`, `familyChance`).
+A price above 1.5 times the worth of a dish (nutrition + saturation) makes customers order it less often and tip less for it (`priceEffect`).
+
 Customers can come as a group. A group sits at one table, and one table has one party at a time. A table is a set of serving surfaces that touch each other.
 One click takes the orders of the whole group. Each member gets its own food. The group eats when every member has its food, pays one bill and leaves together.
 
@@ -38,13 +42,14 @@ Use a **Restaurant Computer** inside the restaurant area, or at most 32 blocks f
 - **Menu**: a searchable catalog of the restaurant's dishes, filtered by kind (main, drink, starter, dessert). Put a dish on the menu or take it off, unlock a dish with money from the register, add any food or drink with your own price (`maxDishPrice`), and change the kind of a dish with its label. One order has at most one dish of each kind. Customers order only dishes that are on the menu.
   **Combos**: 2 to 4 dishes for one price (for example a skewer, a cola and a salad). A customer orders a combo with the chance `comboChance` when all its dishes are on the menu.
 - **Shop**: a searchable catalog of the items of `shop.json`. Buy pays from the register; the items arrive at the delivery container after a delay.
+- **Upgrades**: Decor (guests wait longer), Fast delivery (shop orders arrive sooner) and Call bell (use a Minecraft bell in the area while the day runs: the next group comes now). The prices are `upgradeDecorCosts`, `upgradeDeliveryCosts` and `upgradeBellCosts`.
 - **Manager**: shows the state of the restaurant and edits the area, the customer spawn point and the delivery container with a free camera (keys 1, 2, 3 choose the tool; WASD, Space and Shift fly; Ctrl flies fast). Points must be at most 48 blocks from the computer.
 
 The order goes into this container. If the container is full or gone, the items drop there.
 
 ## Configuration
 
-- `config/onemoreclient-common.toml`: currency item, patience, customer count, group size and chance, dirt, tip, seat heights, food display, shop delivery time, computer apps (`appMenu`, `appShop`, `appManager`).
+- `config/onemoreclient-common.toml`: currency item, patience, customer count, group size and chance, dirt, tip, seat heights, food display, shop delivery time, computer apps (`appMenu`, `appShop`, `appManager`, `appUpgrades`). The default currency is the mod's coin.
 - `lostCustomerPenalty`: money lost per customer who leaves without food. Default: 0 (off). The register stays at or above 0.
 - `readyCountdownTicks`: ticks between "everyone is ready" and the start of the day, when more than one player is in the area. Default: 60. 0 starts at once.
 - `maxLostPerDay`: lost customers that fail the day. Default: 0 (off). A failed day repeats; earned money stays.
