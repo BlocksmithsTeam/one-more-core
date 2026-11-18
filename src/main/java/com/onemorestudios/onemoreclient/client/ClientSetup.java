@@ -35,6 +35,9 @@ public class ClientSetup {
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderOrderTooltip);
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderArea);
         bus.addListener(RestaurantHud::register);
+        bus.addListener(ReadyHud::registerKeys);
+        bus.addListener(ReadyHud::registerLayer);
+        NeoForge.EVENT_BUS.addListener(ReadyHud::tick);
         DirtRenderer.register();
     }
 

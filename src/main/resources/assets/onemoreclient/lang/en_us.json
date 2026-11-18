@@ -15,7 +15,7 @@
   "onemoreclient.open.no_spawn": "Set the customer spawn point first (sneak-click with the tool).",
   "onemoreclient.open.no_menu": "No menu item is unlocked.",
   "onemoreclient.open.no_seats": "No seat next to a serving surface was found in the area.",
-  "onemoreclient.open.ready": "%s is ready (%s/%s). Click the sign to confirm.",
+  "onemoreclient.open.ready": "%s is ready (%s/%s).",
   "onemoreclient.open.started": "%2$s customers are coming",
   "onemoreclient.open.status": "Day %s. Customers left: %s. Register: %s.",
   "onemoreclient.day.end": "Served: %2$s  Lost: %3$s  Earned: %4$s",
@@ -74,5 +74,12 @@
   "onemoreclient.hud.closed": "CLOSED",
   "onemoreclient.hud.left": "Customers left: %s",
   "onemoreclient.hud.ready": "Ready: %s/%s",
-  "onemoreclient.hud.click_sign": "Click the sign to open"
+  "onemoreclient.hud.click_sign": "Click the sign to open",
+  "key.categories.onemoreclient": "One More Client",
+  "key.onemoreclient.ready": "Get ready (hold)",
+  "onemoreclient.ready.title": "Day %s: get ready",
+  "onemoreclient.ready.hold": "Hold to get ready",
+  "onemoreclient.ready.cancel": "Hold to cancel",
+  "onemoreclient.ready.starting": "Starting in %s...",
+  "onemoreclient.open.stopped": "The countdown stopped. A player is not ready."
 }

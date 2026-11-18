@@ -17,6 +17,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataSerializer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.InteractionHand;
@@ -98,7 +99,8 @@ public class OneMoreClient {
             if (e.getLevel() instanceof ServerLevel level) Restaurants.get(level).tick(level);
         });
         bus.addListener((RegisterPayloadHandlersEvent e) -> e.registrar("1").playToClient(Dirt.TYPE, Dirt.CODEC, (dirt, context) -> Dirt.receive(dirt))
-                .playToClient(Status.TYPE, Status.CODEC, (status, context) -> { Status.client = status; Status.clientTime = System.currentTimeMillis(); }));
+                .playToClient(Status.TYPE, Status.CODEC, (status, context) -> { Status.client = status; Status.clientTime = System.currentTimeMillis(); })
+                .playToServer(ReadyRequest.TYPE, ReadyRequest.CODEC, (request, context) -> ReadyRequest.handle(request, (ServerPlayer) context.player())));
         NeoForge.EVENT_BUS.addListener((ChunkWatchEvent.Sent e) -> Restaurants.get(e.getLevel()).sendDirt(e.getPlayer(), e.getPos()));
         NeoForge.EVENT_BUS.addListener(OneMoreClient::onRightClickBlock);
         NeoForge.EVENT_BUS.addListener(OneMoreClient::registerCommands);

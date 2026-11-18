@@ -23,6 +23,9 @@ public class Config {
     static final ModConfigSpec.BooleanValue READY_CHECK = B
             .comment("All players inside the area must click the sign before the day starts.")
             .define("requireReadyCheck", true);
+    static final ModConfigSpec.IntValue READY_COUNTDOWN = B
+            .comment("Ticks between the moment every player is ready and the start of the day. 0 starts the day at once.")
+            .defineInRange("readyCountdownTicks", 60, 0, 600);
     static final ModConfigSpec.IntValue CUSTOMERS_BASE = B
             .comment("Customers per day = customersBase + customersPerDay * (day - 1).")
             .defineInRange("customersBase", 3, 1, 1000);

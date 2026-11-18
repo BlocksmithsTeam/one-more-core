@@ -62,6 +62,8 @@ public class Restaurant {
     int toSpawn, spawnTimer, served, lost, earned;
     long penalties;
     final Set<UUID> ready = new HashSet<>();
+    /** Ticks until the day starts, after every player is ready. 0: no countdown. */
+    int countdown;
     List<Seat> seats = List.of();
     /** The seats, grouped by table. One party sits at a table. */
     List<List<Seat>> tables = List.of();
@@ -199,11 +201,37 @@ public class Restaurant {
         owner.setDirty();
     }
 
-    /** A player clicked the sign of the closed restaurant. */
+    /** A player clicked the sign of the closed restaurant: the player is ready. */
     void requestOpen(ServerLevel level, Player player) {
+        setReady(level, player, true);
+    }
+
+    /** Why the day cannot start, as a lang key suffix, or null. Scans the seats. */
+    private String problem(ServerLevel level) {
         String problem = area == null ? "no_area" : spawn == null ? "no_spawn"
                 : Menu.entries.stream().noneMatch(this::isAvailable) ? "no_menu" : null;
         if (problem == null && (seats = scanSeats(level)).isEmpty()) problem = "no_seats";
+        return problem;
+    }
+
+    /** True if every player inside the area is ready, or the ready check is off. */
+    private boolean allReady(ServerLevel level) {
+        if (!Config.READY_CHECK.get()) return true;
+        for (ServerPlayer p : level.players()) if (area.isInside(p.blockPosition()) && !ready.contains(p.getUUID())) return false;
+        return true;
+    }
+
+    /**
+     * Marks the player ready or not ready. When every player inside the area is ready, the countdown starts;
+     * the day starts when it ends. The player who clicks counts even when outside the area.
+     */
+    void setReady(ServerLevel level, Player player, boolean on) {
+        if (open) return;
+        if (!on) {
+            if (ready.remove(player.getUUID()) && countdown > 0) stopCountdown(level);
+            return;
+        }
+        String problem = problem(level);
         if (problem != null) {
             player.displayClientMessage(Component.translatable("onemoreclient.open." + problem), true);
             return;
@@ -220,6 +248,35 @@ public class Restaurant {
             level.playSound(null, sign, SoundEvents.NOTE_BLOCK_CHIME.value(), SoundSource.BLOCKS, 1, 1.4f);
             return;
         }
+        if (countdown > 0) return;
+        countdown = Config.READY_COUNTDOWN.get();
+        if (countdown == 0) startDay(level);
+    }
+
+    private void stopCountdown(ServerLevel level) {
+        countdown = 0;
+        BoundingBox near = area.inflatedBy(16);
+        for (ServerPlayer p : level.players())
+            if (near.isInside(p.blockPosition())) p.displayClientMessage(Component.translatable("onemoreclient.open.stopped"), true);
+        level.playSound(null, sign, SoundEvents.NOTE_BLOCK_BASS.value(), SoundSource.BLOCKS, 1, 0.8f);
+    }
+
+    /** One tick of the countdown. It stops when a player inside the area is not ready, and the day starts at 0. */
+    private void tickCountdown(ServerLevel level) {
+        if (!allReady(level)) { stopCountdown(level); return; }
+        if (countdown % 20 == 0) level.playSound(null, sign, SoundEvents.NOTE_BLOCK_HAT.value(), SoundSource.BLOCKS, 1, 1.2f);
+        if (--countdown > 0) return;
+        String problem = problem(level);
+        if (problem == null) { startDay(level); return; }
+        ready.clear();
+        BoundingBox near = area.inflatedBy(16);
+        for (ServerPlayer p : level.players())
+            if (near.isInside(p.blockPosition())) p.displayClientMessage(Component.translatable("onemoreclient.open." + problem), true);
+    }
+
+    /** Starts the service. The seats are scanned already. */
+    private void startDay(ServerLevel level) {
+        countdown = 0;
         ready.clear();
         seatScanTimer = 0;
         tables = groupTables(level, seats);
@@ -242,6 +299,7 @@ public class Restaurant {
         if (!state.is(OneMoreClient.OPEN_SIGN)) return;
         tickDeliveries(level);
         if (state.getValue(OpenSignBlock.OPEN) != open) level.setBlockAndUpdate(sign, state.setValue(OpenSignBlock.OPEN, open));
+        if (!open && countdown > 0 && area != null) tickCountdown(level);
         if (area != null && level.getGameTime() % 10 == 0) sendStatus(level);
         if (!open) return;
         if (seatScanTimer > 0) seatScanTimer--;
@@ -419,21 +477,19 @@ public class Restaurant {
     }
 
     // ponytail: a player near two restaurants gets both, and the HUD shows the last one. Pick the nearest if this shows.
-    private void sendStatus(ServerLevel level) {
+    void sendStatus(ServerLevel level) {
         BoundingBox near = area.inflatedBy(8);
         Status status = null;
         for (ServerPlayer p : level.players()) {
             if (!near.isInside(p.blockPosition())) continue;
             if (status == null) {
-                // Like requestOpen: the players inside the area must be ready; a ready player who left does not count.
-                int inside = 0, readyInside = 0;
-                for (ServerPlayer q : level.players()) {
-                    if (!area.isInside(q.blockPosition())) continue;
-                    inside++;
-                    if (ready.contains(q.getUUID())) readyInside++;
-                }
+                // The players inside the area; a ready player who left does not count, like in setReady.
+                List<Status.Member> members = new ArrayList<>();
+                for (ServerPlayer q : level.players())
+                    if (area.isInside(q.blockPosition()))
+                        members.add(new Status.Member(q.getUUID(), q.getGameProfile().getName(), ready.contains(q.getUUID())));
                 status = new Status(open, day, toSpawn + customers.size(), served, lost, Config.MAX_LOST_PER_DAY.get(), register, earned,
-                        readyInside, readyInside == 0 ? 0 : inside, BuiltInRegistries.ITEM.getKey(Config.currency()));
+                        BuiltInRegistries.ITEM.getKey(Config.currency()), members, countdown);
             }
             PacketDistributor.sendToPlayer(p, status);
         }

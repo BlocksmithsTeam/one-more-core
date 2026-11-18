@@ -41,7 +41,7 @@ public class RestaurantHud {
         Font font = mc.font;
         // Open: day, customers, served and lost, register. Closed: day, what to do next, register.
         int x = 4, y = 4, lines = s.open() ? 4 : 3;
-        Component hint = s.needed() > 0 ? text("ready", s.ready(), s.needed()) : text("click_sign");
+        Component hint = s.readyCount() > 0 ? text("ready", s.readyCount(), s.players().size()) : text("click_sign");
         int width = Math.max(WIDTH, font.width(s.open() ? text("left", s.left()) : hint) + 24);
         g.blitSprite(PANEL, x, y, width, 8 + lines * LINE);
         x += 6;
@@ -65,7 +65,7 @@ public class RestaurantHud {
             g.drawString(font, lost, half + 12, y + 1, s.maxLost() > 0 && s.lost() * 2 >= s.maxLost() ? 0xFFFF6A5A : 0xFFE8B0A0, false);
         } else {
             g.blitSprite(READY, x, y, 9, 9);
-            g.drawString(font, hint, x + 12, y + 1, s.needed() > 0 ? 0xFFFFE27A : 0xFFB8A58A, false);
+            g.drawString(font, hint, x + 12, y + 1, s.readyCount() > 0 ? 0xFFFFE27A : 0xFFB8A58A, false);
         }
         y += LINE;
 
