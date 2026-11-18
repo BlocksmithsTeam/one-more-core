@@ -170,18 +170,7 @@ public class OpenSignBlock extends Block implements EntityBlock {
             }
             return ItemInteractionResult.sidedSuccess(level.isClientSide);
         }
-        if (!stack.is(OneMoreClient.AREA_TOOL)) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-        if (level instanceof ServerLevel sl) {
-            Restaurant r = Restaurants.get(sl).create(pos);
-            CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> {
-                tag.remove("c1");
-                tag.putLong("sign", pos.asLong());
-                tag.putString("dimension", level.dimension().location().toString());
-            });
-            AreaToolItem.showArea(stack, r);
-            player.displayClientMessage(Component.translatable("onemoreclient.tool.bound"), true);
-        }
-        return ItemInteractionResult.sidedSuccess(level.isClientSide);
+        return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 
     @Override

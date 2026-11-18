@@ -45,9 +45,21 @@ final class WipingBehavior implements StationBehavior {
         if (event instanceof SceneEvent.Release) touching = false;
     }
 
+    /** Ticks since the surface became clean. */
+    private int cleanTicks;
+
     @Override
     public void tick(StationView view) {
-        if (!view.isFocused() || ++ticks % 4 != 0 || !touching || !Dirt.CLIENT.containsKey(view.pos())) return;
+        // Clean (the server cleaned it at dirtCleanFraction): a short look at the clean table, then the station closes.
+        if (view.isFocused() && !Dirt.CLIENT.containsKey(view.pos())) {
+            if (++cleanTicks == 12) {
+                var mc = net.minecraft.client.Minecraft.getInstance();
+                if (mc.screen != null && com.pockyl.diegesis.api.client.DiegesisClient.isStationScreen(mc.screen)) mc.screen.onClose();
+            }
+            return;
+        }
+        cleanTicks = 0;
+        if (!view.isFocused() || ++ticks % 4 != 0 || !touching) return;
         view.node("cloth").filter(node -> node.isHeld()).ifPresent(node -> {
             var at = view.node("cloth_model").orElse(node).scenePosition();
             CompoundTag data = new CompoundTag();

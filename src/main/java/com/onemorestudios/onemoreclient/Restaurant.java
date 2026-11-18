@@ -53,6 +53,10 @@ public class Restaurant {
     int day = 1;
     int register;
     final Set<String> unlocked = new HashSet<>();
+    /** Ids of dishes that the players took off the menu. */
+    final Set<String> off = new HashSet<>();
+    /** Dishes that the players added, ids "custom:<item id>". */
+    final List<Menu.Entry> custom = new ArrayList<>();
     BlockPos delivery;
     final List<Delivery> deliveries = new ArrayList<>();
     /** Dirty serving surfaces and their dirty cells, see {@link Dirt}. */
@@ -94,8 +98,80 @@ public class Restaurant {
         return day >= e.day() && (e.cost() == 0 || unlocked.contains(e.id()));
     }
 
-    private boolean canOrder(Menu.Entry e) {
-        return isAvailable(e) && (e.tag() == null || BuiltInRegistries.ITEM.getTag(e.tag()).filter(tag -> tag.size() > 0).isPresent());
+    boolean canOrder(Menu.Entry e) {
+        return isAvailable(e) && !off.contains(e.id()) && (e.tag() == null || BuiltInRegistries.ITEM.getTag(e.tag()).filter(tag -> tag.size() > 0).isPresent());
+    }
+
+    /** The dishes of this restaurant: the entries of menu.json, then the dishes that the players added. */
+    public List<Menu.Entry> dishes() {
+        List<Menu.Entry> all = new ArrayList<>(Menu.entries);
+        all.addAll(custom);
+        return all;
+    }
+
+    public Menu.Entry dish(String id) {
+        for (Menu.Entry e : dishes()) if (e.id().equals(id)) return e;
+        return null;
+    }
+
+    public boolean isOn(Menu.Entry e) {
+        return !off.contains(e.id());
+    }
+
+    /** Puts a dish on the menu or takes it off. Customers order only dishes that are on the menu. */
+    boolean toggle(String id) {
+        if (dish(id) == null) return false;
+        if (!off.remove(id)) off.add(id);
+        owner.setDirty();
+        return true;
+    }
+
+    /** Most dishes that the players can add to one restaurant. */
+    static final int MAX_CUSTOM = 64;
+
+    /** Result of {@link #addDish}. */
+    public enum Add { OK, NOT_FOOD, ALREADY, PRICE, FULL }
+
+    /**
+     * Adds any food or drink item as a dish with a price from 1 to maxDishPrice. The id is "custom:" and the item id.
+     * Food is an item with a food component, or an item in the c:foods or c:drinks tag.
+     */
+    Add addDish(net.minecraft.world.item.Item item, int price) {
+        ItemStack stack = new ItemStack(item);
+        if (stack.isEmpty() || !isFood(stack)) return Add.NOT_FOOD;
+        if (price < 1 || price > Config.MAX_DISH_PRICE.get()) return Add.PRICE;
+        String id = "custom:" + BuiltInRegistries.ITEM.getKey(item);
+        if (dish(id) != null) return Add.ALREADY;
+        if (custom.size() >= MAX_CUSTOM) return Add.FULL;
+        custom.add(new Menu.Entry(id, stack, null, price, false, 0, 0));
+        owner.setDirty();
+        return Add.OK;
+    }
+
+    public static boolean isFood(ItemStack stack) {
+        return stack.has(net.minecraft.core.component.DataComponents.FOOD)
+                || stack.is(net.minecraft.tags.ItemTags.create(net.minecraft.resources.ResourceLocation.parse("c:foods")))
+                || stack.is(net.minecraft.tags.ItemTags.create(net.minecraft.resources.ResourceLocation.parse("c:drinks")));
+    }
+
+    /** Changes the price of a dish that a player added. False for an entry of menu.json or a price out of range. */
+    boolean setPrice(String id, int price) {
+        if (price < 1 || price > Config.MAX_DISH_PRICE.get()) return false;
+        for (int i = 0; i < custom.size(); i++) {
+            Menu.Entry e = custom.get(i);
+            if (!e.id().equals(id)) continue;
+            custom.set(i, new Menu.Entry(e.id(), e.stack(), null, price, false, 0, 0));
+            owner.setDirty();
+            return true;
+        }
+        return false;
+    }
+
+    /** Removes a dish that a player added. Orders that customers already have are not changed. */
+    boolean removeDish(String id) {
+        boolean removed = custom.removeIf(e -> e.id().equals(id));
+        if (removed) { off.remove(id); owner.setDirty(); }
+        return removed;
     }
 
     /** Result of {@link #unlock}. */
@@ -193,7 +269,7 @@ public class Restaurant {
     }
 
     boolean hasProgress() {
-        return day > 1 || register > 0 || !unlocked.isEmpty() || !deliveries.isEmpty();
+        return day > 1 || register > 0 || !unlocked.isEmpty() || !deliveries.isEmpty() || !off.isEmpty() || !custom.isEmpty();
     }
 
     void restore(CompoundTag progress) {
@@ -202,6 +278,8 @@ public class Restaurant {
         day = from.day;
         register = from.register;
         unlocked.addAll(from.unlocked);
+        off.addAll(from.off);
+        custom.addAll(from.custom);
         deliveries.addAll(from.deliveries);
         owner.setDirty();
     }
@@ -214,7 +292,7 @@ public class Restaurant {
     /** Why the day cannot start, as a lang key suffix, or null. Scans the seats. */
     private String problem(ServerLevel level) {
         String problem = area == null ? "no_area" : spawn == null ? "no_spawn"
-                : Menu.entries.stream().noneMatch(this::canOrder) ? "no_menu" : null;
+                : dishes().stream().noneMatch(this::canOrder) ? "no_menu" : null;
         if (problem == null && (seats = scanSeats(level)).isEmpty()) problem = "no_seats";
         return problem;
     }
@@ -370,7 +448,7 @@ public class Restaurant {
     }
 
     private List<Customer.Line> makeOrder(ServerLevel level) {
-        List<Menu.Entry> available = Menu.entries.stream().filter(this::canOrder).toList();
+        List<Menu.Entry> available = dishes().stream().filter(this::canOrder).toList();
         List<Customer.Line> order = new ArrayList<>();
         if (available.isEmpty()) return order;
         int n = 1 + level.random.nextInt(Config.MAX_ORDER_ITEMS.get());
@@ -518,6 +596,17 @@ public class Restaurant {
         ListTag list = new ListTag();
         for (String id : unlocked) list.add(StringTag.valueOf(id));
         tag.put("unlocked", list);
+        ListTag offList = new ListTag();
+        for (String id : off) offList.add(StringTag.valueOf(id));
+        tag.put("off", offList);
+        ListTag customList = new ListTag();
+        for (Menu.Entry e : custom) {
+            CompoundTag t = new CompoundTag();
+            t.putString("item", BuiltInRegistries.ITEM.getKey(e.stack().getItem()).toString());
+            t.putInt("price", e.price());
+            customList.add(t);
+        }
+        tag.put("custom", customList);
         if (delivery != null) tag.putLong("delivery", delivery.asLong());
         ListTag pending = new ListTag();
         for (Delivery d : deliveries) {
@@ -547,6 +636,17 @@ public class Restaurant {
         r.day = Math.max(1, tag.getInt("day"));
         r.register = Math.max(0, tag.getInt("register"));
         for (Tag t : tag.getList("unlocked", Tag.TAG_STRING)) r.unlocked.add(t.getAsString());
+        for (Tag t : tag.getList("off", Tag.TAG_STRING)) r.off.add(t.getAsString());
+        for (Tag t : tag.getList("custom", Tag.TAG_COMPOUND)) {
+            CompoundTag c = (CompoundTag) t;
+            // An item of a mod that was removed is skipped. A price out of range is clamped to the allowed range.
+            BuiltInRegistries.ITEM.getOptional(net.minecraft.resources.ResourceLocation.tryParse(c.getString("item"))).ifPresent(item -> {
+                ItemStack stack = new ItemStack(item);
+                if (stack.isEmpty() || r.custom.size() >= MAX_CUSTOM) return;
+                int price = Math.max(1, Math.min(Config.MAX_DISH_PRICE.get(), c.getInt("price")));
+                r.custom.add(new Menu.Entry("custom:" + BuiltInRegistries.ITEM.getKey(item), stack, null, price, false, 0, 0));
+            });
+        }
         if (tag.contains("delivery")) r.delivery = BlockPos.of(tag.getLong("delivery"));
         for (Tag t : tag.getList("deliveries", Tag.TAG_COMPOUND)) {
             CompoundTag d = (CompoundTag) t;

@@ -2,14 +2,19 @@ package com.onemorestudios.onemoreclient.client;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import org.lwjgl.glfw.GLFW;
 
 import com.onemorestudios.onemoreclient.Computer;
 import com.onemorestudios.onemoreclient.OneMoreClient;
+import com.onemorestudios.onemoreclient.Restaurant;
 
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
@@ -18,28 +23,31 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * The desktop of the Restaurant Computer, drawn on the monitor after the camera flew to it: a wallpaper, app icons and a
- * task bar. An app opens in a window with a close button. Menu: unlock dishes. Shop: a catalog of cards. Manager: the
- * restaurant data and the free camera that sets the area and the points.
+ * task bar. An app opens in a window with a close button.
+ * Menu: a searchable catalog of the restaurant's dishes (on and off, unlock, price and removal of added dishes) and a
+ * picker that adds any food. Shop: a searchable catalog. Manager: what is set, and the free camera that sets it.
  */
 public class ComputerScreen extends Screen {
     private static final int[] APPS = {Computer.APP_MENU, Computer.APP_SHOP, Computer.APP_MANAGER};
     private static final String[] KEYS = {"menu", "shop", "manager"};
-    private static final int WHITE = 0xFFFFFFFF, GREY = 0xFFA8B0BA, DARK = 0xFF1C2026, BAR = 0xFF2A3038, LINE = 0xFF353C46,
-            GREEN = 0xFF5BD46A, RED = 0xFFE8695E, BLUE = 0xFF4C8DF0, BLUE_HOVER = 0xFF6AA3FF, YELLOW = 0xFFFFE27A;
-    private static final int CARD_MIN_W = 64, CARD_GAP = 6, CARD_H = 92, ROW_H = 24, TASKBAR = 16, TITLE = 18;
+    private static final int WHITE = 0xFFFFFFFF, GREY = 0xFF9AA3AD, WINDOW = 0xFF1B1F25, TITLE_BAR = 0xFF262B33, CARD = 0xFF262C34,
+            CARD_HOVER = 0xFF2E3540, PICTURE = 0xFF323A45, OFF = 0xFF3A414B, GREEN = 0xFF3FB55A, GREEN_HOVER = 0xFF52C96C,
+            BLUE = 0xFF3D7FE0, BLUE_HOVER = 0xFF5A95F0, RED = 0xFFD9443B, YELLOW = 0xFFFFD866;
+    private static final int CARD_MIN_W = 66, GAP = 5, CARD_H = 92, TASKBAR = 16, TITLE = 18, SEARCH = 16;
 
     private Computer.State state;
     /** 0: no window; otherwise one of Computer.APP_*. */
     private int app;
+    /** In the menu app: the picker that adds a food. */
+    private boolean adding;
     private double scroll;
-    /** Desktop rectangle in GUI pixels: the monitor's screen. */
-    private int dx, dy, dw, dh;
-    /** Window rectangle and its content area. */
-    private int wx, wy, ww, wh, cx, cy, cw, ch;
+    private int dx, dy, dw, dh, wx, wy, ww, wh, cx, cy, cw, ch;
     private final List<Hit> hits = new ArrayList<>();
     private long messageTime;
+    private EditBox search;
+    /** Every food and drink item of the game, for the picker. */
+    private List<ItemStack> foods;
 
-    /** A clickable rectangle, rebuilt every frame. */
     private record Hit(int x, int y, int w, int h, Runnable action) {
         boolean contains(double mx, double my) { return mx >= x && mx < x + w && my >= y && my < y + h; }
     }
@@ -69,7 +77,9 @@ public class ComputerScreen extends Screen {
 
     private void open(int which) {
         app = which;
+        adding = false;
         scroll = 0;
+        if (search != null) search.setValue("");
         send(Computer.REFRESH, "");
     }
 
@@ -80,14 +90,31 @@ public class ComputerScreen extends Screen {
         dw = Math.min(width - 8, dh * 4 / 3);
         dx = (width - dw) / 2;
         dy = (height - dh) / 2;
-        wx = dx + 52;
-        wy = dy + 8;
-        ww = dx + dw - 8 - wx;
-        wh = dy + dh - TASKBAR - 8 - wy;
-        cx = wx + 6;
-        cy = wy + TITLE + 4;
-        cw = ww - 12;
-        ch = wh - TITLE - 8;
+        wx = dx + 46;
+        wy = dy + 6;
+        ww = dx + dw - 6 - wx;
+        wh = dy + dh - TASKBAR - 6 - wy;
+        String old = search == null ? "" : search.getValue();
+        search = new EditBox(font, wx + 22, wy + TITLE + 8, ww - 30, 10, Component.empty());
+        search.setBordered(false);
+        search.setMaxLength(40);
+        search.setValue(old);
+        search.setHint(Component.translatable("onemoreclient.computer.search").withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
+        search.setResponder(s -> scroll = 0);
+        addWidget(search);
+    }
+
+    private boolean hasSearch() {
+        return app == Computer.APP_MENU || app == Computer.APP_SHOP;
+    }
+
+    /** True if the item's name contains every word of the search text. */
+    private boolean matches(ItemStack stack) {
+        String q = search.getValue().trim().toLowerCase(Locale.ROOT);
+        if (q.isEmpty()) return true;
+        String name = stack.getHoverName().getString().toLowerCase(Locale.ROOT);
+        for (String word : q.split("\\s+")) if (!name.contains(word)) return false;
+        return true;
     }
 
     @Override
@@ -98,209 +125,288 @@ public class ComputerScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         hits.clear();
-        // Wallpaper: a vertical gradient.
-        g.fillGradient(dx, dy, dx + dw, dy + dh, 0xFF1F5A6B, 0xFF0E2733);
+        g.fillGradient(dx, dy, dx + dw, dy + dh, 0xFF22607A, 0xFF0D2430);
         drawIcons(g, mouseX, mouseY);
         drawTaskbar(g);
         if (!state.found()) {
-            box(g, text("outside"), mouseX, mouseY);
+            box(g, text("outside"));
         } else if (app != 0) {
-            drawWindow(g, mouseX, mouseY);
+            drawWindow(g, mouseX, mouseY, partialTick);
         }
     }
 
     private void drawIcons(GuiGraphics g, int mouseX, int mouseY) {
-        int x = dx + 8, y = dy + 8;
+        int x = dx + 5, y = dy + 6;
         for (int i = 0; i < APPS.length; i++) {
             int bit = APPS[i];
             boolean on = state.found() && (state.apps() & bit) != 0;
-            boolean hover = mouseX >= x && mouseX < x + 36 && mouseY >= y && mouseY < y + 44;
-            if (hover && on) g.fill(x, y, x + 36, y + 44, 0x33FFFFFF);
-            if (app == bit) g.fill(x, y, x + 36, y + 44, 0x44FFFFFF);
+            boolean hover = on && mouseX >= x && mouseX < x + 36 && mouseY >= y && mouseY < y + 44;
+            if (hover || app == bit) rounded(g, x, y, 36, 44, app == bit ? 0x40FFFFFF : 0x26FFFFFF);
             g.blitSprite(sprite("app_" + KEYS[i]), x + 2, y + 2, 32, 32);
-            if (!on) g.fill(x + 2, y + 2, x + 34, y + 34, 0xAA0E2733);
+            if (!on) rounded(g, x + 2, y + 2, 32, 32, 0xB00D2430);
             Component name = text("app." + KEYS[i]);
             g.drawString(font, name, x + 18 - font.width(name) / 2, y + 35, on ? WHITE : GREY, true);
             if (on) hits.add(new Hit(x, y, 36, 44, () -> open(bit)));
-            else if (hover && state.found()) g.renderTooltip(font, text("app.disabled"), mouseX, mouseY);
             y += 48;
         }
     }
 
     private void drawTaskbar(GuiGraphics g) {
         int y = dy + dh - TASKBAR;
-        g.fill(dx, y, dx + dw, dy + dh, 0xCC0A0D11);
+        g.fill(dx, y, dx + dw, dy + dh, 0xD90A0D11);
         g.blitSprite(sprite("logo"), dx + 3, y + 2, 12, 12);
-        int x = dx + 20;
         if (app != 0) {
-            int i = app == Computer.APP_MENU ? 0 : app == Computer.APP_SHOP ? 1 : 2;
+            int i = index(app), x = dx + 20;
             Component name = text("app." + KEYS[i]);
-            g.fill(x, y + 2, x + font.width(name) + 22, y + TASKBAR - 2, 0x33FFFFFF);
+            rounded(g, x, y + 2, font.width(name) + 20, TASKBAR - 4, 0x33FFFFFF);
             g.blitSprite(sprite("app_" + KEYS[i]), x + 3, y + 3, 10, 10);
             g.drawString(font, name, x + 16, y + 4, WHITE, false);
         }
-        // The clock: the time of day of the world.
         long time = minecraft.level == null ? 0 : (minecraft.level.getDayTime() + 6000) % 24000;
         String clock = String.format("%02d:%02d", time / 1000, time % 1000 * 60 / 1000);
         g.drawString(font, clock, dx + dw - 6 - font.width(clock), y + 4, WHITE, false);
     }
 
-    /** A message box in the middle of the desktop. */
-    private void box(GuiGraphics g, Component message, int mouseX, int mouseY) {
-        int w = Math.min(dw - 40, 220);
-        List<net.minecraft.util.FormattedCharSequence> lines = font.split(message, w - 16);
-        int h = 16 + lines.size() * 10;
-        int x = dx + (dw - w) / 2, y = dy + (dh - TASKBAR - h) / 2;
-        g.fill(x, y, x + w, y + h, DARK);
+    private static int index(int app) {
+        return app == Computer.APP_MENU ? 0 : app == Computer.APP_SHOP ? 1 : 2;
+    }
+
+    /** A rectangle with its corners cut by one pixel. */
+    private static void rounded(GuiGraphics g, int x, int y, int w, int h, int color) {
+        g.fill(x + 1, y, x + w - 1, y + h, color);
+        g.fill(x, y + 1, x + 1, y + h - 1, color);
+        g.fill(x + w - 1, y + 1, x + w, y + h - 1, color);
+    }
+
+    private void box(GuiGraphics g, Component message) {
+        int w = Math.min(dw - 40, 200);
+        var lines = font.split(message, w - 16);
+        int h = 16 + lines.size() * 10, x = dx + (dw - w) / 2, y = dy + (dh - TASKBAR - h) / 2;
+        rounded(g, x, y, w, h, WINDOW);
         for (int i = 0; i < lines.size(); i++) g.drawString(font, lines.get(i), x + 8, y + 8 + i * 10, WHITE, false);
     }
 
-    private void drawWindow(GuiGraphics g, int mouseX, int mouseY) {
-        int i = app == Computer.APP_MENU ? 0 : app == Computer.APP_SHOP ? 1 : 2;
-        g.fill(wx - 1, wy - 1, wx + ww + 1, wy + wh + 1, 0x66000000);
-        g.fill(wx, wy, wx + ww, wy + wh, DARK);
-        g.fill(wx, wy, wx + ww, wy + TITLE, BAR);
-        g.blitSprite(sprite("app_" + KEYS[i]), wx + 4, wy + 1, 16, 16);
-        g.drawString(font, text("title." + KEYS[i]), wx + 24, wy + 5, WHITE, false);
-        // Register balance in the title bar.
+    private void drawWindow(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        int i = index(app);
+        rounded(g, wx - 1, wy - 1, ww + 2, wh + 2, 0x55000000);
+        rounded(g, wx, wy, ww, wh, WINDOW);
+        g.fill(wx + 1, wy, wx + ww - 1, wy + TITLE, TITLE_BAR);
+        g.blitSprite(sprite("app_" + KEYS[i]), wx + 4, wy + 2, 14, 14);
+        Component title = adding ? text("title.add") : text("title." + KEYS[i]);
+        g.drawString(font, title, wx + 22, wy + 5, WHITE, false);
+        // The register, at the right of the title bar.
         String money = String.valueOf(state.balance());
-        int mx = wx + ww - 22 - 16 - font.width(money);
+        int mx = wx + ww - TITLE - 8 - font.width(money);
+        g.drawString(font, money, mx, wy + 5, YELLOW, false);
         g.pose().pushPose();
-        g.pose().translate(mx, wy + 3, 0);
-        g.pose().scale(0.75f, 0.75f, 1);
+        g.pose().translate(mx - 12, wy + 4, 0);
+        g.pose().scale(0.625f, 0.625f, 1);
         g.renderItem(state.currency(), 0, 0);
         g.pose().popPose();
-        g.drawString(font, money, mx + 14, wy + 5, YELLOW, false);
-        // Close button.
         int bx = wx + ww - TITLE;
         boolean overClose = mouseX >= bx && mouseX < wx + ww && mouseY >= wy && mouseY < wy + TITLE;
-        if (overClose) g.fill(bx, wy, wx + ww, wy + TITLE, 0xFFD9443B);
-        g.drawString(font, "×", bx + (TITLE - font.width("×")) / 2, wy + 5, WHITE, false);
-        hits.add(new Hit(bx, wy, TITLE, TITLE, () -> app = 0));
+        if (overClose) g.fill(bx, wy, wx + ww - 1, wy + TITLE, RED);
+        g.drawString(font, "×", bx + (TITLE - font.width("×")) / 2 + 1, wy + 5, WHITE, false);
+        hits.add(new Hit(bx, wy, TITLE, TITLE, () -> { if (adding) adding = false; else app = 0; }));
 
+        cx = wx + 6;
+        cy = wy + TITLE + 5 + (hasSearch() ? SEARCH + 5 : 0);
+        cw = ww - 12;
+        ch = wy + wh - 6 - cy;
+        if (hasSearch()) {
+            int sy = wy + TITLE + 5;
+            rounded(g, cx, sy, cw, SEARCH, 0xFF11151A);
+            g.blitSprite(sprite("search"), cx + 4, sy + 4, 8, 8);
+            search.setX(cx + 16);
+            search.setY(sy + 4);
+            search.setWidth(cw - 20);
+            search.render(g, mouseX, mouseY, partialTick);
+        }
         g.enableScissor(cx, cy, cx + cw, cy + ch);
         ItemStack hovered = switch (app) {
-            case Computer.APP_MENU -> drawMenu(g, mouseX, mouseY);
+            case Computer.APP_MENU -> adding ? drawPicker(g, mouseX, mouseY) : drawMenu(g, mouseX, mouseY);
             case Computer.APP_SHOP -> drawShop(g, mouseX, mouseY);
             default -> { drawManager(g, mouseX, mouseY); yield ItemStack.EMPTY; }
         };
         g.disableScissor();
-        // The last answer of the server, at the bottom of the window for a few seconds.
-        if (System.currentTimeMillis() - messageTime < 4000 && !state.message().getString().isEmpty()) {
-            List<net.minecraft.util.FormattedCharSequence> lines = font.split(state.message(), ww - 24);
-            int h = 6 + lines.size() * 10, y = wy + wh - h - 6;
-            g.fill(wx + 6, y, wx + ww - 6, y + h, 0xF0101418);
-            for (int l = 0; l < lines.size(); l++) g.drawString(font, lines.get(l), wx + 12, y + 4 + l * 10, YELLOW, false);
+        if (System.currentTimeMillis() - messageTime < 3500 && !state.message().getString().isEmpty()) {
+            var lines = font.split(state.message(), ww - 28);
+            int h = 8 + lines.size() * 10, y = wy + wh - h - 6;
+            rounded(g, wx + 8, y, ww - 16, h, 0xF00E1115);
+            for (int l = 0; l < lines.size(); l++) g.drawString(font, lines.get(l), wx + 14, y + 5 + l * 10, YELLOW, false);
         }
         if (!hovered.isEmpty()) g.renderTooltip(font, hovered, mouseX, mouseY);
     }
 
-    /** A flat button. Returns true if the mouse is over it. */
-    private boolean button(GuiGraphics g, int x, int y, int w, int h, Component label, boolean active, int mouseX, int mouseY, Runnable action) {
-        boolean over = active && mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h && mouseY >= cy && mouseY < cy + ch;
-        g.fill(x, y, x + w, y + h, !active ? LINE : over ? BLUE_HOVER : BLUE);
-        g.drawString(font, label, x + (w - font.width(label)) / 2, y + (h - 8) / 2, active ? WHITE : GREY, false);
-        if (active) hits.add(new Hit(x, Math.max(y, cy), w, Math.min(y + h, cy + ch) - Math.max(y, cy), action));
+    private boolean inside(int mouseX, int mouseY, int x, int y, int w, int h) {
+        return mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h && mouseY >= cy && mouseY < cy + ch;
+    }
+
+    /** A flat button; only the part inside the content area can be clicked. */
+    private void button(GuiGraphics g, int x, int y, int w, int h, Component label, int color, int hover, boolean active, int mouseX, int mouseY, Runnable action) {
+        boolean over = active && inside(mouseX, mouseY, x, y, w, h);
+        rounded(g, x, y, w, h, !active ? OFF : over ? hover : color);
+        g.drawString(font, label, x + (w - font.width(label)) / 2, y + (h - 8) / 2 + 1, active ? WHITE : GREY, false);
+        if (active) clipHit(x, y, w, h, action);
+    }
+
+    private void clipHit(int x, int y, int w, int h, Runnable action) {
+        int top = Math.max(y, cy), bottom = Math.min(y + h, cy + ch);
+        if (bottom > top) hits.add(new Hit(x, top, w, bottom - top, action));
+    }
+
+    /** The grid of cards: columns and card width for the content width. */
+    private int columns() {
+        return Math.max(1, (cw + GAP) / (CARD_MIN_W + GAP));
+    }
+
+    private int cardWidth(int columns) {
+        return (cw - (columns - 1) * GAP) / columns;
+    }
+
+    /** One card: a picture with the item at double size, the name, and space below for the caller. Returns true if hovered. */
+    private boolean card(GuiGraphics g, int x, int y, int w, ItemStack picture, ItemStack decorations, int mouseX, int mouseY) {
+        boolean over = inside(mouseX, mouseY, x, y, w, CARD_H);
+        rounded(g, x, y, w, CARD_H, over ? CARD_HOVER : CARD);
+        rounded(g, x + 3, y + 3, w - 6, 38, PICTURE);
+        g.pose().pushPose();
+        g.pose().translate(x + w / 2f - 16, y + 6, 0);
+        g.pose().scale(2, 2, 1);
+        g.renderItem(picture, 0, 0);
+        if (!decorations.isEmpty()) g.renderItemDecorations(font, decorations, 0, 0);
+        g.pose().popPose();
+        String name = picture.getHoverName().getString();
+        g.drawString(font, font.plainSubstrByWidth(name, w - 8), x + 4, y + 45, WHITE, false);
         return over;
     }
 
-    private void clampScroll(int contentHeight) {
-        scroll = Mth.clamp(scroll, 0, Math.max(0, contentHeight - ch));
+    private void price(GuiGraphics g, int x, int y, int price) {
+        g.pose().pushPose();
+        g.pose().translate(x, y - 1, 0);
+        g.pose().scale(0.625f, 0.625f, 1);
+        g.renderItem(state.currency(), 0, 0);
+        g.pose().popPose();
+        g.drawString(font, String.valueOf(price), x + 12, y, YELLOW, false);
     }
 
     private ItemStack drawMenu(GuiGraphics g, int mouseX, int mouseY) {
-        List<Computer.MenuLine> menu = state.menu();
-        clampScroll(menu.size() * ROW_H);
+        List<Computer.MenuLine> lines = state.menu().stream().filter(l -> matches(l.icon())).toList();
+        int columns = columns(), w = cardWidth(columns);
+        int count = lines.size() + 1; // the last card adds a dish
+        scroll = Mth.clamp(scroll, 0, Math.max(0, ((count + columns - 1) / columns) * (CARD_H + GAP) - GAP - ch));
         ItemStack hovered = ItemStack.EMPTY;
-        if (menu.isEmpty()) g.drawCenteredString(font, text("empty"), cx + cw / 2, cy + 20, GREY);
-        for (int i = 0; i < menu.size(); i++) {
-            Computer.MenuLine line = menu.get(i);
-            int y = cy + i * ROW_H - (int) scroll;
-            if (y + ROW_H < cy || y > cy + ch) continue;
-            if (i % 2 == 0) g.fill(cx, y, cx + cw, y + ROW_H, 0x10FFFFFF);
-            g.renderItem(line.icon(), cx + 4, y + 4);
-            String name = line.icon().isEmpty() ? line.id() : line.icon().getHoverName().getString();
-            // Name, then the price right-aligned at cw - 82, then the state (text or a 72 px button) from cw - 76.
-            int nameW = cw - 26 - 82 - 24;
-            g.drawString(font, font.plainSubstrByWidth(name, nameW), cx + 26, y + 8, WHITE, false);
-            if (mouseX >= cx && mouseX < cx + 26 + nameW && mouseY >= y && mouseY < y + ROW_H && mouseY >= cy && mouseY < cy + ch) hovered = line.icon();
-            String price = String.valueOf(line.price());
-            g.drawString(font, price, cx + cw - 82 - font.width(price), y + 8, YELLOW, false);
-            int sx = cx + cw - 76;
+        for (int i = 0; i < count; i++) {
+            int x = cx + (i % columns) * (w + GAP), y = cy + (i / columns) * (CARD_H + GAP) - (int) scroll;
+            if (y + CARD_H < cy || y > cy + ch) continue;
+            if (i == lines.size()) {
+                boolean over = inside(mouseX, mouseY, x, y, w, CARD_H);
+                rounded(g, x, y, w, CARD_H, over ? CARD_HOVER : 0xFF20252C);
+                g.blitSprite(sprite("add"), x + w / 2 - 8, y + 26, 16, 16);
+                Component add = text("add");
+                g.drawString(font, add, x + (w - font.width(add)) / 2, y + 50, GREY, false);
+                clipHit(x, y, w, CARD_H, () -> { adding = true; scroll = 0; search.setValue(""); });
+                continue;
+            }
+            Computer.MenuLine line = lines.get(i);
+            boolean over = card(g, x, y, w, line.icon(), ItemStack.EMPTY, mouseX, mouseY);
+            if (over && mouseY < y + 42) hovered = line.icon();
+            int py = y + 57;
+            if (line.custom()) {
+                // Price with - and + (Shift: 10); the cross removes the dish.
+                button(g, x + 4, py - 2, 11, 11, Component.literal("-"), OFF, CARD_HOVER, line.price() > 1, mouseX, mouseY,
+                        () -> send(Computer.SET_PRICE, line.id() + "," + Math.max(1, line.price() - step())));
+                price(g, x + 18, py, line.price());
+                button(g, x + w - 15, py - 2, 11, 11, Component.literal("+"), OFF, CARD_HOVER, true, mouseX, mouseY,
+                        () -> send(Computer.SET_PRICE, line.id() + "," + (line.price() + step())));
+                button(g, x + w - 13, y + 5, 9, 9, Component.literal("×"), 0xAA000000, RED, true, mouseX, mouseY, () -> send(Computer.REMOVE_DISH, line.id()));
+            } else {
+                price(g, x + 4, py, line.price());
+            }
+            int by = y + CARD_H - 19;
             switch (line.state()) {
-                case Computer.AVAILABLE -> g.drawString(font, text("available"), sx, y + 8, GREEN, false);
-                case Computer.LOCKED_DAY -> g.drawString(font, text("locked", line.day()), sx, y + 8, GREY, false);
-                default -> button(g, sx, y + 3, 72, ROW_H - 6, text("unlock_cost", line.cost()), state.balance() >= line.cost(), mouseX, mouseY,
-                        () -> send(Computer.UNLOCK, line.id()));
+                case Computer.AVAILABLE -> button(g, x + 4, by, w - 8, 15, text(line.on() ? "on" : "off"), line.on() ? GREEN : OFF,
+                        line.on() ? GREEN_HOVER : CARD_HOVER, true, mouseX, mouseY, () -> send(Computer.TOGGLE_DISH, line.id()));
+                case Computer.LOCKED_DAY -> button(g, x + 4, by, w - 8, 15, text("locked", line.day()), OFF, OFF, false, mouseX, mouseY, () -> {});
+                default -> button(g, x + 4, by, w - 8, 15, text("unlock_cost", line.cost()), BLUE, BLUE_HOVER, state.balance() >= line.cost(),
+                        mouseX, mouseY, () -> send(Computer.UNLOCK, line.id()));
             }
         }
         return hovered;
     }
 
-    private ItemStack drawShop(GuiGraphics g, int mouseX, int mouseY) {
-        List<Computer.ShopLine> shop = state.shop();
-        // As many cards as fit in a row, at least CARD_MIN_W wide; the cards share the width, the gaps stay CARD_GAP.
-        int columns = Math.max(1, (cw + CARD_GAP) / (CARD_MIN_W + CARD_GAP));
-        int cardW = (cw - (columns - 1) * CARD_GAP) / columns, gap = CARD_GAP;
-        int rows = (shop.size() + columns - 1) / columns;
-        boolean noDelivery = state.delivery().isEmpty();
-        int top = noDelivery ? 26 : 0;
-        clampScroll(top + rows * (CARD_H + CARD_GAP));
+    private static int step() {
+        return Screen.hasShiftDown() ? 10 : 1;
+    }
+
+    /** A suggested price for a food: its nutrition plus its saturation, at least 1. */
+    private static int suggested(ItemStack stack) {
+        var food = stack.get(DataComponents.FOOD);
+        return food == null ? 2 : Math.max(1, food.nutrition() + Math.round(food.saturation()));
+    }
+
+    private ItemStack drawPicker(GuiGraphics g, int mouseX, int mouseY) {
+        if (foods == null) foods = BuiltInRegistries.ITEM.stream().map(ItemStack::new).filter(Restaurant::isFood).toList();
+        List<String> have = state.menu().stream().map(l -> BuiltInRegistries.ITEM.getKey(l.icon().getItem()).toString()).toList();
+        List<ItemStack> list = foods.stream().filter(this::matches).toList();
+        int columns = Math.max(1, (cw + 3) / (28 + 3)), size = (cw - (columns - 1) * 3) / columns;
+        scroll = Mth.clamp(scroll, 0, Math.max(0, ((list.size() + columns - 1) / columns) * (size + 3) - 3 - ch));
         ItemStack hovered = ItemStack.EMPTY;
-        if (noDelivery) {
-            int y = cy - (int) scroll;
-            g.fill(cx, y, cx + cw, y + 20, 0x40E8695E);
-            g.drawString(font, font.plainSubstrByWidth(text("no_delivery_short").getString(), cw - 12), cx + 6, y + 6, WHITE, false);
+        for (int i = 0; i < list.size(); i++) {
+            ItemStack stack = list.get(i);
+            int x = cx + (i % columns) * (size + 3), y = cy + (i / columns) * (size + 3) - (int) scroll;
+            if (y + size < cy || y > cy + ch) continue;
+            String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+            boolean added = have.contains(id);
+            boolean over = inside(mouseX, mouseY, x, y, size, size);
+            rounded(g, x, y, size, size, added ? 0xFF1F3A27 : over ? CARD_HOVER : CARD);
+            g.renderItem(stack, x + (size - 16) / 2, y + (size - 16) / 2);
+            if (over) hovered = stack;
+            if (!added) clipHit(x, y, size, size, () -> { send(Computer.ADD_DISH, id + "," + suggested(stack)); adding = false; scroll = 0; search.setValue(""); });
         }
-        if (shop.isEmpty()) g.drawCenteredString(font, text("empty"), cx + cw / 2, cy + top + 20, GREY);
-        for (int i = 0; i < shop.size(); i++) {
-            Computer.ShopLine line = shop.get(i);
-            int x = cx + (i % columns) * (cardW + gap), y = cy + top + (i / columns) * (CARD_H + CARD_GAP) - (int) scroll;
-            if (y + CARD_H < cy || y > cy + ch) continue;
-            boolean over = mouseX >= x && mouseX < x + cardW && mouseY >= y && mouseY < y + CARD_H && mouseY >= cy && mouseY < cy + ch;
-            g.fill(x, y, x + cardW, y + CARD_H, over ? 0xFF323A45 : 0xFF2A3038);
-            // The picture: the item at double size on a lighter field.
-            g.fill(x + 4, y + 4, x + cardW - 4, y + 44, 0xFF3A4350);
-            g.pose().pushPose();
-            g.pose().translate(x + cardW / 2f - 16, y + 8, 0);
-            g.pose().scale(2, 2, 1);
-            g.renderItem(line.icon(), 0, 0);
-            g.renderItemDecorations(font, line.stack(), 0, 0);
-            g.pose().popPose();
-            String name = line.stack().getHoverName().getString();
-            g.drawString(font, font.plainSubstrByWidth(name, cardW - 8), x + 4, y + 48, WHITE, false);
-            g.pose().pushPose();
-            g.pose().translate(x + 3, y + 58, 0);
-            g.pose().scale(0.625f, 0.625f, 1);
-            g.renderItem(state.currency(), 0, 0);
-            g.pose().popPose();
-            g.drawString(font, String.valueOf(line.price()), x + 15, y + 60, YELLOW, false);
-            button(g, x + 4, y + CARD_H - 20, cardW - 8, 16, text("buy"), state.balance() >= line.price() && !noDelivery, mouseX, mouseY,
-                    () -> send(Computer.BUY, line.id()));
-            if (over && mouseY < y + 58) hovered = line.stack();
-        }
+        if (list.isEmpty()) g.drawCenteredString(font, text("empty"), cx + cw / 2, cy + 20, GREY);
         return hovered;
     }
 
+    private ItemStack drawShop(GuiGraphics g, int mouseX, int mouseY) {
+        boolean noDelivery = state.delivery().isEmpty();
+        List<Computer.ShopLine> lines = state.shop().stream().filter(l -> matches(l.stack())).toList();
+        int columns = columns(), w = cardWidth(columns), top = noDelivery ? 18 : 0;
+        scroll = Mth.clamp(scroll, 0, Math.max(0, top + ((lines.size() + columns - 1) / columns) * (CARD_H + GAP) - GAP - ch));
+        ItemStack hovered = ItemStack.EMPTY;
+        if (noDelivery) {
+            int y = cy - (int) scroll;
+            rounded(g, cx, y, cw, 14, 0x55D9443B);
+            g.drawString(font, font.plainSubstrByWidth(text("no_delivery_short").getString(), cw - 8), cx + 4, y + 3, WHITE, false);
+        }
+        for (int i = 0; i < lines.size(); i++) {
+            Computer.ShopLine line = lines.get(i);
+            int x = cx + (i % columns) * (w + GAP), y = cy + top + (i / columns) * (CARD_H + GAP) - (int) scroll;
+            if (y + CARD_H < cy || y > cy + ch) continue;
+            boolean over = card(g, x, y, w, line.icon(), line.stack(), mouseX, mouseY);
+            if (over && mouseY < y + 42) hovered = line.stack();
+            price(g, x + 4, y + 57, line.price());
+            button(g, x + 4, y + CARD_H - 19, w - 8, 15, text("buy"), BLUE, BLUE_HOVER, state.balance() >= line.price() && !noDelivery,
+                    mouseX, mouseY, () -> send(Computer.BUY, line.id()));
+        }
+        if (lines.isEmpty()) g.drawCenteredString(font, text("empty"), cx + cw / 2, cy + top + 20, GREY);
+        return hovered;
+    }
+
+    /** What is set, with a mark each, and the button of the free camera. */
     private void drawManager(GuiGraphics g, int mouseX, int mouseY) {
-        List<Component> info = state.info();
-        int y = cy + 2 - (int) scroll;
-        for (Component line : info) {
-            g.drawString(font, line, cx + 4, y, WHITE, false);
-            y += 11;
+        boolean[] set = {!state.area().isEmpty(), state.spawn().isPresent(), state.delivery().isPresent()};
+        String[] keys = {"free.area", "free.spawn", "free.delivery"};
+        int[] colors = {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A};
+        int y = cy + 2;
+        for (int i = 0; i < 3; i++) {
+            rounded(g, cx, y, cw, 20, CARD);
+            g.fill(cx + 6, y + 7, cx + 12, y + 13, colors[i]);
+            g.drawString(font, Component.translatable("onemoreclient." + keys[i]), cx + 18, y + 6, WHITE, false);
+            g.blitSprite(sprite(set[i] ? "check" : "cross"), cx + cw - 16, y + 6, 8, 8);
+            y += 23;
         }
         y += 4;
-        // The colours of the free camera's boxes.
-        int[][] legend = {{0xFF4DE066}, {0xFF4D99FF}, {0xFFFF8C1A}};
-        String[] keys = {"free.area", "free.spawn", "free.delivery"};
-        for (int i = 0; i < 3; i++) {
-            g.fill(cx + 4, y + 1, cx + 10, y + 7, legend[i][0]);
-            g.drawString(font, Component.translatable("onemoreclient." + keys[i]), cx + 14, y, GREY, false);
-            y += 11;
-        }
-        y += 6;
-        button(g, cx + 4, y, Math.min(cw - 8, 180), 20, text("edit_places"), true, mouseX, mouseY, ComputerCamera::startFree);
-        clampScroll(y + 24 - (cy - (int) scroll));
+        button(g, cx, y, cw, 20, text("edit_places"), BLUE, BLUE_HOVER, true, mouseX, mouseY, ComputerCamera::startFree);
     }
 
     @Override
@@ -313,25 +419,39 @@ public class ComputerScreen extends Screen {
                 }
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        // Focus or unfocus the search bar.
+        boolean onSearch = hasSearch() && search.isMouseOver(mouseX, mouseY);
+        search.setFocused(onSearch);
+        setFocused(onSearch ? search : null);
+        return onSearch && search.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        scroll -= scrollY * 16;
-        if (scroll < 0) scroll = 0;
+        scroll = Math.max(0, scroll - scrollY * 16);
         return true;
     }
 
-    /** Escape closes the open window first, then leaves the computer. */
+    /** Escape: the picker, then the window, then the computer. Typing goes to the search bar. */
     @Override
     public boolean keyPressed(int key, int scanCode, int modifiers) {
         if (key == GLFW.GLFW_KEY_ESCAPE) {
-            if (app != 0) app = 0;
+            if (adding) adding = false;
+            else if (app != 0) app = 0;
             else ComputerCamera.leave();
             return true;
         }
+        if (hasSearch() && search.keyPressed(key, scanCode, modifiers)) return true;
         return super.keyPressed(key, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char c, int modifiers) {
+        if (hasSearch()) {
+            if (!search.isFocused()) { search.setFocused(true); setFocused(search); }
+            return search.charTyped(c, modifiers);
+        }
+        return false;
     }
 
     @Override

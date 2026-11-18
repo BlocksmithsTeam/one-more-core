@@ -32,10 +32,8 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Matrix4f;
@@ -59,6 +57,86 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
                 rightPants.copyFrom(rightLeg);
                 leftPants.copyFrom(leftLeg);
             }
+            if (riding) liveliness(entity, ageInTicks);
+        }
+
+        /**
+         * A seated customer is not a statue. While it waits it looks round: at the table, to the sides, at a player near it,
+         * and it talks with a customer at the same table (turns to it, nods, moves a hand). While it eats, it looks down
+         * at the food and its hand goes to its mouth. Everything is a function of the time and the entity id, so it needs no
+         * state and every client shows the same.
+         */
+        private void liveliness(Customer entity, float age) {
+            Customer.State state = entity.getState();
+            if (state == Customer.State.EATING) {
+                float bite = Mth.sin(age * 0.45f);
+                head.xRot = 0.35f + 0.08f * bite;
+                head.yRot = 0;
+                rightArm.xRot = -1.25f + 0.35f * Math.max(0, bite);
+                rightArm.yRot = -0.35f;
+                copyLayers();
+                return;
+            }
+            // Segments of 60 to 99 ticks; each one has a target. The head turns to it in the first 10 ticks of the segment.
+            int phase = Math.floorMod(entity.getId() * 37, 200);
+            float t = age + phase;
+            int length = 60 + Math.floorMod(entity.getId() * 13, 40);
+            int segment = (int) Math.floor(t / length);
+            float into = t - segment * (float) length;
+            float[] from = target(entity, segment - 1), to = target(entity, segment);
+            float k = Mth.clamp(into / 10f, 0, 1);
+            k = k * k * (3 - 2 * k);
+            head.yRot = Mth.lerp(k, from[0], to[0]);
+            head.xRot = Mth.lerp(k, from[1], to[1]);
+            if (to[2] > 0) {
+                // Talking: a small nod and a hand that moves.
+                head.xRot += 0.06f * Mth.sin(age * 0.5f);
+                rightArm.xRot = -0.55f + 0.18f * Mth.sin(age * 0.33f);
+                rightArm.zRot = 0.1f;
+            }
+            copyLayers();
+        }
+
+        /** {head yaw, head pitch, talking 0/1} of a segment: the table, a side, a player near it, or a neighbour to talk to. */
+        private static float[] target(Customer entity, int segment) {
+            int pick = Math.floorMod(segment * 7919 + entity.getId() * 31, 10);
+            if (pick <= 1) {
+                Customer other = neighbour(entity);
+                if (other != null) return new float[] {relativeYaw(entity, other.position()), 0.05f, 1};
+            }
+            if (pick == 2) {
+                var player = Minecraft.getInstance().player;
+                if (player != null && player.distanceToSqr(entity) < 64) return new float[] {relativeYaw(entity, player.getEyePosition()), -0.05f, 0};
+            }
+            if (pick == 3) return new float[] {0.6f, 0.05f, 0};
+            if (pick == 4) return new float[] {-0.6f, 0.05f, 0};
+            // Most of the time: the table in front.
+            return new float[] {0, 0.3f, 0};
+        }
+
+        /** Another seated customer at most 3 blocks away: at the same table in a group. */
+        private static Customer neighbour(Customer entity) {
+            Customer best = null;
+            double bestD = 9;
+            for (Customer c : entity.level().getEntitiesOfClass(Customer.class, entity.getBoundingBox().inflate(3))) {
+                double d = c.distanceToSqr(entity);
+                if (c != entity && c.isSeated() && d < bestD) { best = c; bestD = d; }
+            }
+            return best;
+        }
+
+        /** The head yaw that looks at the point, relative to the body, at most 70 degrees to each side. */
+        private static float relativeYaw(Customer entity, net.minecraft.world.phys.Vec3 point) {
+            double dx = point.x - entity.getX(), dz = point.z - entity.getZ();
+            float world = (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90;
+            float rel = Mth.wrapDegrees(world - entity.yBodyRot);
+            return Mth.clamp(rel, -70, 70) * Mth.DEG_TO_RAD;
+        }
+
+        private void copyLayers() {
+            hat.copyFrom(head);
+            rightSleeve.copyFrom(rightArm);
+            leftSleeve.copyFrom(leftArm);
         }
     }
 
@@ -111,7 +189,7 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
 
     private static final ResourceLocation BUBBLE = ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "textures/entity/order_bubble.png");
     /** Bubble size in blocks. The texture body is 32x20 pixels with 8 pixel caps; the tail is 8x8 pixels. */
-    private static final float BODY_H = 0.66f, CAP = BODY_H * 8 / 20, SLOT = 0.44f;
+    static final float BODY_H = 0.66f, CAP = BODY_H * 8 / 20, SLOT = 0.44f;
 
     /**
      * A speech bubble above the head: a "!" while the customer waits for a player to take the order, then the ordered
@@ -153,17 +231,50 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
             font.drawInBatch("!", -font.width("!") / 2f, 0, 0xFFFFFFFF, false, pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
             pose.popPose();
         } else {
+            int hovered = BubbleHover.slot(customer, order.size(), itemsY);
+            if (hovered >= 0) {
+                // A darker square behind the item that the player looks at.
+                float sx = (hovered - (order.size() - 1) / 2f) * SLOT, r = SLOT / 2 - 0.02f;
+                quad(vc, m, sx - r, itemsY - r, sx + r, itemsY + r, z + 0.012f, 28, 28, 32, 32, 0xB0000000);
+            }
             pose.mulPose(Axis.YP.rotationDegrees(180));
             pose.translate(0, itemsY, 0);
             pose.scale(0.4f, 0.4f, 0.4f);
+            float time = customer.tickCount + Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(false);
             for (int i = 0; i < order.size(); i++) {
                 pose.pushPose();
                 // The half turn above mirrors X, so the first item goes to the right in local space.
                 pose.translate(-(i - (order.size() - 1) / 2f) * SLOT / 0.4f, 0, 0);
-                items.renderStatic(order.get(i), ItemDisplayContext.FIXED, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, pose, buffers, customer.level(), customer.getId() + i);
+                if (i == hovered) {
+                    // The looked-at item grows a little and bobs.
+                    float grow = 1.2f + 0.04f * Mth.sin(time * 0.3f);
+                    pose.scale(grow, grow, grow);
+                }
+                renderFood(order.get(i), pose, buffers, customer, i);
                 pose.popPose();
             }
         }
+        pose.popPose();
+    }
+
+    /**
+     * A food in the bubble, in 3D when it has a block form (a Display Delight plate, a placed dish or bottle): the block
+     * at a slant like a block in the inventory. Other items use their own model.
+     */
+    private void renderFood(ItemStack stack, PoseStack pose, MultiBufferSource buffers, Customer customer, int seed) {
+        var block = FoodModels.block(stack);
+        if (block == null) {
+            items.renderStatic(stack, ItemDisplayContext.FIXED, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, pose, buffers, customer.level(), customer.getId() + seed);
+            return;
+        }
+        pose.pushPose();
+        // The pose faces away from the camera after the half turn; the slant shows the top of the dish.
+        pose.mulPose(Axis.XP.rotationDegrees(-30));
+        pose.mulPose(Axis.YP.rotationDegrees(45));
+        // A plate is flat: at 1.1 its width fills the slot like a flat item does.
+        pose.scale(1.1f, 1.1f, 1.1f);
+        pose.translate(-0.5, -0.5, -0.5);
+        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(block, pose, buffers, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY);
         pose.popPose();
     }
 
@@ -208,8 +319,7 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
                 // The placed block of a food item (a cake, a pie block): drawn at 0.4 size, with its bottom centre on the surface.
                 pose.scale(0.4f * scale, 0.4f * scale, 0.4f * scale);
                 pose.translate(-0.5, 0, -0.5);
-                Minecraft.getInstance().getBlockRenderer().renderSingleBlock(((BlockItem) stack.getItem()).getBlock().defaultBlockState(),
-                        pose, buffers, light, OverlayTexture.NO_OVERLAY);
+                Minecraft.getInstance().getBlockRenderer().renderSingleBlock(FoodModels.block(stack), pose, buffers, light, OverlayTexture.NO_OVERLAY);
                 pose.popPose();
                 continue;
             }
@@ -232,8 +342,7 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
      * a modelled block (cake, pie and meal blocks) shows that block; any other 2D item lies flat.
      */
     private String display(ItemStack stack, Customer customer) {
-        boolean placesBlock = stack.getItem() instanceof BlockItem item
-                && item.getBlock().defaultBlockState().getRenderShape() == RenderShape.MODEL;
+        boolean placesBlock = FoodModels.block(stack) != null;
         String override = Config.lookup(Config.FOOD_DISPLAY.get(), BuiltInRegistries.ITEM.getKey(stack.getItem()));
         if (override != null) return override.equals("block") && !placesBlock ? "upright" : override;
         if (items.getModel(stack, customer.level(), null, 0).isGui3d()) return "upright";

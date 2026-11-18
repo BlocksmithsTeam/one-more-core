@@ -75,9 +75,15 @@ public final class ComputerCamera {
         NeoForge.EVENT_BUS.addListener(ComputerCamera::tick);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::angles);
         NeoForge.EVENT_BUS.addListener((RenderHandEvent e) -> { if (mode != Mode.NONE) e.setCanceled(true); });
+        // On the way to the monitor and at the desktop the camera is near the player's head (a seated player sits close to
+        // the desk): the player's own model would fill the view. The free camera shows the player.
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderPlayerEvent.Pre e) -> {
+            if (mode != Mode.NONE && mode != Mode.FREE && e.getEntity() == Minecraft.getInstance().player) e.setCanceled(true);
+        });
         NeoForge.EVENT_BUS.addListener(ComputerCamera::movement);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::click);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::key);
+        NeoForge.EVENT_BUS.addListener(ComputerCamera::scroll);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::pause);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::renderWorld);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::renderHud);
@@ -252,15 +258,37 @@ public final class ComputerCamera {
         in.up = in.down = in.left = in.right = in.jumping = in.shiftKeyDown = false;
     }
 
-    /** The block that the free camera looks at, up to 64 blocks away, or null. */
-    static BlockHitResult target() {
+    /** Distance of the point in the air while Alt is held, in blocks. Alt and the mouse wheel change it. */
+    static double reach = 6;
+
+    static boolean altDown() {
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        return com.mojang.blaze3d.platform.InputConstants.isKeyDown(window, org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_ALT)
+                || com.mojang.blaze3d.platform.InputConstants.isKeyDown(window, org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_ALT);
+    }
+
+    /**
+     * The position that a click of the current tool sets, or null. Like the selection of Create's Super Glue: without
+     * Alt the block that the camera looks at (for the spawn point, the block on its clicked face); with Alt held, the
+     * block at {@link #reach} blocks along the view, in the air too.
+     */
+    static BlockPos target() {
         Minecraft mc = Minecraft.getInstance();
         if (camera == null || mc.player == null) return null;
         float partial = mc.getTimer().getGameTimeDeltaPartialTick(true);
         Vec3 eye = camera.getPosition(partial);
         Vec3 look = Vec3.directionFromRotation(mc.player.getViewXRot(partial), mc.player.getViewYRot(partial));
+        if (altDown()) return BlockPos.containing(eye.add(look.scale(reach)));
         BlockHitResult hit = mc.level.clip(new ClipContext(eye, eye.add(look.scale(64)), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, CollisionContext.empty()));
-        return hit.getType() == HitResult.Type.BLOCK ? hit : null;
+        if (hit.getType() != HitResult.Type.BLOCK) return null;
+        return tool == Tool.SPAWN ? hit.getBlockPos().relative(hit.getDirection()) : hit.getBlockPos();
+    }
+
+    /** The wheel does not change the hotbar in the free camera; with Alt it changes the distance of the point in the air. */
+    private static void scroll(InputEvent.MouseScrollingEvent event) {
+        if (mode != Mode.FREE) return;
+        event.setCanceled(true);
+        if (altDown()) reach = Mth.clamp(reach + Math.signum(event.getScrollDeltaY()), 1, Computer.PLACE_RANGE);
     }
 
     /** In the free camera: use places a point with the tool, attack forgets the first corner. Nothing reaches the world. */
@@ -271,19 +299,15 @@ public final class ComputerCamera {
         if (mode != Mode.FREE) return;
         if (event.isAttack()) { corner = null; return; }
         if (!event.isUseItem()) return;
-        BlockHitResult hit = target();
-        if (hit == null) return;
-        BlockPos pos = hit.getBlockPos();
+        BlockPos pos = target();
+        if (pos == null) return;
         switch (tool) {
             case AREA -> {
                 if (corner == null) { corner = pos; return; }
                 send(Computer.SET_AREA, List.of(corner.getX(), corner.getY(), corner.getZ(), pos.getX(), pos.getY(), pos.getZ()));
                 corner = null;
             }
-            case SPAWN -> {
-                BlockPos at = pos.relative(hit.getDirection());
-                send(Computer.SET_SPAWN, List.of(at.getX(), at.getY(), at.getZ()));
-            }
+            case SPAWN -> send(Computer.SET_SPAWN, List.of(pos.getX(), pos.getY(), pos.getZ()));
             case DELIVERY -> send(Computer.SET_DELIVERY, List.of(pos.getX(), pos.getY(), pos.getZ()));
         }
     }
@@ -328,15 +352,11 @@ public final class ComputerCamera {
         state.sign().ifPresent(p -> LevelRenderer.renderLineBox(pose, lines, new AABB(p).inflate(0.02), 1f, 1f, 1f, 1f));
         state.spawn().ifPresent(p -> LevelRenderer.renderLineBox(pose, lines, new AABB(p), 0.3f, 0.6f, 1f, 1f));
         state.delivery().ifPresent(p -> LevelRenderer.renderLineBox(pose, lines, new AABB(p).inflate(0.02), 1f, 0.55f, 0.1f, 1f));
-        BlockHitResult hit = target();
-        if (hit != null) {
-            BlockPos p = hit.getBlockPos();
-            if (tool == Tool.AREA && corner != null) {
-                LevelRenderer.renderLineBox(pose, lines, AABB.encapsulatingFullBlocks(corner, p).inflate(0.01), 1f, 1f, 0.3f, 1f);
-            } else {
-                BlockPos shown = tool == Tool.SPAWN ? p.relative(hit.getDirection()) : p;
-                LevelRenderer.renderLineBox(pose, lines, new AABB(shown).inflate(0.005), 1f, 1f, 1f, 0.8f);
-            }
+        BlockPos p = target();
+        if (p != null) {
+            // The box grows from the first corner to the looked-at point, like Create's Super Glue.
+            if (tool == Tool.AREA && corner != null) LevelRenderer.renderLineBox(pose, lines, AABB.encapsulatingFullBlocks(corner, p).inflate(0.01), 1f, 1f, 0.3f, 1f);
+            LevelRenderer.renderLineBox(pose, lines, new AABB(p).inflate(0.005), 1f, 1f, 1f, 0.8f);
         }
         pose.popPose();
         buffers.endBatch(RenderType.lines());
@@ -347,39 +367,34 @@ public final class ComputerCamera {
         Minecraft mc = Minecraft.getInstance();
         GuiGraphics g = event.getGuiGraphics();
         var font = mc.font;
-        Component title = Component.translatable("onemoreclient.free.title");
         Component[] tools = {Component.translatable("onemoreclient.free.area"), Component.translatable("onemoreclient.free.spawn"),
                 Component.translatable("onemoreclient.free.delivery")};
-        Component help = Component.translatable(tool == Tool.AREA ? (corner == null ? "onemoreclient.free.help_area1" : "onemoreclient.free.help_area2")
+        int[] colors = {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A};
+        Component help = altDown() ? Component.translatable("onemoreclient.free.help_alt", (int) reach)
+                : Component.translatable(tool == Tool.AREA ? (corner == null ? "onemoreclient.free.help_area1" : "onemoreclient.free.help_area2")
                 : tool == Tool.SPAWN ? "onemoreclient.free.help_spawn" : "onemoreclient.free.help_delivery");
-        Component keys = Component.translatable("onemoreclient.free.keys");
-        int toolsW = 0;
-        for (int i = 0; i < 3; i++) toolsW += font.width(tools[i]) + 22 + (i > 0 ? 6 : 0);
-        // The panel is as wide as the tool row, at most the screen width; longer lines wrap.
-        int w = Math.min(g.guiWidth() - 12, Math.max(toolsW, font.width(title)) + 16);
-        var helpLines = font.split(help, w - 12);
-        var keyLines = font.split(keys, w - 12);
+        // Tool tabs, then one line of help, then the last answer of the server.
+        int toolsW = -4;
+        for (Component t : tools) toolsW += font.width(t) + 24 + 4;
+        int w = Math.min(g.guiWidth() - 12, Math.max(toolsW, font.width(help)) + 12);
         boolean showMessage = System.currentTimeMillis() - messageTime < 4000 && !message.getString().isEmpty();
-        var messageLines = showMessage ? font.split(message, w - 12) : java.util.List.<net.minecraft.util.FormattedCharSequence>of();
-        int h = 6 + 11 + 18 + 10 * (helpLines.size() + keyLines.size() + messageLines.size()) + 6;
+        int h = 4 + 14 + 4 + 10 + (showMessage ? 10 : 0) + 4;
         int x = (g.guiWidth() - w) / 2, y = 6;
         g.fill(x + 1, y, x + w - 1, y + h, 0x8C0C0C0C);
         g.fill(x, y + 1, x + w, y + h - 1, 0x8C0C0C0C);
-        g.drawString(font, title, x + (w - font.width(title)) / 2, y + 6, 0xFFFFFFFF, false);
-        int tx = x + (w - toolsW) / 2, ty = y + 19;
-        int[] colors = {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A};
+        int tx = x + (w - toolsW) / 2, ty = y + 4;
         for (int i = 0; i < 3; i++) {
-            int tw = font.width(tools[i]) + 22;
+            int tw = font.width(tools[i]) + 24;
             boolean on = tool.ordinal() == i;
-            g.fill(tx, ty, tx + tw, ty + 14, on ? 0x66FFFFFF : 0x22FFFFFF);
-            g.fill(tx + 3, ty + 4, tx + 9, ty + 10, colors[i]);
-            g.drawString(font, (i + 1) + " ", tx + 11, ty + 3, 0xFFB0B0B0, false);
-            g.drawString(font, tools[i], tx + 19, ty + 3, on ? 0xFFFFFFFF : 0xFFB0B0B0, false);
-            tx += tw + 6;
+            g.fill(tx, ty, tx + tw, ty + 14, on ? 0x55FFFFFF : 0x1AFFFFFF);
+            g.drawString(font, String.valueOf(i + 1), tx + 4, ty + 3, 0xFF9AA3AD, false);
+            g.fill(tx + 11, ty + 4, tx + 17, ty + 10, colors[i]);
+            g.drawString(font, tools[i], tx + 20, ty + 3, on ? 0xFFFFFFFF : 0xFF9AA3AD, false);
+            tx += tw + 4;
         }
-        int ly = ty + 19;
-        for (var l : helpLines) { g.drawString(font, l, x + (w - font.width(l)) / 2, ly, 0xFFFFFFFF, false); ly += 10; }
-        for (var l : keyLines) { g.drawString(font, l, x + (w - font.width(l)) / 2, ly, 0xFFB0B0B0, false); ly += 10; }
-        for (var l : messageLines) { g.drawString(font, l, x + (w - font.width(l)) / 2, ly, 0xFFFFE27A, false); ly += 10; }
+        g.drawString(font, help, x + (w - font.width(help)) / 2, ty + 18, 0xFFFFFFFF, false);
+        if (showMessage) g.drawString(font, message, x + (w - font.width(message)) / 2, ty + 28, 0xFFFFE27A, false);
+        Component keys = Component.translatable("onemoreclient.free.keys");
+        g.drawString(font, keys, (g.guiWidth() - font.width(keys)) / 2, g.guiHeight() - 60, 0xFFC0C6CC, true);
     }
 }

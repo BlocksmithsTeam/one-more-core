@@ -40,7 +40,8 @@ public class Computer extends Block {
     /** The monitor, its back and the keyboard. */
     private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {2, 0, 4, 14, 11, 13}, new double[] {4, 1, 13, 12, 9, 16},
             new double[] {2, 0, 0.5, 14, 1.5, 3.5});
-    public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5;
+    public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
+            TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9;
     /** How far from the computer the manager app may set a point, in blocks per axis. */
     public static final int PLACE_RANGE = 48;
     /** Bits of {@link State#apps}. */
@@ -48,10 +49,19 @@ public class Computer extends Block {
     /** Values of {@link MenuLine#state}. */
     public static final int AVAILABLE = 0, LOCKED_DAY = 1, BUYABLE = 2;
 
-    public record MenuLine(String id, ItemStack icon, int price, int day, int cost, int state) {
-        static final StreamCodec<RegistryFriendlyByteBuf, MenuLine> CODEC = StreamCodec.composite(
-                ByteBufCodecs.STRING_UTF8, MenuLine::id, ItemStack.OPTIONAL_STREAM_CODEC, MenuLine::icon, ByteBufCodecs.VAR_INT, MenuLine::price,
-                ByteBufCodecs.VAR_INT, MenuLine::day, ByteBufCodecs.VAR_INT, MenuLine::cost, ByteBufCodecs.VAR_INT, MenuLine::state, MenuLine::new);
+    /** A dish. "on": customers order it. "custom": a player added it, so its price can change and it can be removed. */
+    public record MenuLine(String id, ItemStack icon, int price, int day, int cost, int state, boolean on, boolean custom) {
+        static final StreamCodec<RegistryFriendlyByteBuf, MenuLine> CODEC = StreamCodec.of((b, l) -> {
+            ByteBufCodecs.STRING_UTF8.encode(b, l.id);
+            ItemStack.OPTIONAL_STREAM_CODEC.encode(b, l.icon);
+            b.writeVarInt(l.price);
+            b.writeVarInt(l.day);
+            b.writeVarInt(l.cost);
+            b.writeVarInt(l.state);
+            b.writeBoolean(l.on);
+            b.writeBoolean(l.custom);
+        }, b -> new MenuLine(ByteBufCodecs.STRING_UTF8.decode(b), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(), b.readVarInt(),
+                b.readVarInt(), b.readVarInt(), b.readBoolean(), b.readBoolean()));
     }
 
     public record ShopLine(String id, ItemStack stack, ItemStack icon, int price) {
@@ -177,6 +187,37 @@ public class Computer extends Block {
             else if (Restaurant.container(level, a) == null) key = "not_container";
             else { r.setDelivery(a); key = "delivery_set"; }
             message = Component.translatable("onemoreclient.tool." + key, key.equals("too_big") ? Config.MAX_AREA.get() : PLACE_RANGE);
+        } else if (request.action >= TOGGLE_DISH && request.action <= SET_PRICE) {
+            if (r == null || !Config.APP_MENU.get()) return null;
+            String key;
+            if (request.action == TOGGLE_DISH) {
+                if (!r.toggle(request.id)) return null;
+                key = r.isOn(r.dish(request.id)) ? "dish_on" : "dish_off";
+            } else if (request.action == REMOVE_DISH) {
+                if (!r.removeDish(request.id)) return null;
+                key = "dish_removed";
+            } else {
+                // "<id>,<price>": the id is an item id (add) or a dish id (price); the price is the last number.
+                int comma = request.id.lastIndexOf(',');
+                if (comma < 0) return null;
+                int price;
+                try { price = Integer.parseInt(request.id.substring(comma + 1).trim()); } catch (NumberFormatException e) { return null; }
+                String id = request.id.substring(0, comma);
+                if (request.action == SET_PRICE) {
+                    key = r.setPrice(id, price) ? "price_set" : "price_range";
+                } else {
+                    var item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(id));
+                    if (item.isEmpty()) return null;
+                    key = switch (r.addDish(item.get(), price)) {
+                        case OK -> "dish_added";
+                        case NOT_FOOD -> "not_food";
+                        case ALREADY -> "dish_already";
+                        case PRICE -> "price_range";
+                        case FULL -> "menu_full";
+                    };
+                }
+            }
+            message = Component.translatable("onemoreclient.computer." + key, Config.MAX_DISH_PRICE.get());
         } else if (request.action == UNLOCK) {
             Menu.Entry e = Menu.byId(request.id);
             if (r == null || e == null || !Config.APP_MENU.get()) return null;
@@ -227,10 +268,11 @@ public class Computer extends Block {
         if (r == null) return new State(pos, open, false, apps, currency, 0, List.of(), List.of(), List.of(), message,
                 Optional.empty(), List.of(), Optional.empty(), Optional.empty());
         List<MenuLine> menu = new ArrayList<>();
-        for (Menu.Entry e : Menu.entries) {
+        for (Menu.Entry e : r.dishes()) {
             ItemStack icon = e.tag() == null ? e.stack() : BuiltInRegistries.ITEM.getTag(e.tag())
                     .flatMap(set -> set.stream().findFirst()).map(ItemStack::new).orElse(ItemStack.EMPTY);
-            menu.add(new MenuLine(e.id(), icon, e.price(), e.day(), e.cost(), r.isAvailable(e) ? AVAILABLE : r.day() < e.day() ? LOCKED_DAY : BUYABLE));
+            menu.add(new MenuLine(e.id(), icon, e.price(), e.day(), e.cost(), r.isAvailable(e) ? AVAILABLE : r.day() < e.day() ? LOCKED_DAY : BUYABLE,
+                    r.isOn(e), e.id().startsWith("custom:")));
         }
         List<ShopLine> shop = new ArrayList<>();
         for (Shop.Entry e : Shop.entries) shop.add(new ShopLine(e.id(), e.stack(), e.icon(), e.price()));

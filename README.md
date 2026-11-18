@@ -6,22 +6,21 @@ The mod does not add food. It works with the items of any mod.
 ## How to play
 
 1. Place an **Open/Closed Sign** on the floor, on a wall or under a ceiling. It shows CLOSED or OPEN and turns when the restaurant opens or closes.
-2. Place a **Restaurant Computer** at most 32 blocks from the sign and use it. Open the **Manager** app and select "Edit the area and the points". The camera flies through walls; right click two corners of the area, the ground where customers arrive and a container for shop deliveries. Escape returns to the computer.
-   The **Restaurant Area Tool** does the same with clicks in the world: click the sign, then two corners; sneak-click the spawn point.
+2. Place a **Restaurant Computer** at most 32 blocks from the sign and use it. Open the **Manager** app and select "Edit". The camera flies through walls. Right click the first corner of the area; the box grows to where you look, and a second right click sets it. Hold Alt to point in the air (the wheel changes the distance). Keys 1, 2 and 3 change to the customer spawn point and the delivery container. Escape returns to the computer.
 3. Put seats next to serving surfaces inside the area.
 4. Click the sign. A player alone in the area starts the day at once. With more players, a panel opens for every player inside the area: each one holds **R** (key "Get ready (hold)"). When all of them are ready, a short countdown starts the day. Hold the key again to cancel.
-5. Click a seated customer to take the order. Look at the customer to read the order.
+5. Click a seated customer to take the order. Look at an item in the speech bubble to read its tooltip.
 6. Hold the ordered item and click the customer, or the surface in front of the customer.
 7. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
    A broken sign keeps the money, the day, the unlocks and the paid orders in the item, like a shulker box. Place it again and set the area again.
-8. Customers leave crumbs and smears on the table. A dirty surface gets no customer until `dirtCleanFraction` is reached.
+8. Customers leave a stain on the table. A dirty surface gets no customer until `dirtCleanFraction` of it is clean.
 
 Optional [Diegesis](https://github.com/Pocky-l/diegesis) adds a camera above the table and a folded 3D cloth.
 Use NeoForge 1.21.1 with Diegesis beta.11 or newer on the client and server.
-Use a dirty table with an empty main hand. Pick up the cloth and drag it over the dirt.
+Use a dirty table with an empty main hand. Pick up the cloth and drag it over the stain. The view closes by itself when the table is clean.
+Without Diegesis, hold use and move the crosshair over the stain. The server checks each wipe.
 
-Press Esc or E to leave. Without Diegesis, hold use and move the crosshair over the dirt.
-The server checks each wipe.
+Served food and the food in the speech bubble show in 3D where a mod gives it a block form: the plated foods of Display Delight, and food items that place a block.
 
 Near a restaurant, a panel at the top left shows the day, the customers left, the served and lost customers and the register.
 The start and the end of a day show as a title. A customer shows a speech bubble: a "!" when it waits for a player, then the ordered items and its patience bar.
@@ -33,11 +32,10 @@ One click takes the orders of the whole group. Each member gets its own food. Th
 
 Use a **Restaurant Computer** inside the restaurant area, or at most 32 blocks from a sign that has no area yet. The camera moves to the monitor and a desktop opens. Click an app icon to open its window; the × closes it. Escape closes the window, then leaves the computer.
 
-- **Menu**: shows all menu entries and unlocks an entry with money from the register.
-- **Shop**: a catalog of the items of `shop.json`. Buy pays from the register; the items arrive at the delivery container after a delay.
+- **Menu**: a searchable catalog of the restaurant's dishes. Put a dish on the menu or take it off, unlock a dish with money from the register, and add any food or drink with your own price (`maxDishPrice`). Customers order only dishes that are on the menu.
+- **Shop**: a searchable catalog of the items of `shop.json`. Buy pays from the register; the items arrive at the delivery container after a delay.
 - **Manager**: shows the state of the restaurant and edits the area, the customer spawn point and the delivery container with a free camera (keys 1, 2, 3 choose the tool; WASD, Space and Shift fly; Ctrl flies fast). Points must be at most 48 blocks from the computer.
 
-The delivery container can also be set with the Restaurant Area Tool (sneak-click a chest or a barrel).
 The order goes into this container. If the container is full or gone, the items drop there.
 
 ## Configuration
@@ -94,4 +92,4 @@ Add blocks of other mods with a datapack. Entries for several furniture mods are
 
 ## License
 
-MIT. The folded cloth and table residue models and textures are original MIT art.
+MIT. The stain texture comes from Hands On Delight (MIT), see THIRD_PARTY_NOTICES.md. The cloth is original MIT art.
