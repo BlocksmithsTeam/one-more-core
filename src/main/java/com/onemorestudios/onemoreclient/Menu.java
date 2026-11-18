@@ -2,6 +2,7 @@ package com.onemorestudios.onemoreclient;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -88,10 +89,10 @@ public class Menu {
                     throw new IllegalArgumentException("match must be \"ignore\" or \"exact\"");
                 if (byIdIn(out, id)) throw new IllegalArgumentException("duplicate id");
                 out.add(new Entry(id, stack, tag,
-                        money(GsonHelper.getAsInt(o, "price")),
+                        money(o.get("price")),
                         match.equals("exact"),
                         Math.max(1, GsonHelper.getAsInt(unlock, "day", 1)),
-                        money(GsonHelper.getAsInt(unlock, "cost", 0))));
+                        unlock.has("cost") ? money(unlock.get("cost")) : 0));
             } catch (Exception e) {
                 OneMoreClient.LOGGER.error("Skipped bad menu entry {}: {}", el, e.getMessage());
             }
@@ -112,9 +113,10 @@ public class Menu {
         return stack;
     }
 
-    static int money(int value) {
-        if (value > 1_000_000) OneMoreClient.LOGGER.warn("Capped money value {} at 1000000", value);
-        return Math.max(0, Math.min(1_000_000, value));
+    static int money(JsonElement value) {
+        BigDecimal amount = value.getAsBigDecimal();
+        if (amount.compareTo(BigDecimal.valueOf(1_000_000)) > 0) OneMoreClient.LOGGER.warn("Capped money value {} at 1000000", value);
+        return amount.max(BigDecimal.ZERO).min(BigDecimal.valueOf(1_000_000)).intValue();
     }
 
     private static boolean byIdIn(List<Entry> list, String id) {
