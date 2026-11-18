@@ -28,6 +28,13 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.OpenDoorGoal;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
+import net.minecraft.world.entity.ai.navigation.PathNavigation;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.pathfinder.PathFinder;
+import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.PathfindingContext;
+import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -51,8 +58,7 @@ public class Customer extends PathfinderMob {
     private static final EntityDataAccessor<Optional<BlockPos>> SURFACE = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.OPTIONAL_BLOCK_POS);
     private static final EntityDataAccessor<String> SKIN_NAME = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.STRING);
 
-    // ponytail: a customer that stands still this long, or walks longer than the timeout, is moved to its target.
-    // Add better pathing if this shows in play.
+    // A customer that stands still this long, or walks longer than the timeout, is moved to its target.
     private static final int WALK_TIMEOUT = 600, STUCK_TICKS = 40;
 
     // Server only.
@@ -60,6 +66,8 @@ public class Customer extends PathfinderMob {
     BlockPos seat;
     private final List<Line> wanted = new ArrayList<>();
     private int timer, stuck;
+    /** Where the customer was at the last progress check while the navigation was moving. */
+    private Vec3 lastProgress;
     private long bill;
     private Party party;
     private Vec3 standPos;
@@ -132,6 +140,35 @@ public class Customer extends PathfinderMob {
         ((GroundPathNavigation) getNavigation()).setCanOpenDoors(true);
     }
 
+    /**
+     * Ground navigation that does not walk into or over seats and serving surfaces. Furniture mods give chairs and
+     * tables low or partial collision shapes; the vanilla path finder then takes them as floor, and the customer walks
+     * into the back of a chair and stays there. With them blocked, a path to a seat ends next to it, and the customer
+     * sits from there.
+     */
+    @Override
+    protected PathNavigation createNavigation(Level level) {
+        return new GroundPathNavigation(this, level) {
+            @Override
+            protected PathFinder createPathFinder(int maxVisitedNodes) {
+                nodeEvaluator = new WalkNodeEvaluator() {
+                    @Override
+                    public PathType getPathType(PathfindingContext context, int x, int y, int z) {
+                        if (furniture(context.level(), x, y, z) || furniture(context.level(), x, y - 1, z)) return PathType.BLOCKED;
+                        return super.getPathType(context, x, y, z);
+                    }
+                };
+                nodeEvaluator.setCanPassDoors(true);
+                return new PathFinder(nodeEvaluator, maxVisitedNodes);
+            }
+        };
+    }
+
+    private static boolean furniture(BlockGetter level, int x, int y, int z) {
+        BlockState state = level.getBlockState(new BlockPos(x, y, z));
+        return state.is(OneMoreClient.SEATS) || state.is(OneMoreClient.SURFACES);
+    }
+
     static AttributeSupplier.Builder createAttributes() {
         return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 20).add(Attributes.MOVEMENT_SPEED, 0.3);
     }
@@ -189,6 +226,7 @@ public class Customer extends PathfinderMob {
     private void setState(State s) {
         entityData.set(STATE, (byte) s.ordinal());
         timer = stuck = 0;
+        lastProgress = null;
     }
 
     @Override
@@ -220,6 +258,12 @@ public class Customer extends PathfinderMob {
         if (position().distanceToSqr(target) < 2.25 || timer > WALK_TIMEOUT) return true;
         if (!getNavigation().isDone()) {
             stuck = 0;
+            // A path that does not move the customer: a block in the way that the path finder took as free.
+            // Stop it; the code below makes a new path and gives up after STUCK_TICKS.
+            if (timer % 20 == 0) {
+                if (lastProgress != null && lastProgress.distanceToSqr(position()) < 0.01) getNavigation().stop();
+                lastProgress = position();
+            }
         } else if (onGround()) {
             // A new mob is in the air for a tick, and the navigation refuses a path then.
             if (stuck++ > STUCK_TICKS) return true;
