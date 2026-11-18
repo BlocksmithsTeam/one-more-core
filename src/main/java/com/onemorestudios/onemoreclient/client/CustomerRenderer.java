@@ -137,7 +137,7 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         // Patience bar: a dark track and a coloured fill, from red (0) over yellow to green (1).
         float left = Mth.clamp(customer.getPatience(), 0, 1);
         float barL = -half + 0.1f, barR = half - 0.1f, barB = bottom + 0.07f, barT = barB + 0.06f;
-        quad(vc, m, barL, barB, barR, barT, z + 0.005f, 28, 28, 32, 32, 0xFF4A3C32);
+        quad(vc, m, barL, barB, barR, barT, z + 0.005f, 28, 28, 32, 32, 0xFF3A3A3A);
         int red = left < 0.5f ? 230 : (int) Mth.lerp((left - 0.5f) * 2, 230, 90);
         int green = left < 0.5f ? (int) Mth.lerp(left * 2, 60, 200) : 200;
         int blue = 70;
@@ -150,7 +150,7 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
             pose.pushPose();
             pose.translate(0, itemsY + 0.13f, 0);
             pose.scale(0.025f, -0.025f, 0.025f);
-            font.drawInBatch("!", -font.width("!") / 2f, 0, 0xFF3C3028, false, pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
+            font.drawInBatch("!", -font.width("!") / 2f, 0, 0xFFFFFFFF, false, pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
             pose.popPose();
         } else {
             pose.mulPose(Axis.YP.rotationDegrees(180));

@@ -118,7 +118,8 @@ public class ComputerScreen extends Screen {
         for (int row = 0; row < ROWS && page * ROWS + row < rows(); row += 2)
             g.fill(left + 4, rowY(row) - 2, left + W - 4, rowY(row) + ROW - 2, 0x18FFFFFF);
         for (int y = top + 23; y < top + H; y += 2) g.fill(left, y, left + W, y + 1, 0x0C000000);
-        g.fill(left + W - 6, top + H + 3, left + W - 2, top + H + 6, 0xFF55E07A);
+        // The power LED, centred under the screen like on the block.
+        g.fill(left + W / 2 - 2, top + H + 3, left + W / 2 + 2, top + H + 6, 0xFF55E07A);
     }
 
     @Override
