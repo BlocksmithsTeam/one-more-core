@@ -38,7 +38,7 @@ public class ReadyHud {
     private static final ResourceLocation CARD = sprite("card"), CARD_READY = sprite("card_ready"), WAITING = sprite("waiting"),
             KEYCAP = sprite("key"), CHECK = ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "hud/served"),
             PANEL = ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "hud/panel");
-    private static final int CARD_W = 36, CARD_H = 40;
+    private static final int CARD_H = 22;
 
     private static int held;
     /** True after a hold sent a request, until the key is released. One hold sends one request. */
@@ -91,6 +91,10 @@ public class ReadyHud {
         return Math.max(0, s.countdown() - (System.currentTimeMillis() - Status.clientTime) / 50f);
     }
 
+    private static int cardWidth(Font font, Status.Member m) {
+        return 38 + font.width(m.name());
+    }
+
     private static PlayerSkin skin(Status.Member m) {
         var connection = Minecraft.getInstance().getConnection();
         PlayerInfo info = connection == null ? null : connection.getPlayerInfo(m.id());
@@ -112,24 +116,40 @@ public class ReadyHud {
         String keyName = KEY.getTranslatedKeyMessage().getString();
         int keyW = Math.max(12, font.width(keyName) + 8);
         int promptW = keyW + 4 + font.width(prompt);
-        int cardsW = players.size() * (CARD_W + 4) - 4;
+        // Cards: face, ready mark and name side by side; the cards wrap into rows that fit the screen.
+        int maxRow = Math.max(80, g.guiWidth() - 40);
+        List<List<Status.Member>> rows = new java.util.ArrayList<>();
+        List<Integer> rowWidths = new java.util.ArrayList<>();
+        int rowW = 0;
+        for (Status.Member m : players) {
+            int cw = cardWidth(font, m);
+            if (rows.isEmpty() || rowW + 4 + cw > maxRow) { rows.add(new java.util.ArrayList<>()); rowWidths.add(0); rowW = -4; }
+            rows.get(rows.size() - 1).add(m);
+            rowW += 4 + cw;
+            rowWidths.set(rows.size() - 1, rowW);
+        }
+        int cardsW = rowWidths.stream().mapToInt(Integer::intValue).max().orElse(0);
         int w = Math.max(Math.max(cardsW, promptW), font.width(title)) + 16;
-        int h = 14 + CARD_H + 6 + 16 + 6;
-        int x = (g.guiWidth() - w) / 2, y = g.guiHeight() - 76 - h;
+        int h = 16 + rows.size() * (CARD_H + 3) + 4 + 18;
+        int x = (g.guiWidth() - w) / 2, y = g.guiHeight() - 72 - h;
         g.blitSprite(PANEL, x, y, w, h);
         g.drawString(font, title, x + (w - font.width(title)) / 2, y + 5, 0xFFF3E2C7, false);
-
-        int cx = x + (w - cardsW) / 2, cy = y + 16;
-        for (Status.Member m : players) {
-            g.blitSprite(m.ready() ? CARD_READY : CARD, cx, cy, CARD_W, CARD_H);
-            PlayerFaceRenderer.draw(g, skin(m), cx + (CARD_W - 16) / 2, cy + 4, 16);
-            g.blitSprite(m.ready() ? CHECK : WAITING, cx + CARD_W - 12, cy + 15, 9, 9);
-            String name = font.plainSubstrByWidth(m.name(), CARD_W - 4);
-            g.drawString(font, name, cx + (CARD_W - font.width(name)) / 2, cy + CARD_H - 13, m.ready() ? 0xFF9BE58A : 0xFFE0D2BC, false);
-            cx += CARD_W + 4;
+        int cy = y + 16;
+        for (int r = 0; r < rows.size(); r++) {
+            int cx = x + (w - rowWidths.get(r)) / 2;
+            for (Status.Member m : rows.get(r)) {
+                int cw = cardWidth(font, m);
+                g.blitSprite(m.ready() ? CARD_READY : CARD, cx, cy, cw, CARD_H);
+                PlayerFaceRenderer.draw(g, skin(m), cx + 3, cy + 3, 16);
+                g.blitSprite(m.ready() ? CHECK : WAITING, cx + 22, cy + 7, 9, 9);
+                g.drawString(font, m.name(), cx + 34, cy + 8, m.ready() ? 0xFF9BE58A : 0xFFE0D2BC, false);
+                cx += cw + 4;
+            }
+            cy += CARD_H + 3;
         }
+        cy -= CARD_H + 3;
 
-        int py = cy + CARD_H + 6, px = x + (w - promptW) / 2;
+        int py = cy + CARD_H + 4, px = x + (w - promptW) / 2;
         if (left > 0) {
             Component starting = Component.translatable("onemoreclient.ready.starting", Mth.ceil(left / 20));
             g.drawString(font, starting, x + (w - font.width(starting)) / 2, py + 4, 0xFFFFE27A, false);

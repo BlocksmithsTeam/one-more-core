@@ -74,7 +74,7 @@
   "onemoreclient.hud.closed": "CLOSED",
   "onemoreclient.hud.left": "Customers left: %s",
   "onemoreclient.hud.ready": "Ready: %s/%s",
-  "onemoreclient.hud.click_sign": "Click the sign to open",
+  "onemoreclient.hud.click_sign": "Get ready to open",
   "key.categories.onemoreclient": "One More Client",
   "key.onemoreclient.ready": "Get ready (hold)",
   "onemoreclient.ready.title": "Day %s: get ready",
