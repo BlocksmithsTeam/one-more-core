@@ -957,7 +957,11 @@ public class Restaurant {
     void numberTables(ServerLevel level) {
         List<List<Seat>> all = new ArrayList<>(groupTables(level, open ? seats : scanSeats(level)));
         List<Set<BlockPos>> surfaces = new ArrayList<>();
-        for (List<Seat> t : all) surfaces.add(tableAt(level, t.get(0).surface()));
+        // A seat list of the open day can name a table that a player broke since: it has no surfaces now and no number.
+        for (List<Seat> t : all) {
+            Set<BlockPos> table = tableAt(level, t.get(0).surface());
+            if (!table.isEmpty()) surfaces.add(table);
+        }
         java.util.Comparator<Set<BlockPos>> reading = java.util.Comparator.comparingInt((Set<BlockPos> t) -> t.stream().mapToInt(BlockPos::getZ).min().orElse(0))
                 .thenComparingInt(t -> t.stream().mapToInt(BlockPos::getX).min().orElse(0));
         surfaces.sort(reading);
