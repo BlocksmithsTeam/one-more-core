@@ -57,14 +57,15 @@ public final class WipingStation implements StationLogic {
         float x = data.getFloat("x"), z = data.getFloat("z");
         // The view shows the whole table: x and z are scene pixels from this block, up to 8 blocks away.
         if (!Float.isFinite(x) || !Float.isFinite(z) || Math.abs(x) > 128 || Math.abs(z) > 128) return;
-        long now = level.getGameTime();
-        if (now - lastWipe.getOrDefault(player.getUUID(), now - 4) < 4) return;
-        lastWipe.put(player.getUUID(), now);
         BlockPos pos = station.pos();
         Restaurant r = Restaurants.get(level).containing(pos);
         var table = r.tableAt(level, pos);
         int cx = pos.getX() * 8 + (int) Math.floor(x / 2), cz = pos.getZ() * 8 + (int) Math.floor(z / 2);
+        // A point off the table is no stroke: it does not use up the stroke rate either.
         if (!table.contains(new BlockPos(Math.floorDiv(cx, 8), pos.getY(), Math.floorDiv(cz, 8)))) return;
+        long now = level.getGameTime();
+        if (now - lastWipe.getOrDefault(player.getUUID(), now - 4) < 4) return;
+        lastWipe.put(player.getUUID(), now);
         r.wipeCells(level, table, cx, cz, new Vec3(cx / 8.0 + 1 / 16.0, pos.getY() + Dirt.top(level, pos), cz / 8.0 + 1 / 16.0));
     }
 
