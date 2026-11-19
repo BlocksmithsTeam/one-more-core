@@ -2,13 +2,13 @@
   "camera": {
     "position": [
       8,
-      20,
-      -3
+      22,
+      -6
     ],
     "target": [
       8,
       1,
-      8
+      6
     ],
     "fov": 45,
     "neighbors": {

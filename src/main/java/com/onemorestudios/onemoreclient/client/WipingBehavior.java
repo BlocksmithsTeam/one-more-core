@@ -58,15 +58,19 @@ final class WipingBehavior implements StationBehavior {
 
     /** Shows the coins and the dishes that lie on this surface. */
     private void showTableItems(StationView view) {
-        var items = com.onemorestudios.onemoreclient.TableItems.CLIENT.get(view.pos());
-        show(view, "coins", !collected && items != null && items.coins() > 0);
+        // The coins lie on one block of the table (where the party paid); the world draws them, the node is their click zone.
+        coinBlock = null;
+        for (var p : table) if (com.onemorestudios.onemoreclient.TableItems.CLIENT.containsKey(p)) { coinBlock = p; break; }
+        show(view, "coins", !collected && coinBlock != null);
     }
+
+    private net.minecraft.core.BlockPos coinBlock;
 
     /** A node that comes back starts on the table top again (it may have hopped away before). */
     private void show(StationView view, String id, boolean on) {
         view.node(id).ifPresent(n -> {
             if (n.isVisible() == on || n.isMoving()) return;
-            if (on) n.moveTo(0, height - 16, 0, 0);
+            if (on) n.moveTo((coinBlock.getX() - view.pos().getX()) * 16, height - 16, (coinBlock.getZ() - view.pos().getZ()) * 16, 0);
             n.setVisible(on);
         });
     }
@@ -92,11 +96,11 @@ final class WipingBehavior implements StationBehavior {
     @Override
     public void tick(StationView view) {
         showTableItems(view);
-        if (collected && !com.onemorestudios.onemoreclient.TableItems.CLIENT.containsKey(view.pos())) collected = false;
+        if (collected && coinBlock == null) collected = false;
         // Clean (the server cleaned it at dirtCleanFraction): a short look at the clean table, then the station closes.
         boolean dirty = false;
         for (var p : table) dirty |= Dirt.CLIENT.containsKey(p);
-        if (view.isFocused() && !dirty && !com.onemorestudios.onemoreclient.TableItems.CLIENT.containsKey(view.pos())) {
+        if (view.isFocused() && !dirty && coinBlock == null) {
             if (++cleanTicks == 12) {
                 var mc = net.minecraft.client.Minecraft.getInstance();
                 if (mc.screen != null && com.pockyl.diegesis.api.client.DiegesisClient.isStationScreen(mc.screen)) mc.screen.onClose();

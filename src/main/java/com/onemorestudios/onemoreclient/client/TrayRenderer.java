@@ -50,7 +50,7 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     /** Dishes and label on a north-facing tray in block space (0..1). */
     static void draw(List<ItemStack> dishes, int label, PoseStack pose, MultiBufferSource buffers, int light) {
         var level = Minecraft.getInstance().level;
-        float scale = 0.55f * Config.FOOD_SCALE.get().floatValue();
+        float scale = 0.7f * Config.FOOD_SCALE.get().floatValue();
         for (int i = 0; i < dishes.size() && i < SPOTS.length; i++) {
             ItemStack dish = dishes.get(i);
             if (dish.isEmpty()) continue;
@@ -61,15 +61,16 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
             pose.popPose();
         }
         if (label <= 0) return;
-        // The ticket stands on the front rim (z 3), facing out.
+        // The ticket is stuck to the front rim (z 3), a small tag that leans out.
         pose.pushPose();
-        pose.translate(0.5, 2.6 / 16, 2.9 / 16);
+        pose.translate(0.5, 1.8 / 16, 2.9 / 16);
         pose.mulPose(Axis.YP.rotationDegrees(180));
-        float w = 5 / 16f, h = 3 / 16f;
+        pose.mulPose(Axis.XP.rotationDegrees(-25));
+        float w = 3.6f / 16, h = 2 / 16f;
         quad(pose, buffers.getBuffer(PAPER), -w / 2, -h / 2, w / 2, h / 2, 0, 0xFFFFFFFF, light);
         Font font = Minecraft.getInstance().font;
         String text = "#" + label;
-        float s = 1 / 120f;
+        float s = 1 / 170f;
         pose.translate(0, 0, 0.002);
         pose.scale(s, -s, s);
         font.drawInBatch(text, -font.width(text) / 2f, -3.5f, 0xFF202020, false, pose.last().pose(), buffers, Font.DisplayMode.POLYGON_OFFSET, 0, light);

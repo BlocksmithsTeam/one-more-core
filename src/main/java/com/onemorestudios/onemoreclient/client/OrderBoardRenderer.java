@@ -77,7 +77,8 @@ public class OrderBoardRenderer implements BlockEntityRenderer<OrderBoardBlockEn
             pose.popPose();
             String head = "#" + t.table();
             float hs = 0.011f;
-            text(font, pose, buffers, Component.literal(head), (x0 + x1) / 2 - font.width(head) * hs / 2, 0.31f, hs, 0xFF202020, light);
+            // The table number, white in the red head of the ticket.
+            text(font, pose, buffers, Component.literal(head), (x0 + x1) / 2 - font.width(head) * hs / 2, 0.375f, hs, 0xFFFFFFFF, light);
             // Dishes: icons in a column, up to 5.
             float icon = 0.11f, y = 0.17f;
             for (int k = 0; k < t.items().size() && k < 5; k++) {

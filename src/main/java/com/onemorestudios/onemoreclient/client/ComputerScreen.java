@@ -51,7 +51,7 @@ public class ComputerScreen extends Screen {
     private final java.util.LinkedHashMap<String, Integer> cart = new java.util.LinkedHashMap<>();
     /** The shop shows the cart instead of the catalog. */
     private boolean cartOpen;
-    private static final int SIDEBAR = 64, ROW = 22;
+    private static final int SIDEBAR = 62, ROW = 22;
     private static final String[] FILTERS = {"all", "main", "drink", "starter", "dessert", "combos"};
     private static final int CHIPS = 13;
     private double scroll;
@@ -107,7 +107,8 @@ public class ComputerScreen extends Screen {
         dw = Math.min(width - 8, dh * 4 / 3);
         dx = (width - dw) / 2;
         dy = (height - dh) / 2;
-        wx = dx + 46;
+        // A window covers the desktop but the task bar, so that its lists have room; the task bar shows the open app.
+        wx = dx + 6;
         wy = dy + 6;
         ww = dx + dw - 6 - wx;
         wh = dy + dh - TASKBAR - 6 - wy;
@@ -144,7 +145,7 @@ public class ComputerScreen extends Screen {
         hits.clear();
         // The wallpaper: an evening diner, pixel art (art/wallpaper.py).
         g.blit(WALLPAPER, dx, dy, dw, dh, 0, 0, 160, 120, 160, 120);
-        drawIcons(g, mouseX, mouseY);
+        if (app == 0) drawIcons(g, mouseX, mouseY);
         drawTaskbar(g);
         if (!state.found()) {
             box(g, text("outside"));
@@ -519,14 +520,16 @@ public class ComputerScreen extends Screen {
             y += 22;
             if (k < building.size() - 1) { g.drawCenteredString(font, "+", cx + lw / 2, y - 1, GREY); y += 8; }
         }
-        if (building.size() < 4) {
+        // The hint, when it fits above the price row.
+        if (building.size() < 4 && y + 16 <= cy + ch - 38) {
             g.drawString(font, text(building.isEmpty() ? "combo_first" : "combo_next"), cx + 6, y + 4, GREY, false);
             y += 16;
         }
         int sum = building.stream().mapToInt(this::slotPrice).sum();
         int suggested = Math.max(1, (int) Math.round(sum * 0.9));
         int p = comboPrice < 0 ? suggested : comboPrice;
-        int by = cy + ch - 40;
+        // The price row under the places, and the Create button at the bottom.
+        int by = Math.min(y + 2, cy + ch - 38);
         if (building.size() >= 2) {
             g.drawString(font, text("combo_price"), cx + 6, by + 3, GREY, false);
             int pw = font.width(String.valueOf(p)) + 12;
