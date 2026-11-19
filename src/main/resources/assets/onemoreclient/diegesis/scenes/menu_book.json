@@ -1,0 +1,74 @@
+{
+  "camera": {
+    "position": [
+      8,
+      26,
+      -4
+    ],
+    "target": [
+      8,
+      1,
+      8
+    ],
+    "fov": 50,
+    "neighbors": {
+      "enabled": false
+    }
+  },
+  "work_plane": 2,
+  "idle_visible": false,
+  "interface": {
+    "hide_player": true,
+    "inventory_panel": false
+  },
+  "nodes": [
+    {
+      "id": "book",
+      "pos": [
+        8,
+        1.6,
+        8
+      ]
+    },
+    {
+      "id": "left_page",
+      "pos": [
+        17,
+        1.6,
+        8
+      ],
+      "collider": {
+        "from": [
+          -9,
+          0,
+          -12
+        ],
+        "to": [
+          9,
+          1,
+          12
+        ]
+      }
+    },
+    {
+      "id": "right_page",
+      "pos": [
+        -1,
+        1.6,
+        8
+      ],
+      "collider": {
+        "from": [
+          -9,
+          0,
+          -12
+        ],
+        "to": [
+          9,
+          1,
+          12
+        ]
+      }
+    }
+  ]
+}

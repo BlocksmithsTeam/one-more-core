@@ -74,7 +74,15 @@ public final class KitchenStations {
         return ticket;
     }
 
+    /** The menu book up close: the open book on the table, its pages turned by clicks (client only, it shows the synced menu). */
+    public static final StationType BOOK = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "menu_book"))
+            .block(OneMoreClient.MENU_BOOK)
+            .clientOnly()
+            .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown())
+            .build();
+
     public static void register() {
+        Diegesis.register(BOOK);
         Diegesis.register(TRAY);
         Diegesis.register(RAIL);
     }

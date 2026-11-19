@@ -42,7 +42,7 @@ public class Computer extends Block {
             new double[] {2, 0, 0.5, 14, 1.5, 3.5});
     public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
             TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9, SET_KIND = 10, ADD_COMBO = 11, REMOVE_COMBO = 12,
-            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15;
+            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16;
     /** How far from the computer the manager app may set a point, in blocks per axis. */
     public static final int PLACE_RANGE = 48;
     /** Bits of {@link State#apps}. */
@@ -144,7 +144,7 @@ public class Computer extends Block {
     public record Request(BlockPos pos, int action, String id) implements CustomPacketPayload {
         public static final Type<Request> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "computer_request"));
         static final StreamCodec<RegistryFriendlyByteBuf, Request> CODEC = StreamCodec.composite(
-                BlockPos.STREAM_CODEC, Request::pos, ByteBufCodecs.VAR_INT, Request::action, ByteBufCodecs.stringUtf8(256), Request::id, Request::new);
+                BlockPos.STREAM_CODEC, Request::pos, ByteBufCodecs.VAR_INT, Request::action, ByteBufCodecs.stringUtf8(1024), Request::id, Request::new);
 
         @Override
         public Type<Request> type() { return TYPE; }
@@ -306,6 +306,27 @@ public class Computer extends Block {
             message = switch (r.buy(e)) {
                 case OK -> Component.translatable("onemoreclient.computer.ordered", e.stack().getHoverName(), r.deliveryTicks() / 20);
                 case COST -> Component.translatable("onemoreclient.cmd.cost", e.id(), e.price(), r.register());
+                case NO_DELIVERY -> Component.translatable("onemoreclient.computer.no_delivery");
+            };
+        } else if (request.action == BUY_CART) {
+            // "id:count;id:count", at most 32 lines.
+            if (r == null || !Config.APP_SHOP.get()) return null;
+            java.util.Map<Shop.Entry, Integer> cart = new java.util.LinkedHashMap<>();
+            String[] parts = request.id.split(";");
+            if (parts.length > 32) return null;
+            for (String part : parts) {
+                int colon = part.lastIndexOf(':');
+                if (colon < 0) return null;
+                Shop.Entry e = Shop.byId(part.substring(0, colon));
+                int count;
+                try { count = Integer.parseInt(part.substring(colon + 1)); } catch (NumberFormatException ex) { return null; }
+                if (e == null || count < 1 || count > 64) return null;
+                cart.merge(e, count, (a, b) -> Math.min(64, a + b));
+            }
+            long total = cart.entrySet().stream().mapToLong(x -> (long) x.getKey().price() * x.getValue()).sum();
+            message = switch (r.buyAll(cart)) {
+                case OK -> Component.translatable("onemoreclient.computer.cart_ordered", cart.values().stream().mapToInt(Integer::intValue).sum(), r.deliveryTicks() / 20);
+                case COST -> Component.translatable("onemoreclient.computer.cart_cost", total - r.register());
                 case NO_DELIVERY -> Component.translatable("onemoreclient.computer.no_delivery");
             };
         } else if (request.action != REFRESH) {

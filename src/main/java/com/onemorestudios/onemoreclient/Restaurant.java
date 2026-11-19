@@ -300,10 +300,22 @@ public class Restaurant {
     /** Result of {@link #addCombo}. */
     public enum AddCombo { OK, DISHES, PRICE, FULL }
 
-    /** Adds a combo of 2 to MAX_COMBO_DISHES different dishes of this restaurant, with a price from 1 to maxDishPrice. */
+    /** The kinds a combo place can ask for as a whole ("kind:drink": any drink on the menu). */
+    static final List<String> KINDS = List.of("main", "drink", "starter", "dessert");
+
+    /** The kind of a combo place "kind:<kind>", or null for a place that names one dish. */
+    static String slotKind(String slot) {
+        return slot.startsWith("kind:") && KINDS.contains(slot.substring(5)) ? slot.substring(5) : null;
+    }
+
+    /**
+     * Adds a combo of 2 to MAX_COMBO_DISHES places, with a price from 1 to maxDishPrice times the places. A place is a dish
+     * of this restaurant or a whole kind ("kind:drink"); a dish is in a combo at most once.
+     */
     AddCombo addCombo(List<String> ids, int price) {
-        if (ids.size() < 2 || ids.size() > MAX_COMBO_DISHES || ids.stream().distinct().count() != ids.size()
-                || ids.stream().anyMatch(id -> dish(id) == null)) return AddCombo.DISHES;
+        List<String> dishIds = ids.stream().filter(id -> slotKind(id) == null).toList();
+        if (ids.size() < 2 || ids.size() > MAX_COMBO_DISHES || dishIds.stream().distinct().count() != dishIds.size()
+                || dishIds.stream().anyMatch(id -> dish(id) == null)) return AddCombo.DISHES;
         if (price < 1 || price > Config.MAX_DISH_PRICE.get() * MAX_COMBO_DISHES) return AddCombo.PRICE;
         if (combos.size() >= MAX_COMBOS) return AddCombo.FULL;
         int n = 1;
@@ -335,13 +347,23 @@ public class Restaurant {
         return false;
     }
 
-    /** A combo can be ordered when every one of its dishes can be ordered. */
+    /** A combo can be ordered when every one of its places can: a dish that can be ordered, or a kind with such a dish. */
     boolean canOrder(Combo c) {
         for (String id : c.dishes()) {
+            String kind = slotKind(id);
+            if (kind != null) {
+                if (ofKind(kind).isEmpty()) return false;
+                continue;
+            }
             Menu.Entry e = dish(id);
             if (e == null || !canOrder(e)) return false;
         }
         return true;
+    }
+
+    /** The dishes of a kind that customers can order now. */
+    List<Menu.Entry> ofKind(String kind) {
+        return dishes().stream().filter(e -> canOrder(e) && kind(e).equals(kind)).toList();
     }
 
     /** The serving surfaces that touch the one at pos (one table), inside the area, at most 256. */
@@ -423,6 +445,16 @@ public class Restaurant {
 
     /** Result of {@link #buy}. */
     public enum Buy { OK, COST, NO_DELIVERY }
+
+    /** Orders a whole cart, or nothing when the register cannot pay all of it. Counts are 1..64 per line. */
+    public Buy buyAll(Map<Shop.Entry, Integer> cart) {
+        if (delivery == null) return Buy.NO_DELIVERY;
+        long total = 0;
+        for (var e : cart.entrySet()) total += (long) e.getKey().price() * e.getValue();
+        if (total > register) return Buy.COST;
+        for (var e : cart.entrySet()) for (int i = 0; i < e.getValue(); i++) buy(e.getKey());
+        return Buy.OK;
+    }
 
     /** Orders a shop entry with money from the register. The items arrive at the delivery point after shopDeliveryTicks. */
     public Buy buy(Shop.Entry e) {
@@ -759,7 +791,11 @@ public class Restaurant {
             Combo c = orderable.get(level.random.nextInt(orderable.size()));
             int share = c.price() / c.dishes().size(), rest = c.price() - share * c.dishes().size();
             for (int i = 0; i < c.dishes().size(); i++) {
-                Menu.Entry e = dish(c.dishes().get(i));
+                String kind = slotKind(c.dishes().get(i));
+                // A kind place: one dish of that kind, chosen like a single order (prices weigh in), not one already taken.
+                Menu.Entry e = kind == null ? dish(c.dishes().get(i))
+                        : weighted(ofKind(kind).stream().filter(x -> !ids.contains(x.id())).toList().isEmpty() ? ofKind(kind)
+                                : ofKind(kind).stream().filter(x -> !ids.contains(x.id())).toList(), level);
                 ItemStack stack = e.pick(level.random);
                 if (stack.isEmpty()) return new ArrayList<>();
                 order.add(new Customer.Line(stack, share + (i == 0 ? rest : 0), e.exact(), 100, kind(e).equals("drink")));

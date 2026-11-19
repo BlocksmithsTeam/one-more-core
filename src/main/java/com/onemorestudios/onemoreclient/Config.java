@@ -95,10 +95,12 @@ public class Config {
                     "If this list and the stream chat give no names, customers use the default skins and have no name.")
             .defineListAllowEmpty("skinNames", List.of(), () -> "", o -> o instanceof String);
     static final ModConfigSpec.ConfigValue<String> CHAT_PLATFORM = B
-            .comment("Stream chat that viewers use to become customers: \"none\" or \"twitch\". The chat is only read.",
+            .comment("Stream chat that viewers use to become customers: \"none\", \"twitch\", \"kick\" or \"youtube\". The chat is only read.",
+                    "chatChannel: the Twitch or Kick channel name (Kick: or the chatroom id, digits), or for YouTube a channel handle (@name) or a video id.",
+                    "Kick and YouTube have no public chat API for this: the mod reads them like their web pages do, which can stop working when they change.",
                     "A viewer writes the chat command and a Minecraft account name, for example: !omc Notch",
                     "The customer gets the skin of that account and the chat name of the viewer. A restart applies changes.")
-            .define("chatPlatform", "none", o -> "none".equals(o) || "twitch".equals(o));
+            .define("chatPlatform", "none", o -> "none".equals(o) || "twitch".equals(o) || "kick".equals(o) || "youtube".equals(o));
     static final ModConfigSpec.ConfigValue<String> CHAT_CHANNEL = B.define("chatChannel", "");
     static final ModConfigSpec.ConfigValue<String> CHAT_COMMAND = B.define("chatCommand", "!omc");
     static final ModConfigSpec.IntValue SKIN_POOL_SIZE = B

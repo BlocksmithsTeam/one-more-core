@@ -84,6 +84,9 @@ public class OneMoreClient {
     public static final DeferredBlock<OrderBoardBlock> ORDER_BOARD = BLOCKS.register("order_board",
             () -> new OrderBoardBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.WOOD)));
     public static final DeferredItem<BlockItem> ORDER_BOARD_ITEM = ITEMS.registerSimpleBlockItem(ORDER_BOARD);
+    public static final DeferredBlock<MenuBookBlock> MENU_BOOK = BLOCKS.register("menu_book",
+            () -> new MenuBookBlock(BlockBehaviour.Properties.of().strength(0.4f).noOcclusion().sound(SoundType.WOOL).pushReaction(PushReaction.DESTROY)));
+    public static final DeferredItem<BlockItem> MENU_BOOK_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOOK);
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OpenSignBlockEntity>> OPEN_SIGN_ENTITY = BLOCK_ENTITIES.register("open_sign",
             () -> BlockEntityType.Builder.of(OpenSignBlockEntity::new, OPEN_SIGN.get()).build(null));
@@ -93,6 +96,8 @@ public class OneMoreClient {
             () -> BlockEntityType.Builder.of(TrayBlockEntity::new, TRAY.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OrderBoardBlockEntity>> ORDER_BOARD_ENTITY = BLOCK_ENTITIES.register("order_board",
             () -> BlockEntityType.Builder.of(OrderBoardBlockEntity::new, ORDER_BOARD.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBookBlockEntity>> MENU_BOOK_ENTITY = BLOCK_ENTITIES.register("menu_book",
+            () -> BlockEntityType.Builder.of(MenuBookBlockEntity::new, MENU_BOOK.get()).build(null));
     public static final DeferredHolder<EntityType<?>, EntityType<Customer>> CUSTOMER = ENTITIES.register("customer",
             () -> EntityType.Builder.<Customer>of(Customer::new, MobCategory.MISC).sized(0.6f, 1.8f).noSave().noSummon().clientTrackingRange(8).build("customer"));
     public static final DeferredHolder<EntityDataSerializer<?>, EntityDataSerializer<List<ItemStack>>> STACKS = SERIALIZERS.register("stacks",
@@ -109,6 +114,7 @@ public class OneMoreClient {
                 output.accept(OPEN_SIGN_ITEM);
                 output.accept(COMPUTER_ITEM);
                 output.accept(MENU_BOARD_ITEM);
+                output.accept(MENU_BOOK_ITEM);
                 output.accept(ORDER_BOARD_ITEM);
                 output.accept(TRAY_RACK_ITEM);
                 output.accept(TRAY_ITEM);
@@ -144,6 +150,7 @@ public class OneMoreClient {
                 .playToClient(Status.TYPE, Status.CODEC, (status, context) -> { Status.client = status; Status.clientTime = System.currentTimeMillis(); })
                 .playToClient(TableItems.TYPE, TableItems.CODEC, (t, context) -> TableItems.receive(t))
                 .playToClient(TableMarks.TYPE, TableMarks.CODEC, (t, context) -> TableMarks.receive(t))
+                .playToClient(MenuBookBlockEntity.Open.TYPE, MenuBookBlockEntity.Open.CODEC, (o, context) -> MenuBookBlockEntity.Open.handler.accept(o))
                 .playToClient(TableItems.Collected.TYPE, TableItems.Collected.CODEC, (c, context) -> TableItems.Collected.receive(c))
                 .playToServer(ReadyRequest.TYPE, ReadyRequest.CODEC, (request, context) -> ReadyRequest.handle(request, (ServerPlayer) context.player())));
         NeoForge.EVENT_BUS.addListener((ChunkWatchEvent.Sent e) -> {

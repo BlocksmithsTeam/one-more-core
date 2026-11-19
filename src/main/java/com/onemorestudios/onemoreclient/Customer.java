@@ -274,6 +274,8 @@ public class Customer extends PathfinderMob {
     public float getPatience() { return entityData.get(PATIENCE); }
     /** The items the customer still waits for. Empty until a player takes the order. */
     public List<ItemStack> getOrder() { return entityData.get(ORDER); }
+    /** Server: the lines still wanted (copy). */
+    List<Line> wantedLines() { return List.copyOf(wanted); }
     public List<ItemStack> getServed() { return entityData.get(SERVED); }
     public BlockPos getSurface() { return entityData.get(SURFACE).orElse(null); }
     /** The Minecraft account whose skin the customer wears. Empty: a default skin. */

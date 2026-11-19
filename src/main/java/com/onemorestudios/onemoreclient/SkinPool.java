@@ -23,7 +23,8 @@ public class SkinPool {
 
     /** Chat entries by chat user, oldest first. */
     private static final Map<String, Entry> chat = new LinkedHashMap<>();
-    private static TwitchChat reader;
+    /** The running chat reader: its stop method. */
+    private static Runnable reader;
 
     static boolean isMinecraftName(String s) {
         return NAME.matcher(s).matches();
@@ -53,21 +54,26 @@ public class SkinPool {
 
     /** Starts the chat reader if the config names a channel. The server owner configures it; it runs on the server. */
     static void start(MinecraftServer server) {
-        String platform = Config.CHAT_PLATFORM.get(), channel = Config.CHAT_CHANNEL.get().strip().toLowerCase(Locale.ROOT);
-        if (!platform.equals("twitch") || channel.isEmpty()) return;
+        String platform = Config.CHAT_PLATFORM.get(), channel = Config.CHAT_CHANNEL.get().strip();
+        if (platform.equals("none") || channel.isEmpty()) return;
+        java.util.function.Consumer<TwitchChat.Message> handler = m -> {
+            String name = commandName(m.text(), Config.CHAT_COMMAND.get());
+            if (name != null) server.execute(() -> addChat(platform + ":" + m.user(), m.displayName(), name, Config.SKIN_POOL_SIZE.get()));
+        };
         try {
-            reader = new TwitchChat(channel, m -> {
-                String name = commandName(m.text(), Config.CHAT_COMMAND.get());
-                if (name != null) server.execute(() -> addChat(m.user(), m.displayName(), name, Config.SKIN_POOL_SIZE.get()));
-            });
-            reader.start();
+            switch (platform) {
+                case "twitch" -> { TwitchChat t = new TwitchChat(channel.toLowerCase(Locale.ROOT), handler); t.start(); reader = t::stop; }
+                case "kick" -> { KickChat k = new KickChat(channel.toLowerCase(Locale.ROOT), handler); k.start(); reader = k::stop; }
+                case "youtube" -> { YouTubeChat y = new YouTubeChat(channel, handler); y.start(); reader = y::stop; }
+                default -> { }
+            }
         } catch (IllegalArgumentException e) {
             OneMoreClient.LOGGER.error("Stream chat is off: {}", e.getMessage());
         }
     }
 
     static void stop() {
-        if (reader != null) reader.stop();
+        if (reader != null) reader.run();
         reader = null;
         chat.clear();
     }

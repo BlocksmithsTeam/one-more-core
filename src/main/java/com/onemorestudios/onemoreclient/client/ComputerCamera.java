@@ -49,8 +49,8 @@ public final class ComputerCamera {
 
     /** Ticks of one camera flight. */
     static final int FLIGHT = 12;
-    /** Part of the view height that the monitor's screen fills at the end of the flight. */
-    static final double FILL = 0.9;
+    /** The monitor's screen fills this share of the view height: the room stays visible round the monitor. */
+    static final double FILL = 0.75;
     /** The monitor's screen in pixels of the north-facing model: x 4..12, y 3..9, front face at z 3.9. */
     static final double SCREEN_HEIGHT = 6 / 16.0;
 
@@ -345,30 +345,27 @@ public final class ComputerCamera {
         PoseStack pose = event.getPoseStack();
         Vec3 cam = event.getCamera().getPosition();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
-        var lines = buffers.getBuffer(RenderType.lines());
         pose.pushPose();
         pose.translate(-cam.x, -cam.y, -cam.z);
+        // Boxes like Create's Super Glue: see-through faces with a grid, thick edges.
         List<Integer> a = state.area();
-        if (a.size() == 6) LevelRenderer.renderLineBox(pose, lines, new AABB(a.get(0), a.get(1), a.get(2), a.get(3) + 1, a.get(4) + 1, a.get(5) + 1), 0.3f, 1f, 0.4f, 1f);
-        state.sign().ifPresent(p -> LevelRenderer.renderLineBox(pose, lines, new AABB(p).inflate(0.02), 1f, 1f, 1f, 1f));
-        state.spawn().ifPresent(p -> LevelRenderer.renderLineBox(pose, lines, new AABB(p), 0.3f, 0.6f, 1f, 1f));
-        state.delivery().ifPresent(p -> LevelRenderer.renderLineBox(pose, lines, new AABB(p).inflate(0.02), 1f, 0.55f, 0.1f, 1f));
+        if (a.size() == 6) SelectionBox.draw(pose, buffers, new AABB(a.get(0), a.get(1), a.get(2), a.get(3) + 1, a.get(4) + 1, a.get(5) + 1), 0x4DE066, 0.12f);
+        state.sign().ifPresent(p -> SelectionBox.draw(pose, buffers, new AABB(p).inflate(0.02), 0xFFFFFF, 0.2f));
+        state.spawn().ifPresent(p -> SelectionBox.draw(pose, buffers, new AABB(p), 0x4D99FF, 0.3f));
+        state.delivery().ifPresent(p -> SelectionBox.draw(pose, buffers, new AABB(p).inflate(0.02), 0xFF8C1A, 0.3f));
         if (tool == Tool.TABLES) {
             // Tables: green when customers may use them, red when they are off.
             java.util.Set<BlockPos> off = new java.util.HashSet<>(state.offSurfaces());
-            for (BlockPos p : state.surfaces()) {
-                boolean on = !off.contains(p);
-                LevelRenderer.renderLineBox(pose, lines, new AABB(p).deflate(0.03), on ? 0.3f : 1f, on ? 1f : 0.25f, on ? 0.4f : 0.25f, 1f);
-            }
+            for (BlockPos p : state.surfaces()) SelectionBox.draw(pose, buffers, new AABB(p).deflate(0.03), off.contains(p) ? 0xE05555 : 0x4DE066, 0.25f);
         }
         BlockPos p = target();
         if (p != null) {
             // The box grows from the first corner to the looked-at point, like Create's Super Glue.
-            if (tool == Tool.AREA && corner != null) LevelRenderer.renderLineBox(pose, lines, AABB.encapsulatingFullBlocks(corner, p).inflate(0.01), 1f, 1f, 0.3f, 1f);
-            LevelRenderer.renderLineBox(pose, lines, new AABB(p).inflate(0.005), 1f, 1f, 1f, 0.8f);
+            if (tool == Tool.AREA && corner != null) SelectionBox.draw(pose, buffers, AABB.encapsulatingFullBlocks(corner, p).inflate(0.01), 0xFFE04D, 0.18f);
+            SelectionBox.draw(pose, buffers, new AABB(p).inflate(0.005), 0xFFFFFF, 0.15f);
         }
         pose.popPose();
-        buffers.endBatch(RenderType.lines());
+        buffers.endBatch();
     }
 
     private static void renderHud(RenderGuiEvent.Post event) {

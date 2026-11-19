@@ -32,7 +32,12 @@ public class MenuBoardBlockEntity extends BlockEntity {
     public List<Line> lines = List.of();
 
     public MenuBoardBlockEntity(BlockPos pos, BlockState state) {
-        super(OneMoreClient.MENU_BOARD_ENTITY.get(), pos, state);
+        this(OneMoreClient.MENU_BOARD_ENTITY.get(), pos, state);
+    }
+
+    /** Also the menu book, which shows the same menu. */
+    protected MenuBoardBlockEntity(net.minecraft.world.level.block.entity.BlockEntityType<?> type, BlockPos pos, BlockState state) {
+        super(type, pos, state);
     }
 
     void serverTick(ServerLevel level) {
@@ -58,7 +63,12 @@ public class MenuBoardBlockEntity extends BlockEntity {
             for (Restaurant.Combo c : r.combos) {
                 if (!r.canOrder(c)) continue;
                 List<ItemStack> items = new ArrayList<>();
-                for (String id : c.dishes()) items.add(r.dish(id).stack() == null ? ItemStack.EMPTY : r.dish(id).stack());
+                for (String id : c.dishes()) {
+                    // A kind place shows one dish of that kind.
+                    String kind = Restaurant.slotKind(id);
+                    Menu.Entry e = kind == null ? r.dish(id) : r.ofKind(kind).stream().findFirst().orElse(null);
+                    items.add(e == null || e.stack() == null ? ItemStack.EMPTY : e.stack());
+                }
                 list.add(line("combo", items, c.price()));
             }
         }
@@ -89,6 +99,11 @@ public class MenuBoardBlockEntity extends BlockEntity {
     /** Client: reads the lines of an update. The tag is not trusted beyond its shape. */
     @Override
     public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+        lines = parse(tag);
+    }
+
+    /** The lines of a menu tag (from build). */
+    public static List<Line> parse(CompoundTag tag) {
         List<Line> out = new ArrayList<>();
         for (Tag t : tag.getList("lines", Tag.TAG_COMPOUND)) {
             CompoundTag c = (CompoundTag) t;
@@ -97,7 +112,7 @@ public class MenuBoardBlockEntity extends BlockEntity {
                 BuiltInRegistries.ITEM.getOptional(ResourceLocation.tryParse(id.getAsString())).ifPresent(i -> items.add(new ItemStack(i)));
             if (!items.isEmpty() && out.size() < 64) out.add(new Line(c.getString("kind"), items, c.getInt("price")));
         }
-        lines = out;
+        return out;
     }
 
     @Override

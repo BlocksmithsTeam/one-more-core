@@ -64,6 +64,7 @@ public class ClientSetup {
             }
         }, OneMoreClient.ORDER_BOARD_ITEM.get()));
         TableMarkRenderer.register();
+        MenuBook.register();
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderOrderTooltip);
         NeoForge.EVENT_BUS.addListener(BubbleHover::reset);
         bus.addListener(RestaurantHud::register);

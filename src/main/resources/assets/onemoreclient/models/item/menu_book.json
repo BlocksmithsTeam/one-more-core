@@ -1,0 +1,22 @@
+{
+ "parent": "onemoreclient:block/menu_book",
+ "display": {
+  "gui": {
+   "rotation": [
+    60,
+    0,
+    0
+   ],
+   "translation": [
+    0,
+    2,
+    0
+   ],
+   "scale": [
+    1.3,
+    1.3,
+    1.3
+   ]
+  }
+ }
+}

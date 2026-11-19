@@ -1,6 +1,15 @@
 {
  "variants": {
-  "": {
+  "facing=north": {
+   "model": "onemoreclient:block/order_board"
+  },
+  "facing=east": {
+   "model": "onemoreclient:block/order_board"
+  },
+  "facing=south": {
+   "model": "onemoreclient:block/order_board"
+  },
+  "facing=west": {
    "model": "onemoreclient:block/order_board"
   }
  }
