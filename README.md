@@ -12,10 +12,13 @@ The mod does not add food. It works with the items of any mod.
 4. Click the sign. A player alone in the area starts the day at once. With more players, a panel opens for every player inside the area: each one holds **R** (key "Get ready (hold)"). When all of them are ready, a short countdown starts the day. Hold the key again to cancel.
 5. Click a seated customer to take the order. Look at an item in the speech bubble to read its tooltip.
 6. Hold the ordered item and click the customer, or the surface in front of the customer.
-7. Serve food on a clean **Plate** and drinks in a clean **Glass** (one is used from the inventory per dish). A party leaves its bill as **Coins** and its dirty dishes on the table. Click the table with an empty hand (with Diegesis: click the coins in the table view) to put the coins in the register and take the dishes. A table with coins or dishes gets no new party. Wash dirty dishes at a **Sink**: use a dirty plate or glass on it. `usePlates` and `collectPayments` turn this off.
+7. Serve on a **Tray**. Take one from a **Tray Rack** and put it on a counter. Click it with each dish of one customer; the dishes stand on it in 3D. A taken order hangs on the **Order Rail** as a ticket with the table number; click the ticket and click the tray with it, so the tray shows the table number. Sneak-click the tray with an empty hand to take it, then click the customer (or the table in front of the customer): every dish of that customer on the tray is served at once. With Diegesis, a click with an empty hand opens the tray up close, and dishes are dragged onto it. `requireTray = false` also takes single dishes from the hand.
+   Every table with seats has a number, on a small card in its middle.
+   A party leaves its bill as **Coins** on the table. Click the table with an empty hand (with Diegesis: click the coins in the table view) to put the coins in the register. A table with coins gets no new party. `collectPayments = false` pays straight into the register.
 8. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
    A broken sign keeps the money, the day, the unlocks and the paid orders in the item, like a shulker box. Place it again and set the area again.
-9. Customers leave a stain on the table. A dirty surface gets no customer until `dirtCleanFraction` of it is clean.
+9. A party leaves stains where it ate; a stain can go over the joins of a table's blocks. A table is one thing to clean: it gets no customer until `dirtCleanFraction` of all its dirt is wiped, then all of it is clean.
+10. A **Menu Book** on a table shows the menu on pages, like a restaurant's menu folder (with Diegesis: the open book up close).
 
 Optional [Diegesis](https://github.com/Pocky-l/diegesis) adds a camera above the table and a folded 3D cloth.
 Use NeoForge 1.21.1 with Diegesis beta.11 or newer on the client and server.
@@ -40,8 +43,8 @@ One click takes the orders of the whole group. Each member gets its own food. Th
 Use a **Restaurant Computer** inside the restaurant area, or at most 32 blocks from a sign that has no area yet. The camera moves to the monitor and a desktop opens. Click an app icon to open its window; the × closes it. Escape closes the window, then leaves the computer.
 
 - **Menu**: a searchable catalog of the restaurant's dishes, filtered by kind (main, drink, starter, dessert). Put a dish on the menu or take it off, unlock a dish with money from the register, add any food or drink with your own price (`maxDishPrice`), and change the kind of a dish with its label. One order has at most one dish of each kind. Customers order only dishes that are on the menu.
-  **Combos**: 2 to 4 dishes for one price (for example a skewer, a cola and a salad). A customer orders a combo with the chance `comboChance` when all its dishes are on the menu.
-- **Shop**: a searchable catalog of the items of `shop.json`. Buy pays from the register; the items arrive at the delivery container after a delay.
+  **Combos**: 2 to 4 places for one price; a place is one dish or a whole kind ("Any drink"), for example a burger + any drink + any starter (for example a skewer, a cola and a salad). A customer orders a combo with the chance `comboChance` when all its dishes are on the menu.
+- **Shop**: a searchable catalog of the items of `shop.json`. Add items to the cart, change the counts in the cart, and check out: the register pays all of it or nothing, and the cart shows how much money is missing. The items arrive at the delivery container after a delay.
 - **Upgrades**: Decor (guests wait longer), Fast delivery (shop orders arrive sooner) and Call bell (use a Minecraft bell in the area while the day runs: the next group comes now). The prices are `upgradeDecorCosts`, `upgradeDeliveryCosts` and `upgradeBellCosts`.
 - **Manager**: shows the state of the restaurant and edits the area, the customer spawn point and the delivery container with a free camera (keys 1, 2, 3 choose the tool; WASD, Space and Shift fly; Ctrl flies fast). Points must be at most 48 blocks from the computer.
 
@@ -88,7 +91,7 @@ For Kaleidoscope food, the `kaleidoscope_cookery:quality` component uses names s
 Without setup, customers use the default skins and have no name.
 
 - `skinNames` in `config/onemoreclient-common.toml` is a list of Minecraft account names, for example `["Notch", "jeb_"]`. A customer gets the skin of one account. The account name is shown above the customer.
-- Streamers: set `chatPlatform = "twitch"` and `chatChannel` to the channel name. A viewer writes `!omc <Minecraft name>` in the chat. A customer gets the skin of that account and the chat name of the viewer. Each viewer has one entry; a new command replaces it. `skinPoolSize` limits the number of viewers, and `chatCommand` changes the command.
+- Streamers: set `chatPlatform` to `"twitch"`, `"kick"` or `"youtube"` and `chatChannel` to the channel name (YouTube: the channel handle, `@name`, or the video id of the stream). Kick and YouTube have no public chat API for this; the mod reads them like their web pages do, which can stop working when they change. A viewer writes `!omc <Minecraft name>` in the chat. A customer gets the skin of that account and the chat name of the viewer. Each viewer has one entry; a new command replaces it. `skinPoolSize` limits the number of viewers, and `chatCommand` changes the command.
 
 The mod only reads the chat. It needs no login and no token, and it sends nothing. Restart the world or the server after you change the chat settings.
 In multiplayer the chat reader runs on the server. The server owner sets it in the config of the server.
