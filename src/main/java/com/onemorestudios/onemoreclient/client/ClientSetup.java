@@ -41,6 +41,29 @@ public class ClientSetup {
                 return renderer;
             }
         }, OneMoreClient.OPEN_SIGN_ITEM.get()));
+        bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreClient.TRAY_ENTITY.get(), TrayRenderer::new));
+        bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreClient.ORDER_BOARD_ENTITY.get(), OrderBoardRenderer::new));
+        bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
+            private TrayRenderer.Item renderer;
+
+            @Override
+            public BlockEntityWithoutLevelRenderer getCustomRenderer() {
+                Minecraft mc = Minecraft.getInstance();
+                if (renderer == null) renderer = new TrayRenderer.Item(mc.getBlockEntityRenderDispatcher(), mc.getEntityModels());
+                return renderer;
+            }
+        }, OneMoreClient.TRAY_ITEM.get()));
+        bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
+            private OrderBoardRenderer.Item renderer;
+
+            @Override
+            public BlockEntityWithoutLevelRenderer getCustomRenderer() {
+                Minecraft mc = Minecraft.getInstance();
+                if (renderer == null) renderer = new OrderBoardRenderer.Item(mc.getBlockEntityRenderDispatcher(), mc.getEntityModels());
+                return renderer;
+            }
+        }, OneMoreClient.ORDER_BOARD_ITEM.get()));
+        TableMarkRenderer.register();
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderOrderTooltip);
         NeoForge.EVENT_BUS.addListener(BubbleHover::reset);
         bus.addListener(RestaurantHud::register);

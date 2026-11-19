@@ -119,30 +119,6 @@
       "visual": {
         "model": "onemoreclient:diegesis/coins"
       }
-    },
-    {
-      "id": "dishes",
-      "pos": [
-        5,
-        16,
-        11
-      ],
-      "tooltip": "onemoreclient.wiping.dishes",
-      "collider": {
-        "from": [
-          -5,
-          0,
-          -5
-        ],
-        "to": [
-          7,
-          4,
-          5
-        ]
-      },
-      "visual": {
-        "model": "onemoreclient:diegesis/dishes"
-      }
     }
   ],
   "idle_visible": false

@@ -306,15 +306,24 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
             pose.pushPose();
             pose.translate(x - dx * 0.2 - dz * side, y, z - dz * 0.2 + dx * side);
             pose.mulPose(Axis.YP.rotationDegrees(facing));
-            String display = display(stack, customer);
-            if (display.equals("block")) {
-                // The placed block of a food item (a cake, a pie block): drawn at 0.4 size, with its bottom centre on the surface.
-                pose.scale(0.4f * scale, 0.4f * scale, 0.4f * scale);
-                pose.translate(-0.5, 0, -0.5);
-                Minecraft.getInstance().getBlockRenderer().renderSingleBlock(FoodModels.block(stack), pose, buffers, light, OverlayTexture.NO_OVERLAY);
-                pose.popPose();
-                continue;
-            }
+            renderFood(stack, customer.level(), pose, buffers, light, scale, customer.getId() + i);
+            pose.popPose();
+        }
+    }
+
+    /**
+     * Draws a food with the middle of its bottom at the origin, as on a table: the placed block of a food item at 0.4
+     * size, a 3D item standing, a 2D item lying flat. Also used for the food on trays.
+     */
+    public static void renderFood(ItemStack stack, net.minecraft.world.level.Level level, PoseStack pose, MultiBufferSource buffers, int light, float scale, int seed) {
+        var items = Minecraft.getInstance().getItemRenderer();
+        pose.pushPose();
+        String display = display(stack, level);
+        if (display.equals("block")) {
+            pose.scale(0.4f * scale, 0.4f * scale, 0.4f * scale);
+            pose.translate(-0.5, 0, -0.5);
+            Minecraft.getInstance().getBlockRenderer().renderSingleBlock(FoodModels.block(stack), pose, buffers, light, OverlayTexture.NO_OVERLAY);
+        } else {
             if (display.equals("flat")) {
                 pose.translate(0, 0.5f * scale / 32, 0);
                 pose.mulPose(Axis.XP.rotationDegrees(90));
@@ -324,20 +333,20 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
                 pose.translate(0, 0.25f * scale, 0);
                 pose.scale(scale, scale, scale);
             }
-            items.renderStatic(stack, ItemDisplayContext.FIXED, light, OverlayTexture.NO_OVERLAY, pose, buffers, customer.level(), customer.getId() + i);
-            pose.popPose();
+            items.renderStatic(stack, ItemDisplayContext.FIXED, light, OverlayTexture.NO_OVERLAY, pose, buffers, level, seed);
         }
+        pose.popPose();
     }
 
     /**
      * "flat", "upright" or "block". Without a config entry: a 3D item model stays upright; a 2D item whose item places
      * a modelled block (cake, pie and meal blocks) shows that block; any other 2D item lies flat.
      */
-    private String display(ItemStack stack, Customer customer) {
+    private static String display(ItemStack stack, net.minecraft.world.level.Level level) {
         boolean placesBlock = FoodModels.block(stack) != null;
         String override = Config.lookup(Config.FOOD_DISPLAY.get(), BuiltInRegistries.ITEM.getKey(stack.getItem()));
         if (override != null) return override.equals("block") && !placesBlock ? "upright" : override;
-        if (items.getModel(stack, customer.level(), null, 0).isGui3d()) return "upright";
+        if (Minecraft.getInstance().getItemRenderer().getModel(stack, level, null, 0).isGui3d()) return "upright";
         return placesBlock ? "block" : "flat";
     }
 }

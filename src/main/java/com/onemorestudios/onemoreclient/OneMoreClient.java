@@ -68,21 +68,31 @@ public class OneMoreClient {
     public static final DeferredBlock<MenuBoardBlock> MENU_BOARD = BLOCKS.register("menu_board",
             () -> new MenuBoardBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.WOOD)));
     public static final DeferredItem<BlockItem> MENU_BOARD_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOARD);
-    /** Plates and glasses: a clean one is needed to serve (usePlates); customers leave them dirty; a sink washes them. */
     /** The default money of the mod (currencyItem). */
     public static final DeferredItem<Item> COIN = ITEMS.registerSimpleItem("coin", new Item.Properties().stacksTo(99));
-    public static final DeferredItem<Item> PLATE = ITEMS.registerSimpleItem("plate", new Item.Properties().stacksTo(64));
-    public static final DeferredItem<Item> GLASS = ITEMS.registerSimpleItem("glass", new Item.Properties().stacksTo(64));
-    public static final DeferredItem<Item> DIRTY_PLATE = ITEMS.registerSimpleItem("dirty_plate", new Item.Properties().stacksTo(64));
-    public static final DeferredItem<Item> DIRTY_GLASS = ITEMS.registerSimpleItem("dirty_glass", new Item.Properties().stacksTo(64));
-    public static final DeferredBlock<SinkBlock> SINK = BLOCKS.register("sink",
-            () -> new SinkBlock(BlockBehaviour.Properties.of().strength(2f).noOcclusion().sound(SoundType.STONE)));
-    public static final DeferredItem<BlockItem> SINK_ITEM = ITEMS.registerSimpleBlockItem(SINK);
+    private static final DeferredRegister.DataComponents COMPONENTS = DeferredRegister.createDataComponents(Registries.DATA_COMPONENT_TYPE, MODID);
+    /** The table number of an order ticket and of a tray's label. */
+    public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<Integer>> TABLE =
+            COMPONENTS.registerComponentType("table", b -> b.persistent(com.mojang.serialization.Codec.INT).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.VAR_INT));
+    public static final DeferredBlock<TrayBlock> TRAY = BLOCKS.register("tray",
+            () -> new TrayBlock(BlockBehaviour.Properties.of().strength(0.5f).noOcclusion().sound(SoundType.WOOD).pushReaction(PushReaction.DESTROY)));
+    public static final DeferredItem<TrayItem> TRAY_ITEM = ITEMS.register("tray", () -> new TrayItem(TRAY.get(), new Item.Properties().stacksTo(1)));
+    public static final DeferredBlock<TrayRackBlock> TRAY_RACK = BLOCKS.register("tray_rack",
+            () -> new TrayRackBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().sound(SoundType.WOOD)));
+    public static final DeferredItem<BlockItem> TRAY_RACK_ITEM = ITEMS.registerSimpleBlockItem(TRAY_RACK);
+    public static final DeferredItem<TicketItem> TICKET = ITEMS.register("ticket", () -> new TicketItem(new Item.Properties().stacksTo(1)));
+    public static final DeferredBlock<OrderBoardBlock> ORDER_BOARD = BLOCKS.register("order_board",
+            () -> new OrderBoardBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.WOOD)));
+    public static final DeferredItem<BlockItem> ORDER_BOARD_ITEM = ITEMS.registerSimpleBlockItem(ORDER_BOARD);
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OpenSignBlockEntity>> OPEN_SIGN_ENTITY = BLOCK_ENTITIES.register("open_sign",
             () -> BlockEntityType.Builder.of(OpenSignBlockEntity::new, OPEN_SIGN.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBoardBlockEntity>> MENU_BOARD_ENTITY = BLOCK_ENTITIES.register("menu_board",
             () -> BlockEntityType.Builder.of(MenuBoardBlockEntity::new, MENU_BOARD.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TrayBlockEntity>> TRAY_ENTITY = BLOCK_ENTITIES.register("tray",
+            () -> BlockEntityType.Builder.of(TrayBlockEntity::new, TRAY.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OrderBoardBlockEntity>> ORDER_BOARD_ENTITY = BLOCK_ENTITIES.register("order_board",
+            () -> BlockEntityType.Builder.of(OrderBoardBlockEntity::new, ORDER_BOARD.get()).build(null));
     public static final DeferredHolder<EntityType<?>, EntityType<Customer>> CUSTOMER = ENTITIES.register("customer",
             () -> EntityType.Builder.<Customer>of(Customer::new, MobCategory.MISC).sized(0.6f, 1.8f).noSave().noSummon().clientTrackingRange(8).build("customer"));
     public static final DeferredHolder<EntityDataSerializer<?>, EntityDataSerializer<List<ItemStack>>> STACKS = SERIALIZERS.register("stacks",
@@ -99,12 +109,10 @@ public class OneMoreClient {
                 output.accept(OPEN_SIGN_ITEM);
                 output.accept(COMPUTER_ITEM);
                 output.accept(MENU_BOARD_ITEM);
-                output.accept(SINK_ITEM);
+                output.accept(ORDER_BOARD_ITEM);
+                output.accept(TRAY_RACK_ITEM);
+                output.accept(TRAY_ITEM);
                 output.accept(COIN);
-                output.accept(PLATE);
-                output.accept(GLASS);
-                output.accept(DIRTY_PLATE);
-                output.accept(DIRTY_GLASS);
             }).build());
 
     /** Blocks a customer can sit on. */
@@ -113,12 +121,16 @@ public class OneMoreClient {
     public static final TagKey<Block> SURFACES = BlockTags.create(ResourceLocation.fromNamespaceAndPath(MODID, "serving_surfaces"));
 
     public OneMoreClient(IEventBus bus, ModContainer container) {
-        if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) WipingStation.register();
+        if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) {
+            WipingStation.register();
+            KitchenStations.register();
+        }
         BLOCKS.register(bus);
         ITEMS.register(bus);
         ENTITIES.register(bus);
         SERIALIZERS.register(bus);
         TABS.register(bus);
+        COMPONENTS.register(bus);
         BLOCK_ENTITIES.register(bus);
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
         bus.addListener((EntityAttributeCreationEvent e) -> e.put(CUSTOMER.get(), Customer.createAttributes().build()));
@@ -131,6 +143,7 @@ public class OneMoreClient {
         bus.addListener((RegisterPayloadHandlersEvent e) -> e.registrar("1").playToClient(Dirt.TYPE, Dirt.CODEC, (dirt, context) -> Dirt.receive(dirt))
                 .playToClient(Status.TYPE, Status.CODEC, (status, context) -> { Status.client = status; Status.clientTime = System.currentTimeMillis(); })
                 .playToClient(TableItems.TYPE, TableItems.CODEC, (t, context) -> TableItems.receive(t))
+                .playToClient(TableMarks.TYPE, TableMarks.CODEC, (t, context) -> TableMarks.receive(t))
                 .playToClient(TableItems.Collected.TYPE, TableItems.Collected.CODEC, (c, context) -> TableItems.Collected.receive(c))
                 .playToServer(ReadyRequest.TYPE, ReadyRequest.CODEC, (request, context) -> ReadyRequest.handle(request, (ServerPlayer) context.player())));
         NeoForge.EVENT_BUS.addListener((ChunkWatchEvent.Sent e) -> {
@@ -142,6 +155,7 @@ public class OneMoreClient {
             if (e.getLevel().isClientSide()) {
                 Dirt.CLIENT.clear();
                 TableItems.CLIENT.clear();
+                TableMarks.CLIENT.clear();
                 Status.client = null;
             }
         });
@@ -212,7 +226,7 @@ public class OneMoreClient {
                 Restaurant r = Restaurants.get(level).containing(event.getPos());
                 wiped = r != null && r.wipe(level, event.getEntity(), event.getPos(), event.getHitVec().getLocation());
             } else {
-                wiped = Dirt.CLIENT.containsKey(event.getPos());
+                wiped = Dirt.tableDirty(event.getLevel(), event.getPos());
             }
             if (!wiped) return;
             event.setCanceled(true);

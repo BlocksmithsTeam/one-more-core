@@ -68,9 +68,8 @@ public class Restaurant {
 
     /** Upgrade levels bought on the computer: "decor", "delivery", "bell". */
     final Map<String, Integer> upgrades = new HashMap<>();
-    /** Coins (the bills) and dirty plates and glasses on the serving surfaces; a player collects them. */
+    /** Coins (the bills) on the serving surfaces; a player collects them. */
     final Map<BlockPos, Integer> coins = new HashMap<>();
-    final Map<BlockPos, int[]> dishesOnTable = new HashMap<>();
     /** Game time when the call bell may ring again. */
     private long bellReady;
 
@@ -128,38 +127,25 @@ public class Restaurant {
         sendTable(surface);
     }
 
-    /** Dirty plates and glasses on a surface. */
-    void addDishes(ServerLevel level, BlockPos surface, int plates, int glasses) {
-        if (plates <= 0 && glasses <= 0) return;
-        int[] d = dishesOnTable.computeIfAbsent(surface.immutable(), p -> new int[2]);
-        d[0] = Math.min(64, d[0] + plates);
-        d[1] = Math.min(64, d[1] + glasses);
-        owner.setDirty();
-        sendTable(surface);
-    }
-
     private ServerLevel serverLevel;
 
     private void sendTable(BlockPos pos) {
         if (serverLevel == null) return;
-        int[] d = dishesOnTable.getOrDefault(pos, new int[2]);
-        PacketDistributor.sendToPlayersTrackingChunk(serverLevel, new ChunkPos(pos), new TableItems(pos, coins.getOrDefault(pos, 0), d[0], d[1]));
+        PacketDistributor.sendToPlayersTrackingChunk(serverLevel, new ChunkPos(pos), new TableItems(pos, coins.getOrDefault(pos, 0)));
     }
 
     /**
-     * A player collects the coins and the dirty dishes of the whole table of a surface: the coins go to the register
-     * with a pop and a "+N" notice for the player, the dishes into the player's inventory. Returns the coins collected.
+     * A player collects the coins of the whole table of a surface: they go to the register with a pop and a "+N" notice
+     * for the player. Returns the coins collected.
      */
     int collect(ServerLevel level, Player player, BlockPos pos) {
-        int money = 0, plates = 0, glasses = 0;
+        int money = 0;
         Set<BlockPos> table = tableAt(level, pos);
         table.add(pos.immutable());
         for (BlockPos p : table) {
             Integer c = coins.remove(p);
-            int[] d = dishesOnTable.remove(p);
-            if (c == null && d == null) continue;
-            if (c != null) money = (int) Math.min(Integer.MAX_VALUE, (long) money + c);
-            if (d != null) { plates += d[0]; glasses += d[1]; }
+            if (c == null) continue;
+            money = (int) Math.min(Integer.MAX_VALUE, (long) money + c);
             sendTable(p);
         }
         if (money > 0) {
@@ -167,30 +153,18 @@ public class Restaurant {
             level.playSound(null, pos, SoundEvents.CHICKEN_EGG, SoundSource.PLAYERS, 0.8f, 1.6f);
             if (player instanceof ServerPlayer sp) PacketDistributor.sendToPlayer(sp, new TableItems.Collected(money));
         }
-        give(player, new ItemStack(OneMoreClient.DIRTY_PLATE.get(), plates));
-        give(player, new ItemStack(OneMoreClient.DIRTY_GLASS.get(), glasses));
-        if (money > 0 || plates > 0 || glasses > 0) owner.setDirty();
+        if (money > 0) owner.setDirty();
         return money;
     }
 
-    private static void give(Player player, ItemStack stack) {
-        while (!stack.isEmpty()) {
-            ItemStack part = stack.split(stack.getMaxStackSize());
-            if (!player.getInventory().add(part)) player.drop(part, false);
-        }
-    }
-
     boolean hasTableItems(BlockPos pos) {
-        return coins.containsKey(pos) || dishesOnTable.containsKey(pos);
+        return coins.containsKey(pos);
     }
 
-    /** Sends the coins and dishes of a chunk to a player that starts to see it. */
+    /** Sends the coins of a chunk to a player that starts to see it. */
     void sendTableItems(ServerPlayer player, ChunkPos chunk) {
-        for (BlockPos p : java.util.stream.Stream.concat(coins.keySet().stream(), dishesOnTable.keySet().stream()).distinct().toList()) {
-            if (!chunk.equals(new ChunkPos(p))) continue;
-            int[] d = dishesOnTable.getOrDefault(p, new int[2]);
-            PacketDistributor.sendToPlayer(player, new TableItems(p, coins.getOrDefault(p, 0), d[0], d[1]));
-        }
+        for (var e : coins.entrySet())
+            if (chunk.equals(new ChunkPos(e.getKey()))) PacketDistributor.sendToPlayer(player, new TableItems(e.getKey(), e.getValue()));
     }
 
     /** A combo: dish ids and the price of all of them together. */
@@ -639,6 +613,7 @@ public class Restaurant {
         if (state.getValue(OpenSignBlock.OPEN) != open) level.setBlockAndUpdate(sign, state.setValue(OpenSignBlock.OPEN, open));
         if (!open && countdown > 0 && area != null) tickCountdown(level);
         if (area != null && level.getGameTime() % 10 == 0) sendStatus(level);
+        if (area != null && level.getGameTime() % 100 == Math.floorMod(sign.asLong(), 100)) numberTables(level);
         if (!open) return;
         if (serviceLeft > 0 && --serviceLeft == 0) {
             // The service is over: no new parties. Parties that are on their way and the customers inside finish, then the day ends.
@@ -653,7 +628,7 @@ public class Restaurant {
             if (--spawnTimer > 0) return;
             int size = 1;
             if (Config.MAX_GROUP.get() > 1 && level.random.nextDouble() < Config.GROUP_CHANCE.get())
-                size = 2 + level.random.nextInt(Config.MAX_GROUP.get() - 1);
+                size = groupSize(level.random.nextDouble(), Config.MAX_GROUP.get());
             if (spawnParty(level, size) == 0) {
                 if (seatScanTimer == 0) {
                     seats = scanSeats(level);
@@ -664,6 +639,18 @@ public class Restaurant {
             } else spawnTimer = nextInterval(level);
         }
         if (toSpawn == 0 && customers.isEmpty()) endDay(level, false);
+    }
+
+    /** Size of a group (2 to max) from a uniform u in [0, 1): size k has weight 2^-(k-2), so pairs are the most common. */
+    static int groupSize(double u, int max) {
+        double total = 0;
+        for (int k = 2; k <= max; k++) total += Math.pow(0.5, k - 2);
+        double x = u * total;
+        for (int k = 2; k < max; k++) {
+            x -= Math.pow(0.5, k - 2);
+            if (x < 0) return k;
+        }
+        return max;
     }
 
     /** The next pause between arrivals: spawnIntervalTicks, 6 percent shorter per day down to 40 percent, then 60 to 140 percent of that. */
@@ -822,7 +809,8 @@ public class Restaurant {
         long now = level.getGameTime();
         for (List<Seat> table : tables) {
             if (table.stream().anyMatch(s -> customers.stream().anyMatch(c -> s.seat().equals(c.seat)))) continue;
-            if (table.stream().anyMatch(s -> dirt.containsKey(s.surface()) || offTables.contains(s.surface()) || hasTableItems(s.surface())
+            if (tableDirty(level, table.get(0).surface())) continue;
+            if (table.stream().anyMatch(s -> offTables.contains(s.surface()) || hasTableItems(s.surface())
                     || now - freedAt.getOrDefault(s.surface(), Long.MIN_VALUE / 2) < Config.TABLE_PAUSE.get())) continue;
             List<Seat> seated = new ArrayList<>(table.stream().filter(s -> isSeat(level, s)).toList());
             if (seated.isEmpty() || !isTableOn(tableSurfaces(table))) continue;
@@ -888,9 +876,114 @@ public class Restaurant {
         return found;
     }
 
+    /**
+     * Dirt cells a table had when its party left; the table is clean when dirtCleanFraction of them are wiped.
+     * ponytail: not saved; after a reload the cells left then count as the start.
+     */
+    final Map<BlockPos, Integer> dirtStart = new HashMap<>();
+
+    /**
+     * A party leaves dirt on its table: one irregular spot where each member ate (the side of the table next to the
+     * seat) and a few crumbs around it. Spots go over the joins of the blocks, so a table of many blocks gets one stain.
+     */
+    void soilTable(ServerLevel level, List<Customer> eaters) {
+        if (eaters.isEmpty()) return;
+        Set<BlockPos> table = tableAt(level, eaters.get(0).getSurface());
+        Map<BlockPos, Long> cells = new HashMap<>();
+        var random = level.random;
+        for (Customer m : eaters) {
+            BlockPos s = m.getSurface();
+            // The middle of the spot, in cells (8 per block): a quarter block from the middle towards the seat.
+            double cx = (s.getX() + 0.5 + (m.seat.getX() - s.getX()) * 0.25) * 8, cz = (s.getZ() + 0.5 + (m.seat.getZ() - s.getZ()) * 0.25) * 8;
+            double radius = 1.6 + random.nextDouble() * 1.2, stretch = 0.7 + random.nextDouble() * 0.6;
+            for (int z = (int) Math.floor(cz - 4); z <= cz + 4; z++)
+                for (int x = (int) Math.floor(cx - 4); x <= cx + 4; x++) {
+                    double dx = (x + 0.5 - cx) / (radius * stretch), dz = (z + 0.5 - cz) / (radius / stretch), d = Math.sqrt(dx * dx + dz * dz);
+                    if (d < 0.7 || d < 1.2 && random.nextDouble() < (1.2 - d) * 2) mark(cells, table, x, z);
+                }
+            for (int i = 2 + random.nextInt(3); i > 0; i--) mark(cells, table, (int) Math.floor(cx + random.nextGaussian() * 3), (int) Math.floor(cz + random.nextGaussian() * 3));
+        }
+        cells.forEach((pos, c) -> {
+            long all = c | dirt.getOrDefault(pos, 0L);
+            setDirt(level, pos, all);
+            dirtStart.put(pos, Long.bitCount(all));
+        });
+    }
+
+    /** Table numbers by serving surface, from the last numbering. */
+    private final Map<BlockPos, Integer> tableNumbers = new HashMap<>();
+
+    /**
+     * Numbers the tables that have seats, 1 first, in reading order (north to south, then west to east), and sends a
+     * mark (the surface nearest the middle of each table) to the players near the area. Every 5 seconds.
+     * ponytail: scans the whole area each time; keep the numbers from the day's scan if large areas lag.
+     */
+    void numberTables(ServerLevel level) {
+        List<List<Seat>> all = new ArrayList<>(groupTables(level, open ? seats : scanSeats(level)));
+        List<Set<BlockPos>> surfaces = new ArrayList<>();
+        for (List<Seat> t : all) surfaces.add(tableAt(level, t.get(0).surface()));
+        java.util.Comparator<Set<BlockPos>> reading = java.util.Comparator.comparingInt((Set<BlockPos> t) -> t.stream().mapToInt(BlockPos::getZ).min().orElse(0))
+                .thenComparingInt(t -> t.stream().mapToInt(BlockPos::getX).min().orElse(0));
+        surfaces.sort(reading);
+        tableNumbers.clear();
+        List<BlockPos> marks = new ArrayList<>();
+        List<Integer> numbers = new ArrayList<>();
+        for (int i = 0; i < surfaces.size() && i < 256; i++) {
+            Set<BlockPos> t = surfaces.get(i);
+            for (BlockPos p : t) tableNumbers.put(p, i + 1);
+            double cx = t.stream().mapToDouble(BlockPos::getX).average().orElse(0), cz = t.stream().mapToDouble(BlockPos::getZ).average().orElse(0);
+            marks.add(t.stream().min(java.util.Comparator.comparingDouble(p -> (p.getX() - cx) * (p.getX() - cx) + (p.getZ() - cz) * (p.getZ() - cz))).orElseThrow());
+            numbers.add(i + 1);
+        }
+        BoundingBox near = area.inflatedBy(32);
+        TableMarks packet = new TableMarks(sign, marks, numbers);
+        for (ServerPlayer p : level.players()) if (near.isInside(p.blockPosition())) PacketDistributor.sendToPlayer(p, packet);
+    }
+
+    /** The number of the table of a serving surface, 0 if it has none yet. */
+    int tableNumber(BlockPos surface) {
+        return surface == null ? 0 : tableNumbers.getOrDefault(surface, 0);
+    }
+
+    /** The taken orders, oldest first: one ticket per party that waits for its food. */
+    List<OrderBoardBlockEntity.Ticket> tickets() {
+        List<OrderBoardBlockEntity.Ticket> out = new ArrayList<>();
+        Set<Customer.Party> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (Customer c : customers) {
+            if (c.getState() != Customer.State.WAITING_FOOD || !seen.add(c.party())) continue;
+            List<ItemStack> items = new ArrayList<>();
+            for (Customer m : c.party().members) items.addAll(m.getOrder());
+            out.add(new OrderBoardBlockEntity.Ticket(tableNumber(c.getSurface()), items, c.party().patience / (float) Math.max(1, c.party().patienceMax)));
+        }
+        return out;
+    }
+
+    /** Whether any block of the table at pos is dirty. */
+    boolean tableDirty(ServerLevel level, BlockPos pos) {
+        if (dirt.isEmpty()) return false;
+        for (BlockPos p : tableAt(level, pos)) if (dirt.containsKey(p)) return true;
+        return false;
+    }
+
+    /** Marks world cell (x, z) dirty, if its block is part of the table. */
+    private static void mark(Map<BlockPos, Long> cells, Set<BlockPos> table, int x, int z) {
+        for (BlockPos p : table) {
+            if (p.getX() != Math.floorDiv(x, 8) || p.getZ() != Math.floorDiv(z, 8)) continue;
+            cells.merge(p, 1L << (Math.floorMod(z, 8) * 8 + Math.floorMod(x, 8)), (a, b) -> a | b);
+            return;
+        }
+    }
+
+    /** Like setDirt, but a block wiped clean keeps its share of the table's start count until the table is clean. */
+    private void setDirtKeepStart(ServerLevel level, BlockPos pos, long cells) {
+        Integer start = dirtStart.get(pos);
+        setDirt(level, pos, cells);
+        if (start != null) dirtStart.put(pos, start);
+    }
+
     /** Sets the dirty cells of a surface and tells the clients that see it. 0 cleans the surface. */
     void setDirt(ServerLevel level, BlockPos pos, long cells) {
-        if (cells == 0) dirt.remove(pos); else dirt.put(pos, cells);
+        if (cells == 0) { dirt.remove(pos); dirtStart.remove(pos); } else dirt.put(pos, cells);
         owner.setDirty();
         PacketDistributor.sendToPlayersTrackingChunk(level, new ChunkPos(pos), new Dirt(pos, cells));
     }
@@ -900,23 +993,40 @@ public class Restaurant {
      * False if the surface is not dirty, the player is too far away or the hit is not on the block.
      */
     boolean wipe(ServerLevel level, Player player, BlockPos pos, Vec3 hit) {
-        Long cells = dirt.get(pos);
-        if (cells == null || !level.getBlockState(pos).is(OneMoreClient.SURFACES)
+        if (!tableDirty(level, pos) || !level.getBlockState(pos).is(OneMoreClient.SURFACES)
                 || !Double.isFinite(hit.x) || !Double.isFinite(hit.y) || !Double.isFinite(hit.z)
                 || !player.canInteractWithBlock(pos, 1) || !new AABB(pos).inflate(0.01).contains(hit)) return false;
-        int cx = Mth.clamp((int) ((hit.x - pos.getX()) * 8), 0, 7), cz = Mth.clamp((int) ((hit.z - pos.getZ()) * 8), 0, 7);
-        long left = cells;
-        for (int z = Math.max(0, cz - 1); z <= Math.min(7, cz + 1); z++)
-            for (int x = Math.max(0, cx - 1); x <= Math.min(7, cx + 1); x++) left &= ~(1L << (z * 8 + x));
-        if (left != cells) {
-            double clean = 1 - Long.bitCount(left) / (double) Long.bitCount(Dirt.FULL);
-            if (clean >= Config.DIRT_CLEAN_FRACTION.get()) {
-                // One table is one thing to clean: a clean part makes every part of the table clean.
-                for (BlockPos p : tableAt(level, pos)) if (dirt.containsKey(p)) setDirt(level, p, 0);
-                setDirt(level, pos, 0);
-            } else {
-                setDirt(level, pos, left);
+        return wipeCells(level, tableAt(level, pos), pos.getX() * 8 + Mth.clamp((int) ((hit.x - pos.getX()) * 8), 0, 7),
+                pos.getZ() * 8 + Mth.clamp((int) ((hit.z - pos.getZ()) * 8), 0, 7), hit);
+    }
+
+    /**
+     * Wipes world cell (cx, cz) and its 8 neighbours, in any block of the table. The whole table is one thing to clean: when
+     * dirtCleanFraction of the table's dirt is gone, all of it is clean.
+     */
+    boolean wipeCells(ServerLevel level, Set<BlockPos> table, int cx, int cz, Vec3 hit) {
+        boolean changed = false;
+        for (BlockPos p : table) {
+            Long cells = dirt.get(p);
+            if (cells == null) continue;
+            long left = cells;
+            for (int z = cz - 1; z <= cz + 1; z++)
+                for (int x = cx - 1; x <= cx + 1; x++)
+                    if (Math.floorDiv(x, 8) == p.getX() && Math.floorDiv(z, 8) == p.getZ()) left &= ~(1L << (Math.floorMod(z, 8) * 8 + Math.floorMod(x, 8)));
+            if (left != cells) {
+                dirtStart.putIfAbsent(p, Long.bitCount(cells));
+                setDirtKeepStart(level, p, left);
+                changed = true;
             }
+        }
+        if (changed) {
+            int start = 0, left = 0;
+            for (BlockPos p : table) {
+                start += dirtStart.getOrDefault(p, 0);
+                left += Long.bitCount(dirt.getOrDefault(p, 0L));
+            }
+            if (left == 0 || left <= (1 - Config.DIRT_CLEAN_FRACTION.get()) * start)
+                for (BlockPos p : table) if (dirt.containsKey(p) || dirtStart.containsKey(p)) setDirt(level, p, 0);
             level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.BRUSH_GENERIC,
                     SoundSource.BLOCKS, 0.35f, 1.2f);
             level.sendParticles(ParticleTypes.SPLASH,
@@ -997,13 +1107,10 @@ public class Restaurant {
         for (String id : favourites) favs.add(StringTag.valueOf(id));
         tag.put("favourites", favs);
         ListTag table = new ListTag();
-        for (BlockPos p : java.util.stream.Stream.concat(coins.keySet().stream(), dishesOnTable.keySet().stream()).distinct().toList()) {
+        for (var e : coins.entrySet()) {
             CompoundTag t = new CompoundTag();
-            t.putLong("pos", p.asLong());
-            t.putInt("coins", coins.getOrDefault(p, 0));
-            int[] d = dishesOnTable.getOrDefault(p, new int[2]);
-            t.putInt("plates", d[0]);
-            t.putInt("glasses", d[1]);
+            t.putLong("pos", e.getKey().asLong());
+            t.putInt("coins", e.getValue());
             table.add(t);
         }
         tag.put("table_items", table);
@@ -1056,8 +1163,6 @@ public class Restaurant {
             CompoundTag c = (CompoundTag) t;
             BlockPos p = BlockPos.of(c.getLong("pos"));
             if (c.getInt("coins") > 0) r.coins.put(p, c.getInt("coins"));
-            int pl = Math.max(0, Math.min(64, c.getInt("plates"))), gl = Math.max(0, Math.min(64, c.getInt("glasses")));
-            if (pl > 0 || gl > 0) r.dishesOnTable.put(p, new int[] {pl, gl});
         }
         for (Tag t : tag.getList("custom", Tag.TAG_COMPOUND)) {
             CompoundTag c = (CompoundTag) t;

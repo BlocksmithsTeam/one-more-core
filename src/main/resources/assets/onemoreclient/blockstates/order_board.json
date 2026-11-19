@@ -1,0 +1,7 @@
+{
+ "variants": {
+  "": {
+   "model": "onemoreclient:block/order_board"
+  }
+ }
+}

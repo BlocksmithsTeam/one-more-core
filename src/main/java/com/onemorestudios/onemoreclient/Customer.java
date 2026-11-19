@@ -81,7 +81,6 @@ public class Customer extends PathfinderMob {
     /** Price times tipPercent of the served lines: the base of the tip. */
     private long tipBase;
     /** Served lines on a plate and in a glass; dirty after eating. Server only. */
-    int servedPlates, servedGlasses;
     /** Ids of the dishes that this customer ordered, for the favourites of the restaurant. Server only. */
     final List<String> dishIds = new ArrayList<>();
     private Party party;
@@ -167,12 +166,10 @@ public class Customer extends PathfinderMob {
                 }
             } else if (state == State.EATING && members.get(0).timer > Config.EAT_TICKS.get()) {
                 settle(restaurant, true);
+                if (Config.DIRT_ENABLED.get()) restaurant.soilTable((ServerLevel) members.get(0).level(), List.copyOf(members));
                 members.get(0).effect(SoundEvents.EXPERIENCE_ORB_PICKUP, null);
                 for (Customer m : List.copyOf(members)) {
                     m.effect(null, ParticleTypes.HAPPY_VILLAGER);
-                    if (Config.DIRT_ENABLED.get()) restaurant.setDirt((ServerLevel) m.level(), m.getSurface(), Dirt.FULL);
-                    // The plates and glasses of the eaten food stay on the table, dirty.
-                    if (Config.USE_PLATES.get()) restaurant.addDishes((ServerLevel) m.level(), m.getSurface(), m.servedPlates, m.servedGlasses);
                     m.leave();
                 }
             }
@@ -234,6 +231,7 @@ public class Customer extends PathfinderMob {
 
     void setup(Restaurant restaurant, Restaurant.Seat seat, List<Line> order, Party party) {
         this.restaurant = restaurant;
+        getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(Config.WALK_SPEED.get());
         this.party = party;
         party.members.add(this);
         this.seat = seat.seat();
@@ -397,38 +395,65 @@ public class Customer extends PathfinderMob {
         return InteractionResult.SUCCESS;
     }
 
-    /** True if the customer still waits for this item. Works on both sides; the client only compares the item type. */
+    /** The dishes on a tray (empty for any other item). */
+    static List<ItemStack> trayDishes(ItemStack tray) {
+        if (!tray.is(OneMoreClient.TRAY_ITEM.get())) return List.of();
+        List<ItemStack> out = new ArrayList<>();
+        tray.getOrDefault(net.minecraft.core.component.DataComponents.CONTAINER, net.minecraft.world.item.component.ItemContainerContents.EMPTY)
+                .nonEmptyItems().forEach(s -> out.add(s.copy()));
+        return out;
+    }
+
+    /** True if the customer still waits for this item (on a tray: for one of its dishes). Works on both sides; the client only compares the item type. */
     public boolean wants(ItemStack held) {
         if (getState() != State.WAITING_FOOD || held.isEmpty()) return false;
+        if (held.is(OneMoreClient.TRAY_ITEM.get())) return trayDishes(held).stream().anyMatch(this::wants);
         if (level().isClientSide) return getOrder().stream().anyMatch(s -> ItemStack.isSameItem(s, held));
         return wanted.stream().anyMatch(l -> l.matches(held));
     }
 
-    /** Takes one matching item from the stack. Server only. */
+    /**
+     * Serves a tray (every dish on it that this customer ordered; the tray stays in the hand with what is left) or one
+     * matching item of the stack. With requireTray, food must come on a tray. Server only.
+     */
     public boolean deliver(Player player, ItemStack held) {
-        if (!wants(held)) return false;
-        Line line = wanted.stream().filter(l -> l.matches(held)).findFirst().orElseThrow();
-        // A dish goes on a clean plate, a drink in a clean glass, from the player's inventory.
-        if (Config.USE_PLATES.get() && !player.getAbilities().instabuild) {
-            net.minecraft.world.item.Item need = line.drink() ? OneMoreClient.GLASS.get() : OneMoreClient.PLATE.get();
-            int slot = player.getInventory().findSlotMatchingItem(new ItemStack(need));
-            if (slot < 0) {
-                player.displayClientMessage(Component.translatable(line.drink() ? "onemoreclient.customer.no_glass" : "onemoreclient.customer.no_plate"), true);
-                return false;
+        if (held.is(OneMoreClient.TRAY_ITEM.get())) {
+            if (!wants(held)) return false;
+            List<ItemStack> dishes = trayDishes(held), left = new ArrayList<>();
+            for (ItemStack dish : dishes) {
+                if (wants(dish)) serve(player, dish); else left.add(dish);
             }
-            player.getInventory().getItem(slot).shrink(1);
+            held.set(net.minecraft.core.component.DataComponents.CONTAINER, net.minecraft.world.item.component.ItemContainerContents.fromItems(left));
+            if (left.isEmpty()) held.remove(OneMoreClient.TABLE.get());
+            checkServed();
+            return true;
         }
-        if (line.drink()) servedGlasses++; else servedPlates++;
+        if (!wants(held)) return false;
+        if (Config.REQUIRE_TRAY.get()) {
+            player.displayClientMessage(Component.translatable("onemoreclient.customer.use_tray"), true);
+            return false;
+        }
+        serve(player, held);
+        held.consume(1, player);
+        checkServed();
+        return true;
+    }
+
+    /** Serves one item of the stack (the stack itself is not changed). */
+    private void serve(Player player, ItemStack held) {
+        Line line = wanted.stream().filter(l -> l.matches(held)).findFirst().orElseThrow();
         wanted.remove(line);
         bill += line.price();
         tipBase += (long) line.price() * line.tipPercent();
         List<ItemStack> served = new ArrayList<>(getServed());
         served.add(held.copyWithCount(1));
         entityData.set(SERVED, served);
-        held.consume(1, player);
         syncOrder();
         effect(SoundEvents.ITEM_PICKUP, null);
-        // A member that has all its food waits until every member is served.
+    }
+
+    /** A member that has all its food waits until every member is served; then the party eats. */
+    private void checkServed() {
         if (party.members.stream().allMatch(m -> m.wanted.isEmpty())) {
             long price = party.members.stream().mapToLong(m -> m.bill).sum();
             long base = party.members.stream().mapToLong(m -> m.tipBase).sum();
@@ -442,7 +467,6 @@ public class Customer extends PathfinderMob {
             party.bill = (int) Math.min(Integer.MAX_VALUE, java.math.BigInteger.valueOf(price).add(tip).min(java.math.BigInteger.valueOf(Integer.MAX_VALUE)).longValue());
             party.members.forEach(m -> m.setState(State.EATING));
         }
-        return true;
     }
 
     /** Plays a sound at the customer and shows particles above its head. Either can be null. Server only. */

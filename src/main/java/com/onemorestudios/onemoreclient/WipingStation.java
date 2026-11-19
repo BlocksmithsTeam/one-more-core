@@ -36,9 +36,9 @@ public final class WipingStation implements StationLogic {
                 || player.isSpectator() || !player.canInteractWithBlock(pos, 1)) return false;
         if (player.level() instanceof ServerLevel level) {
             Restaurant r = Restaurants.get(level).containing(pos);
-            return r != null && (r.dirt.containsKey(pos) || r.hasTableItems(pos));
+            return r != null && (r.tableDirty(level, pos) || r.hasTableItems(pos));
         }
-        return Dirt.CLIENT.containsKey(pos) || TableItems.CLIENT.containsKey(pos);
+        return Dirt.tableDirty(player.level(), pos) || TableItems.CLIENT.containsKey(pos);
     }
 
     @Override
@@ -55,13 +55,17 @@ public final class WipingStation implements StationLogic {
                 || !opens(player, station.pos(), station.blockState())
                 || !data.contains("x", Tag.TAG_FLOAT) || !data.contains("z", Tag.TAG_FLOAT)) return;
         float x = data.getFloat("x"), z = data.getFloat("z");
-        if (!Float.isFinite(x) || !Float.isFinite(z) || x < 0 || x >= 16 || z < 0 || z >= 16) return;
+        // The view shows the whole table: x and z are scene pixels from this block, up to 8 blocks away.
+        if (!Float.isFinite(x) || !Float.isFinite(z) || Math.abs(x) > 128 || Math.abs(z) > 128) return;
         long now = level.getGameTime();
         if (now - lastWipe.getOrDefault(player.getUUID(), now - 4) < 4) return;
         lastWipe.put(player.getUUID(), now);
         BlockPos pos = station.pos();
-        Restaurants.get(level).containing(pos).wipe(level, player, pos,
-                new Vec3(pos.getX() + x / 16.0, pos.getY() + Dirt.top(level, pos), pos.getZ() + z / 16.0));
+        Restaurant r = Restaurants.get(level).containing(pos);
+        var table = r.tableAt(level, pos);
+        int cx = pos.getX() * 8 + (int) Math.floor(x / 2), cz = pos.getZ() * 8 + (int) Math.floor(z / 2);
+        if (!table.contains(new BlockPos(Math.floorDiv(cx, 8), pos.getY(), Math.floorDiv(cz, 8)))) return;
+        r.wipeCells(level, table, cx, cz, new Vec3(cx / 8.0 + 1 / 16.0, pos.getY() + Dirt.top(level, pos), cz / 8.0 + 1 / 16.0));
     }
 
     @Override

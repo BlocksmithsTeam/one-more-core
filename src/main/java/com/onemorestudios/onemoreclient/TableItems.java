@@ -10,17 +10,17 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-/** Server to client: the coins and the dirty plates and glasses on one serving surface. All 0: nothing is left. */
-public record TableItems(BlockPos pos, int coins, int plates, int glasses) implements CustomPacketPayload {
+/** Server to client: the coins on one serving surface. 0: nothing is left. */
+public record TableItems(BlockPos pos, int coins) implements CustomPacketPayload {
     public static final Type<TableItems> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "table_items"));
     static final StreamCodec<ByteBuf, TableItems> CODEC = StreamCodec.composite(BlockPos.STREAM_CODEC, TableItems::pos,
-            ByteBufCodecs.VAR_INT, TableItems::coins, ByteBufCodecs.VAR_INT, TableItems::plates, ByteBufCodecs.VAR_INT, TableItems::glasses, TableItems::new);
+            ByteBufCodecs.VAR_INT, TableItems::coins, TableItems::new);
 
     /** Client only: what lies on each surface. */
     public static final Map<BlockPos, TableItems> CLIENT = new HashMap<>();
 
     static void receive(TableItems t) {
-        if (t.coins <= 0 && t.plates <= 0 && t.glasses <= 0) CLIENT.remove(t.pos); else CLIENT.put(t.pos, t);
+        if (t.coins <= 0) CLIENT.remove(t.pos); else CLIENT.put(t.pos, t);
     }
 
     @Override

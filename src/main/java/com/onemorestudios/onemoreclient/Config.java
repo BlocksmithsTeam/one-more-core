@@ -51,10 +51,10 @@ public class Config {
             .defineInRange("spawnIntervalTicks", 200, 1, 72000);
     static final ModConfigSpec.IntValue ORDER_PATIENCE = B
             .comment("Ticks a seated customer waits for a player to take the order.")
-            .defineInRange("orderPatienceTicks", 1200, 20, 72000);
+            .defineInRange("orderPatienceTicks", 2400, 20, 72000);
     static final ModConfigSpec.IntValue FOOD_PATIENCE = B
             .comment("Ticks a customer waits for the food after the order is taken.")
-            .defineInRange("foodPatienceTicks", 2400, 20, 72000);
+            .defineInRange("foodPatienceTicks", 6000, 20, 72000);
     static final ModConfigSpec.IntValue EAT_TICKS = B.defineInRange("eatTicks", 200, 0, 72000);
     static final ModConfigSpec.IntValue MAX_ORDER_ITEMS = B.defineInRange("maxOrderItems", 2, 1, 6);
     static final ModConfigSpec.IntValue MAX_TIP = B
@@ -67,8 +67,11 @@ public class Config {
             .comment("Largest group of customers that sit together at one table. 1 disables groups.")
             .defineInRange("maxGroupSize", 4, 1, 16);
     static final ModConfigSpec.DoubleValue GROUP_CHANCE = B
-            .comment("Chance that the next customers come as a group of 2 to maxGroupSize.")
-            .defineInRange("groupChance", 0.4, 0, 1);
+            .comment("Chance that the next customers come as a group. A group of 2 is twice as likely as one of 3, and so on up to maxGroupSize.")
+            .defineInRange("groupChance", 0.6, 0, 1);
+    static final ModConfigSpec.DoubleValue WALK_SPEED = B
+            .comment("Walking speed of customers (movement speed attribute; a zombie has 0.23).")
+            .defineInRange("walkSpeed", 0.17, 0.05, 1);
     static final ModConfigSpec.BooleanValue DIRT_ENABLED = B
             .comment("Customers leave a dirty spot on the serving surface. A dirty spot gets no customer until a player wipes it.")
             .define("dirtEnabled", true);
@@ -118,10 +121,6 @@ public class Config {
             .comment("Customers leave their bill as coins on the table; a player collects them for the register. Off: the money goes",
                     "straight into the register.")
             .define("collectPayments", true);
-    static final ModConfigSpec.BooleanValue USE_PLATES = B
-            .comment("Serving a dish needs a clean plate (a drink: a clean glass) from the player's inventory. Customers leave them",
-                    "dirty on the table; a sink washes them.")
-            .define("usePlates", true);
     static final ModConfigSpec.ConfigValue<List<? extends Integer>> DECOR_COSTS = B
             .comment("Prices of the upgrade levels. Decor: each level gives 10 percent more patience.")
             .defineListAllowEmpty("upgradeDecorCosts", List.of(30, 60, 120), () -> 30, o -> o instanceof Integer i && i >= 0);
@@ -131,6 +130,9 @@ public class Config {
     static final ModConfigSpec.ConfigValue<List<? extends Integer>> BELL_COSTS = B
             .comment("Call bell: ringing a bell in the area during the service calls the next group at once (every 10 seconds at most).")
             .defineListAllowEmpty("upgradeBellCosts", List.of(50), () -> 50, o -> o instanceof Integer i && i >= 0);
+    static final ModConfigSpec.BooleanValue REQUIRE_TRAY = B
+            .comment("Food is served on a tray (from a tray rack): one tray per customer, all its dishes at once. False also takes single dishes from the hand.")
+            .define("requireTray", true);
     static final ModConfigSpec.BooleanValue PRICE_EFFECT = B
             .comment("A price above 1.5 times a dish's worth (nutrition + saturation) makes customers order it less and tip less.")
             .define("priceEffect", true);

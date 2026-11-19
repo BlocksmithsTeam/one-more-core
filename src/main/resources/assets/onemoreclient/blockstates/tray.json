@@ -1,0 +1,19 @@
+{
+ "variants": {
+  "facing=north": {
+   "model": "onemoreclient:block/tray"
+  },
+  "facing=east": {
+   "model": "onemoreclient:block/tray",
+   "y": 90
+  },
+  "facing=south": {
+   "model": "onemoreclient:block/tray",
+   "y": 180
+  },
+  "facing=west": {
+   "model": "onemoreclient:block/tray",
+   "y": 270
+  }
+ }
+}

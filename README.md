@@ -101,4 +101,4 @@ Add blocks of other mods with a datapack. Entries for several furniture mods are
 
 ## License
 
-MIT. The stain texture comes from Hands On Delight (MIT), see THIRD_PARTY_NOTICES.md. The cloth is original MIT art.
+MIT. The stain and the cloth are original MIT art.

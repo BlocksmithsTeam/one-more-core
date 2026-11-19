@@ -32,6 +32,29 @@ public record Dirt(BlockPos pos, long cells) implements CustomPacketPayload {
         return shape.isEmpty() ? 1 : shape.max(Direction.Axis.Y);
     }
 
+    /** Client: whether a serving surface that touches pos (the same table, up to 64 blocks) is dirty. */
+    public static boolean tableDirty(Level level, BlockPos pos) {
+        if (CLIENT.isEmpty()) return false;
+        for (BlockPos p : tableOf(level, pos)) if (CLIENT.containsKey(p)) return true;
+        return false;
+    }
+
+    /** The serving surfaces that touch pos, on one level, at most 64. */
+    public static java.util.Set<BlockPos> tableOf(Level level, BlockPos pos) {
+        java.util.Set<BlockPos> table = new java.util.HashSet<>();
+        if (!level.getBlockState(pos).is(OneMoreClient.SURFACES)) return table;
+        java.util.ArrayDeque<BlockPos> todo = new java.util.ArrayDeque<>(java.util.List.of(pos.immutable()));
+        table.add(pos.immutable());
+        while (!todo.isEmpty() && table.size() < 64) {
+            BlockPos p = todo.pop();
+            for (Direction dir : Direction.Plane.HORIZONTAL) {
+                BlockPos next = p.relative(dir);
+                if (level.getBlockState(next).is(OneMoreClient.SURFACES) && table.add(next)) todo.push(next);
+            }
+        }
+        return table;
+    }
+
     static void receive(Dirt dirt) {
         if (dirt.cells == 0) CLIENT.remove(dirt.pos); else CLIENT.put(dirt.pos, dirt.cells);
     }
