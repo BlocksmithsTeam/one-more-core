@@ -102,3 +102,4 @@ Add blocks of other mods with a datapack. Entries for several furniture mods are
 ## License
 
 MIT. The stain and the cloth are original MIT art.
+The app icon symbols of the Restaurant Computer come from [game-icons.net](https://game-icons.net) (hot-meal, shopping-cart, checklist and upgrade by Delapouite), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), drawn on the mod's own tiles.
