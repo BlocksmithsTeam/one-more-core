@@ -18,15 +18,14 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
 
 /**
- * The order rail of the kitchen, on a wall: every order that a player took hangs on it as a small ticket (table number,
- * dishes, patience), oldest first. A click on a ticket gives a copy of it, to stick on a tray.
+ * The order screen of the kitchen, a television on a wall: every order that a player took shows as a card (table number,
+ * dishes, patience, price), oldest first. A click on a card gives its ticket, to stick on a tray.
  */
 public class OrderBoardBlock extends MenuBoardBlock {
     /** Tickets on the rail; the rail is as wide as the menu board. */
-    public static final int TICKETS = 8;
+    public static final int TICKETS = 16;
 
     public OrderBoardBlock(Properties properties) {
         super(properties);
@@ -43,29 +42,32 @@ public class OrderBoardBlock extends MenuBoardBlock {
                 : (l, p, s, be) -> ((OrderBoardBlockEntity) be).serverTick((ServerLevel) l);
     }
 
-    /** The ticket under a hit: the hit's place along the board, from its left edge, in tickets. -1 off the tickets. */
-    public static int ticketAt(BlockState state, BlockPos pos, Vec3 hit) {
-        Direction right = state.getValue(FACING).getCounterClockWise();
-        double u = (hit.x - pos.getX() - 0.5) * right.getStepX() + (hit.z - pos.getZ() - 0.5) * right.getStepZ();
-        int i = (int) Math.floor((u + W / 2) / (W / TICKETS));
-        return i >= 0 && i < TICKETS ? i : -1;
-    }
-
-    /** Board width in blocks, as the renderer draws it. */
-    public static final float W = 2;
-
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (!(level instanceof ServerLevel sl) || !(level.getBlockEntity(pos) instanceof OrderBoardBlockEntity board)) return InteractionResult.SUCCESS;
-        int i = ticketAt(state, pos, hit.getLocation());
-        List<OrderBoardBlockEntity.Ticket> tickets = board.tickets(sl);
-        if (i < 0 || i >= tickets.size()) return InteractionResult.PASS;
+        if (!(level instanceof ServerLevel sl)) return InteractionResult.SUCCESS;
+        List<OrderBoardBlockEntity.Ticket> tickets = ticketsAt(sl, pos);
+        float[] at = ScreenRect.OWN.canvas(pos, state, hit.getLocation());
+        int i = at == null || tickets == null ? -1
+                : ScreenRect.orderAt(ScreenRect.OWN.width(), ScreenRect.OWN.height(), tickets.size(), level.getGameTime(), at[0], at[1]);
+        return giveTicket(sl, player, pos, tickets, i) ? InteractionResult.SUCCESS : InteractionResult.PASS;
+    }
+
+    /** The orders that the screen at a position shows (an Order Screen, or a television in orders mode), or null. */
+    static List<OrderBoardBlockEntity.Ticket> ticketsAt(ServerLevel level, BlockPos pos) {
+        if (level.getBlockEntity(pos) instanceof OrderBoardBlockEntity board) return board.tickets(level);
+        Restaurant r = Restaurants.get(level).withScreen(pos);
+        return r != null && r.screens.get(pos) == Restaurant.SCREEN_ORDERS ? r.tickets() : null;
+    }
+
+    /** Gives the ticket of order i (its table and dishes) to the player; false when there is no such order. */
+    static boolean giveTicket(ServerLevel level, Player player, BlockPos pos, List<OrderBoardBlockEntity.Ticket> tickets, int i) {
+        if (tickets == null || i < 0 || i >= tickets.size()) return false;
         OrderBoardBlockEntity.Ticket t = tickets.get(i);
         ItemStack ticket = new ItemStack(OneMoreClient.TICKET.get());
         ticket.set(OneMoreClient.TABLE.get(), t.table());
         ticket.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(t.items()));
         TrayBlock.give(player, ticket);
         level.playSound(null, pos, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8f, 1.4f);
-        return InteractionResult.SUCCESS;
+        return true;
     }
 }

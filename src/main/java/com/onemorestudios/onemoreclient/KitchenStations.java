@@ -1,6 +1,5 @@
 package com.onemorestudios.onemoreclient;
 
-import java.util.List;
 
 import com.pockyl.diegesis.api.Diegesis;
 import com.pockyl.diegesis.api.state.SlotRules;
@@ -10,12 +9,9 @@ import com.pockyl.diegesis.api.station.StationContext;
 import com.pockyl.diegesis.api.station.StationLogic;
 import com.pockyl.diegesis.api.station.StationType;
 
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.ItemContainerContents;
 
 /**
  * Loaded only when Diegesis is present. The tray up close: drag dishes from the inventory onto it and back (its six
@@ -36,43 +32,21 @@ public final class KitchenStations {
             })
             .build();
 
-    public static final StationType RAIL = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "order_board"))
-            .block(OneMoreClient.ORDER_BOARD)
-            .schema(railSchema())
+    /**
+     * The menu screen and the order screen up close: the camera in front of the television, the mouse as the pointer
+     * (tooltips of the dishes), and on the order screen a click on a card gives its ticket.
+     */
+    public static final StationType SCREEN = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "screen"))
+            .block(OneMoreClient.MENU_BOARD).block(OneMoreClient.ORDER_BOARD)
             .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown())
             .logic(context -> new StationLogic() {
                 @Override
-                public void updateOutputs(StationContext station) {
-                    List<OrderBoardBlockEntity.Ticket> tickets = station.level() instanceof ServerLevel level
-                            && station.blockEntity() instanceof OrderBoardBlockEntity board ? board.tickets(level) : List.of();
-                    for (int i = 0; i < OrderBoardBlock.TICKETS; i++)
-                        station.state().setOutput("ticket" + i, i < tickets.size() ? ticket(tickets.get(i)) : ItemStack.EMPTY);
-                }
-
-                @Override
-                public ItemStack takeOutput(StationContext station, Player player, String output) {
-                    return station.state().getOutput(output).copy();
-                }
-
-                @Override
-                public void tick(StationContext station) {
-                    if (station.level().getGameTime() % 10 == 0) updateOutputs(station);
+                public void onCustomAction(StationContext station, Player player, String action, net.minecraft.nbt.CompoundTag data) {
+                    if (!"ticket".equals(action) || !(station.level() instanceof ServerLevel level) || !station.users().contains(player)) return;
+                    OrderBoardBlock.giveTicket(level, player, station.pos(), OrderBoardBlock.ticketsAt(level, station.pos()), data.getInt("index"));
                 }
             })
             .build();
-
-    private static StationSchema railSchema() {
-        var b = StationSchema.builder();
-        for (int i = 0; i < OrderBoardBlock.TICKETS; i++) b.output("ticket" + i);
-        return b.build();
-    }
-
-    static ItemStack ticket(OrderBoardBlockEntity.Ticket t) {
-        ItemStack ticket = new ItemStack(OneMoreClient.TICKET.get());
-        ticket.set(OneMoreClient.TABLE.get(), t.table());
-        ticket.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(t.items()));
-        return ticket;
-    }
 
     /** The menu book up close: the open book on the table, its pages turned by clicks (client only, it shows the synced menu). */
     public static final StationType BOOK = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "menu_book"))
@@ -84,6 +58,6 @@ public final class KitchenStations {
     public static void register() {
         Diegesis.register(BOOK);
         Diegesis.register(TRAY);
-        Diegesis.register(RAIL);
+        Diegesis.register(SCREEN);
     }
 }

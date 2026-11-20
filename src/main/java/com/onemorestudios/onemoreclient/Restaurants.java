@@ -32,6 +32,12 @@ public class Restaurants extends SavedData {
         return bySign.get(sign);
     }
 
+    /** The restaurant that set a television at the position to a mode, or null. */
+    public Restaurant withScreen(BlockPos pos) {
+        for (Restaurant r : bySign.values()) if (r.screens.containsKey(pos)) return r;
+        return null;
+    }
+
     /** The restaurant whose area contains the position, or null. */
     public Restaurant containing(BlockPos pos) {
         for (Restaurant r : bySign.values()) if (r.area != null && r.area.isInside(pos)) return r;

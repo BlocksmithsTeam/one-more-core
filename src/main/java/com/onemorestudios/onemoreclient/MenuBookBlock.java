@@ -31,7 +31,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
  */
 public class MenuBookBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {4, 0, 3, 12, 1.5, 13});
+    private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {4.5, 0, 3, 11.5, 2.6, 13});
 
     public MenuBookBlock(Properties properties) {
         super(properties);

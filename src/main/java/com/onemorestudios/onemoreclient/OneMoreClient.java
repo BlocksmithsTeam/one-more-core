@@ -150,9 +150,11 @@ public class OneMoreClient {
                 .playToClient(Status.TYPE, Status.CODEC, (status, context) -> { Status.client = status; Status.clientTime = System.currentTimeMillis(); })
                 .playToClient(TableItems.TYPE, TableItems.CODEC, (t, context) -> TableItems.receive(t))
                 .playToClient(TableMarks.TYPE, TableMarks.CODEC, (t, context) -> TableMarks.receive(t))
+                .playToClient(ScreenData.TYPE, ScreenData.CODEC, (t, context) -> ScreenData.receive(t))
                 .playToClient(MenuBookBlockEntity.Open.TYPE, MenuBookBlockEntity.Open.CODEC, (o, context) -> MenuBookBlockEntity.Open.handler.accept(o))
                 .playToClient(TableItems.Collected.TYPE, TableItems.Collected.CODEC, (c, context) -> TableItems.Collected.receive(c))
-                .playToServer(ReadyRequest.TYPE, ReadyRequest.CODEC, (request, context) -> ReadyRequest.handle(request, (ServerPlayer) context.player())));
+                .playToServer(ReadyRequest.TYPE, ReadyRequest.CODEC, (request, context) -> ReadyRequest.handle(request, (ServerPlayer) context.player()))
+                .playToServer(ScreenClick.TYPE, ScreenClick.CODEC, (click, context) -> ScreenClick.handle(click, (ServerPlayer) context.player())));
         NeoForge.EVENT_BUS.addListener((ChunkWatchEvent.Sent e) -> {
             Restaurants all = Restaurants.get(e.getLevel());
             all.sendDirt(e.getPlayer(), e.getPos());
@@ -163,6 +165,7 @@ public class OneMoreClient {
                 Dirt.CLIENT.clear();
                 TableItems.CLIENT.clear();
                 TableMarks.CLIENT.clear();
+                ScreenData.CLIENT.clear();
                 Status.client = null;
             }
         });

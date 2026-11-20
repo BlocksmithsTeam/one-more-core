@@ -65,7 +65,7 @@ public final class ComputerCamera {
     static int reopenApp;
 
     // Free camera.
-    enum Tool { AREA, SPAWN, DELIVERY, TABLES }
+    enum Tool { AREA, SPAWN, DELIVERY, TABLES, SCREENS }
     static Tool tool = Tool.AREA;
     static BlockPos corner;
     static Component message = Component.empty();
@@ -310,6 +310,7 @@ public final class ComputerCamera {
             case SPAWN -> send(Computer.SET_SPAWN, List.of(pos.getX(), pos.getY(), pos.getZ()));
             case DELIVERY -> send(Computer.SET_DELIVERY, List.of(pos.getX(), pos.getY(), pos.getZ()));
             case TABLES -> send(Computer.TOGGLE_TABLE, List.of(pos.getX(), pos.getY(), pos.getZ()));
+            case SCREENS -> send(Computer.SET_SCREEN, List.of(pos.getX(), pos.getY(), pos.getZ()));
         }
     }
 
@@ -323,7 +324,7 @@ public final class ComputerCamera {
     private static void key(InputEvent.Key event) {
         if (mode != Mode.FREE || event.getAction() != org.lwjgl.glfw.GLFW.GLFW_PRESS || Minecraft.getInstance().screen != null) return;
         int k = event.getKey();
-        if (k >= org.lwjgl.glfw.GLFW.GLFW_KEY_1 && k <= org.lwjgl.glfw.GLFW.GLFW_KEY_4) {
+        if (k >= org.lwjgl.glfw.GLFW.GLFW_KEY_1 && k <= org.lwjgl.glfw.GLFW.GLFW_KEY_5) {
             tool = Tool.values()[k - org.lwjgl.glfw.GLFW.GLFW_KEY_1];
             corner = null;
         }
@@ -375,8 +376,9 @@ public final class ComputerCamera {
         var font = mc.font;
         var o = mc.options;
         Component[] tools = {Component.translatable("onemoreclient.free.area"), Component.translatable("onemoreclient.free.spawn"),
-                Component.translatable("onemoreclient.free.delivery"), Component.translatable("onemoreclient.free.tables")};
-        int[] colors = {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A, 0xFFE05555};
+                Component.translatable("onemoreclient.free.delivery"), Component.translatable("onemoreclient.free.tables"),
+                Component.translatable("onemoreclient.free.screens")};
+        int[] colors = {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A, 0xFFE05555, 0xFFB57BFF};
         // One prompt row for the current tool: the mouse buttons and what they do.
         List<Object> help = new java.util.ArrayList<>();
         if (altDown()) {
@@ -392,6 +394,7 @@ public final class ComputerCamera {
                 case SPAWN -> "onemoreclient.free.place_spawn";
                 case DELIVERY -> "onemoreclient.free.place_delivery";
                 case TABLES -> "onemoreclient.free.toggle_table";
+                case SCREENS -> "onemoreclient.free.cycle_screen";
             }));
             if (tool == Tool.AREA) { help.add("Alt"); help.add(Component.translatable("onemoreclient.free.in_air")); }
         }

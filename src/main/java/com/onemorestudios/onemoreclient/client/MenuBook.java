@@ -18,7 +18,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -64,7 +63,9 @@ public final class MenuBook {
         if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) Behavior.register();
     }
 
-    /** Two paper pages side by side on a leather cover, arrows below. */
+    private static final ResourceLocation PAPER = ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "textures/gui/menu_book_paper.png");
+
+    /** Two paper pages side by side on the brown cover, arrows below. */
     static final class BookScreen extends Screen {
         private final List<List<Object>> pages;
         private int spread;
@@ -77,12 +78,13 @@ public final class MenuBook {
         @Override
         public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
             super.render(g, mouseX, mouseY, partialTick);
-            int pw = 130, ph = 14 + ROWS * 13, x0 = width / 2 - pw - 6, y0 = (height - ph) / 2 - 8;
-            g.fill(x0 - 6, y0 - 6, x0 + 2 * pw + 18, y0 + ph + 6, 0xFF6E2A22);
-            g.fill(x0 - 4, y0 - 4, x0 + 2 * pw + 16, y0 + ph + 4, 0xFF8A3A2E);
+            // The paper is 3 by 4, as the pages of the book model.
+            int ph = 14 + ROWS * 13, pw = ph * 3 / 4, x0 = width / 2 - pw - 6, y0 = (height - ph) / 2 - 8;
+            g.fill(x0 - 6, y0 - 6, x0 + 2 * pw + 18, y0 + ph + 6, 0xFF4D3723);
+            g.fill(x0 - 4, y0 - 4, x0 + 2 * pw + 16, y0 + ph + 4, 0xFF5D4733);
             for (int side = 0; side < 2; side++) {
                 int px = x0 + side * (pw + 12);
-                g.fill(px, y0, px + pw, y0 + ph, 0xFFF4EEDC);
+                g.blit(PAPER, px, y0, pw, ph, 0, 0, 72, 96, 128, 128);
                 int index = spread * 2 + side;
                 if (index < pages.size()) drawPage(g, pages.get(index), px + 6, y0 + 7, pw - 12);
                 String number = String.valueOf(index + 1);
@@ -96,7 +98,7 @@ public final class MenuBook {
         private void drawPage(GuiGraphics g, List<Object> rows, int x, int y, int w) {
             for (Object r : rows) {
                 if (r instanceof String kind) {
-                    g.drawString(font, Component.translatable("onemoreclient.board." + kind), x, y + 2, 0xFF8A3A2E, false);
+                    g.drawString(font, Component.translatable("onemoreclient.board." + kind), x, y + 2, 0xFF6B4A2E, false);
                     g.fill(x, y + 11, x + w, y + 12, 0xFFD8CBB0);
                 } else if (r instanceof MenuBoardBlockEntity.Line l) {
                     int ix = x;
@@ -143,8 +145,7 @@ public final class MenuBook {
 
     // ---- Diegesis: the open book on the table ----
 
-    private static final RenderType WHITE = RenderType.entityCutout(ResourceLocation.fromNamespaceAndPath(OneMoreClient.MODID, "textures/block/white.png"));
-    /** Page size in scene pixels; the book is two pages wide. */
+    /** Page size in the scaled layout (three times the 6 x 8 pages of the model); the book is two pages wide. */
     private static final float PW = 18, PH = 24;
 
     /** Clicks on the left or right page turn back or on; the wheel turns too. */
@@ -185,14 +186,13 @@ public final class MenuBook {
             pose.pushPose();
             pose.mulPose(Axis.YP.rotationDegrees(180));
             pose.mulPose(Axis.XP.rotationDegrees(90));
-            // Now x runs to the reader's right and y towards the reader, on the table top; the book's middle is the origin.
-            pose.translate(0, 0, -0.02f);
-            TrayRenderer.quad(pose, buffers.getBuffer(WHITE), -PW - 1.2f, -PH / 2 - 1.2f, PW + 1.2f, PH / 2 + 1.2f, 0, 0xFF8A3A2E, light);
+            // Now x runs to the reader's right and y towards the reader, on the paper of the open book (menu_book_open:
+            // two 6 x 8 pages); the layout is drawn three times as large and scaled down.
+            pose.scale(1 / 3f, 1 / 3f, 1 / 3f);
             pose.translate(0, 0, -0.05f);
             Font font = Minecraft.getInstance().font;
             for (int side = 0; side < 2; side++) {
                 float x0 = side == 0 ? -PW : 0.3f;
-                TrayRenderer.quad(pose, buffers.getBuffer(WHITE), x0, -PH / 2, x0 + PW - 0.3f, PH / 2, 0, 0xFFF4EEDC, light);
                 int index = spread * 2 + side;
                 if (index >= pages.size()) continue;
                 pose.pushPose();
@@ -200,7 +200,7 @@ public final class MenuBook {
                 float s = 0.16f;
                 float y = 0, rowH = (PH - 3) / ROWS;
                 for (Object r : pages.get(index)) {
-                    if (r instanceof String kind) text(font, pose, buffers, Component.translatable("onemoreclient.board." + kind).getString(), 0, y, s, 0xFF8A3A2E, light);
+                    if (r instanceof String kind) text(font, pose, buffers, Component.translatable("onemoreclient.board." + kind).getString(), 0, y, s, 0xFF6B4A2E, light);
                     else if (r instanceof MenuBoardBlockEntity.Line l) {
                         float ix = 0;
                         for (ItemStack st : l.items()) {

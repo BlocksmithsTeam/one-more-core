@@ -132,6 +132,11 @@ public class Config {
     static final ModConfigSpec.ConfigValue<List<? extends Integer>> BELL_COSTS = B
             .comment("Call bell: ringing a bell in the area during the service calls the next group at once (every 10 seconds at most).")
             .defineListAllowEmpty("upgradeBellCosts", List.of(50), () -> 50, o -> o instanceof Integer i && i >= 0);
+    static final ModConfigSpec.ConfigValue<List<? extends String>> SCREEN_BLOCKS = B
+            .comment("Televisions of other mods that can show the menu or the orders: \"<block id>=x0,y0,x1,y1,z,flip\".",
+                    "The picture rectangle in the pixels of the block model when the screen faces south (+z), on the plane z; flip 1 when the",
+                    "block's facing is the back of the screen. Set a television's screen with the Manager app (tool 5) of the computer.")
+            .defineListAllowEmpty("screenBlocks", ScreenRect.defaults(), () -> "", Config::isPair);
     static final ModConfigSpec.BooleanValue REQUIRE_TRAY = B
             .comment("Food is served on a tray (from a tray rack): one tray per customer, all its dishes at once. False also takes single dishes from the hand.")
             .define("requireTray", true);

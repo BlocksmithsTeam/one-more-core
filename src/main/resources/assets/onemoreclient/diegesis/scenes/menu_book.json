@@ -2,20 +2,20 @@
   "camera": {
     "position": [
       8,
-      32,
-      -6
+      14,
+      0
     ],
     "target": [
       8,
-      1,
+      1.5,
       8
     ],
-    "fov": 50,
+    "fov": 40,
     "neighbors": {
       "enabled": false
     }
   },
-  "work_plane": 2,
+  "work_plane": 1.5,
   "idle_visible": false,
   "interface": {
     "hide_player": true,
@@ -23,50 +23,63 @@
   },
   "nodes": [
     {
+      "id": "cover",
+      "pos": [
+        8,
+        0,
+        8
+      ],
+      "visual": {
+        "model": "onemoreclient:diegesis/menu_book_open"
+      },
+      "pickable": false
+    },
+    {
       "id": "book",
       "pos": [
         8,
-        1.6,
+        1.52,
         8
-      ]
+      ],
+      "pickable": false
     },
     {
       "id": "left_page",
       "pos": [
-        17,
-        1.6,
+        11,
+        1.5,
         8
       ],
       "collider": {
         "from": [
-          -9,
+          -3,
           0,
-          -12
+          -4
         ],
         "to": [
-          9,
-          1,
-          12
+          3,
+          0.5,
+          4
         ]
       }
     },
     {
       "id": "right_page",
       "pos": [
-        -1,
-        1.6,
+        5,
+        1.5,
         8
       ],
       "collider": {
         "from": [
-          -9,
+          -3,
           0,
-          -12
+          -4
         ],
         "to": [
-          9,
-          1,
-          12
+          3,
+          0.5,
+          4
         ]
       }
     }

@@ -1,42 +1,7 @@
 {
- "parent": "minecraft:builtin/entity",
- "gui_light": "front",
+ "parent": "onemoreclient:block/screen",
  "display": {
   "gui": {
-   "rotation": [
-    0,
-    0,
-    0
-   ],
-   "translation": [
-    0,
-    0,
-    0
-   ],
-   "scale": [
-    0.95,
-    0.95,
-    0.95
-   ]
-  },
-  "ground": {
-   "rotation": [
-    0,
-    0,
-    0
-   ],
-   "translation": [
-    0,
-    3,
-    0
-   ],
-   "scale": [
-    0.25,
-    0.25,
-    0.25
-   ]
-  },
-  "fixed": {
    "rotation": [
     0,
     180,
@@ -48,15 +13,39 @@
     0
    ],
    "scale": [
-    0.5,
-    0.5,
-    0.5
+    0.38,
+    0.38,
+    0.38
+   ]
+  },
+  "ground": {
+   "translation": [
+    0,
+    3,
+    0
+   ],
+   "scale": [
+    0.2,
+    0.2,
+    0.2
+   ]
+  },
+  "fixed": {
+   "rotation": [
+    0,
+    180,
+    0
+   ],
+   "scale": [
+    0.4,
+    0.4,
+    0.4
    ]
   },
   "thirdperson_righthand": {
    "rotation": [
     75,
-    315,
+    180,
     0
    ],
    "translation": [
@@ -65,43 +54,33 @@
     0
    ],
    "scale": [
-    0.375,
-    0.375,
-    0.375
+    0.2,
+    0.2,
+    0.2
    ]
   },
   "firstperson_righthand": {
    "rotation": [
     0,
-    315,
-    0
-   ],
-   "translation": [
-    0,
-    0,
+    180,
     0
    ],
    "scale": [
-    0.3,
-    0.3,
-    0.3
+    0.2,
+    0.2,
+    0.2
    ]
   },
   "firstperson_lefthand": {
    "rotation": [
     0,
-    315,
-    0
-   ],
-   "translation": [
-    0,
-    0,
+    180,
     0
    ],
    "scale": [
-    0.3,
-    0.3,
-    0.3
+    0.2,
+    0.2,
+    0.2
    ]
   }
  }

@@ -42,7 +42,7 @@ public class Computer extends Block {
             new double[] {2, 0, 0.5, 14, 1.5, 3.5});
     public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
             TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9, SET_KIND = 10, ADD_COMBO = 11, REMOVE_COMBO = 12,
-            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16;
+            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17;
     /** How far from the computer the manager app may set a point, in blocks per axis. */
     public static final int PLACE_RANGE = 48;
     /** Bits of {@link State#apps}. */
@@ -233,6 +233,14 @@ public class Computer extends Block {
             BlockPos p = new BlockPos(n[0], n[1], n[2]);
             String key = !near(request.pos, p) || !level.isLoaded(p) ? "too_far" : r.isOpen() ? "busy" : !r.toggleTable(level, p) ? "not_table"
                     : r.isTableOn(r.tableAt(level, p)) ? "table_on" : "table_off";
+            message = Component.translatable("onemoreclient.tool." + key, PLACE_RANGE);
+        } else if (request.action == SET_SCREEN) {
+            if (r == null || !Config.APP_MANAGER.get()) return null;
+            int[] n = ints(request.id, 3);
+            if (n == null) return null;
+            BlockPos p = new BlockPos(n[0], n[1], n[2]);
+            String key = !near(request.pos, p) || !level.isLoaded(p) ? "too_far" : !r.cycleScreen(level, p) ? "not_screen"
+                    : "screen_" + r.screens.getOrDefault(p, Restaurant.SCREEN_OFF);
             message = Component.translatable("onemoreclient.tool." + key, PLACE_RANGE);
         } else if (request.action >= SET_KIND && request.action <= SET_COMBO_PRICE) {
             if (r == null || !Config.APP_MENU.get()) return null;

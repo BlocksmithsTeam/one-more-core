@@ -514,7 +514,7 @@ public class Restaurant {
     /** Day, register, unlocks and paid orders: what the sign item keeps when the sign is broken. Positions are not kept. */
     CompoundTag progress() {
         CompoundTag tag = save();
-        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "tables_off", "table_items")) tag.remove(key);
+        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "tables_off", "table_items", "screens", "screen_modes")) tag.remove(key);
         return tag;
     }
 
@@ -646,6 +646,7 @@ public class Restaurant {
         if (!open && countdown > 0 && area != null) tickCountdown(level);
         if (area != null && level.getGameTime() % 10 == 0) sendStatus(level);
         if (area != null && level.getGameTime() % 100 == Math.floorMod(sign.asLong(), 100)) numberTables(level);
+        if (area != null && level.getGameTime() % 10 == 5) sendScreens(level);
         if (!open) return;
         if (serviceLeft > 0 && --serviceLeft == 0) {
             // The service is over: no new parties. Parties that are on their way and the customers inside finish, then the day ends.
@@ -946,6 +947,41 @@ public class Restaurant {
         });
     }
 
+    /** Televisions of other mods that show something: 1 the menu, 2 the orders. */
+    final Map<BlockPos, Integer> screens = new HashMap<>();
+    private CompoundTag sentScreens = new CompoundTag();
+
+    /** Screen modes: none, the menu, the orders. */
+    public static final int SCREEN_OFF = 0, SCREEN_MENU = 1, SCREEN_ORDERS = 2;
+
+    /** Turns a television to the next mode (off, menu, orders). False if the block is no known television. */
+    boolean cycleScreen(ServerLevel level, BlockPos pos) {
+        if (ScreenRect.of(level.getBlockState(pos)) == null || level.getBlockState(pos).is(OneMoreClient.MENU_BOARD.get())
+                || level.getBlockState(pos).is(OneMoreClient.ORDER_BOARD.get())) return false;
+        int next = (screens.getOrDefault(pos, SCREEN_OFF) + 1) % 3;
+        if (next == SCREEN_OFF) screens.remove(pos); else screens.put(pos.immutable(), next);
+        owner.setDirty();
+        sentScreens = new CompoundTag();
+        return true;
+    }
+
+    /** Sends the televisions, the menu and the tickets to the players near the area, when they changed. */
+    private void sendScreens(ServerLevel level) {
+        screens.keySet().removeIf(p -> level.isLoaded(p) && ScreenRect.of(level.getBlockState(p)) == null);
+        CompoundTag now = new CompoundTag();
+        if (!screens.isEmpty()) {
+            now.put("menu", MenuBoardBlockEntity.build(this));
+            now.put("tickets", OrderBoardBlockEntity.encode(tickets(), level.registryAccess()));
+            now.putLongArray("pos", screens.keySet().stream().mapToLong(BlockPos::asLong).toArray());
+            now.putIntArray("mode", screens.values().stream().mapToInt(Integer::intValue).toArray());
+        }
+        if (now.equals(sentScreens)) return;
+        sentScreens = now;
+        BoundingBox near = area.inflatedBy(32);
+        ScreenData packet = new ScreenData(sign, now);
+        for (ServerPlayer p : level.players()) if (near.isInside(p.blockPosition())) PacketDistributor.sendToPlayer(p, packet);
+    }
+
     /** Table numbers by serving surface, from the last numbering. */
     private final Map<BlockPos, Integer> tableNumbers = new HashMap<>();
 
@@ -992,8 +1028,12 @@ public class Restaurant {
         for (Customer c : customers) {
             if (c.getState() != Customer.State.WAITING_FOOD || !seen.add(c.party())) continue;
             List<ItemStack> items = new ArrayList<>();
-            for (Customer m : c.party().members) items.addAll(m.getOrder());
-            out.add(new OrderBoardBlockEntity.Ticket(tableNumber(c.getSurface()), items, c.party().patience / (float) Math.max(1, c.party().patienceMax)));
+            int price = 0;
+            for (Customer m : c.party().members) {
+                items.addAll(m.getOrder());
+                for (Customer.Line l : m.wantedLines()) price += l.price();
+            }
+            out.add(new OrderBoardBlockEntity.Ticket(tableNumber(c.getSurface()), items, c.party().patience / (float) Math.max(1, c.party().patienceMax), price));
         }
         return out;
     }
@@ -1156,6 +1196,8 @@ public class Restaurant {
         tag.put("table_items", table);
         long[] tablesOff = offTables.stream().mapToLong(BlockPos::asLong).toArray();
         tag.putLongArray("tables_off", tablesOff);
+        tag.putLongArray("screens", screens.keySet().stream().mapToLong(BlockPos::asLong).toArray());
+        tag.putIntArray("screen_modes", screens.values().stream().mapToInt(Integer::intValue).toArray());
         if (delivery != null) tag.putLong("delivery", delivery.asLong());
         ListTag pending = new ListTag();
         for (Delivery d : deliveries) {
@@ -1196,6 +1238,9 @@ public class Restaurant {
                 r.combos.add(new Combo(c.getString("id"), List.copyOf(ids), Math.max(1, c.getInt("price"))));
         }
         for (long p : tag.getLongArray("tables_off")) r.offTables.add(BlockPos.of(p));
+        long[] sp = tag.getLongArray("screens");
+        int[] sm = tag.getIntArray("screen_modes");
+        for (int i = 0; i < sp.length && i < sm.length && i < 256; i++) if (sm[i] == SCREEN_MENU || sm[i] == SCREEN_ORDERS) r.screens.put(BlockPos.of(sp[i]), sm[i]);
         CompoundTag up = tag.getCompound("upgrades");
         for (String id : up.getAllKeys()) if (upgradeCosts(id) != null) r.upgrades.put(id, Math.max(0, Math.min(upgradeCosts(id).size(), up.getInt(id))));
         for (Tag t : tag.getList("favourites", Tag.TAG_STRING)) r.favourites.add(t.getAsString());
