@@ -33,6 +33,7 @@ public class ClientSetup {
             }
         }, OneMoreClient.OPEN_SIGN_ITEM.get()));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreClient.TRAY_ENTITY.get(), TrayRenderer::new));
+        bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreClient.MENU_BOOK_ENTITY.get(), MenuBookRenderer::new));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreClient.ORDER_BOARD_ENTITY.get(), ScreenRenderer::new));
         bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
             private TrayRenderer.Item renderer;

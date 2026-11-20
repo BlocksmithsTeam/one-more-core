@@ -63,6 +63,12 @@ public class MenuBookBlock extends Block implements EntityBlock {
         return state.rotate(mirror.getRotation(state.getValue(FACING)));
     }
 
+    /** The book is drawn by its block entity renderer, so Diegesis can show the open book in its place. */
+    @Override
+    protected net.minecraft.world.level.block.RenderShape getRenderShape(BlockState state) {
+        return net.minecraft.world.level.block.RenderShape.ENTITYBLOCK_ANIMATED;
+    }
+
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
         return new MenuBookBlockEntity(pos, state);

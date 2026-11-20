@@ -140,14 +140,14 @@ public final class ScreenPainter {
             int rows = Math.min(4, (of.size() + perRow - 1) / perRow);
             int perPage = rows * perRow, pages = (of.size() + perPage - 1) / perPage;
             int page = (int) (System.currentTimeMillis() / 6000 % pages);
-            float tileH = Math.min(52 * u, (areaH - (rows - 1) * 3 * u) / rows), tileW = (colW - (perRow - 1) * 3 * u) / perRow;
+            float tileH = (areaH - (rows - 1) * 3 * u) / rows, tileW = (colW - (perRow - 1) * 3 * u) / perRow;
             for (int i = 0; i < perPage && page * perPage + i < of.size(); i++) {
                 MenuBoardBlockEntity.Line l = of.get(page * perPage + i);
                 float tx = x + (i % perRow) * (tileW + 3 * u), ty = areaTop + (i / perRow) * (tileH + 3 * u);
                 c.rect(tx, ty, tileW, tileH, 0xFF22252C);
                 // The picture: one big icon, or the dishes of a combo side by side.
                 float icon = Math.min(tileH * 0.55f, tileW / Math.max(1, l.items().size()) * 0.8f);
-                float iy = ty + 3 * u + icon / 2;
+                float iy = ty + Math.max(3 * u + icon / 2, (tileH - 12 * u) / 2);
                 for (int j = 0; j < l.items().size(); j++)
                     c.item(l.items().get(j), tx + tileW / 2 + (j - (l.items().size() - 1) / 2f) * icon * 1.05f, iy, icon);
                 String name = l.items().size() == 1 ? l.items().get(0).getHoverName().getString() : head;
