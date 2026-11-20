@@ -192,5 +192,13 @@
   "onemoreclient.screen.items": "ITEMS",
   "onemoreclient.screen.menu": "MENU",
   "onemoreclient.screen.no_orders": "No orders yet",
-  "onemoreclient.screen.dishes": "%s dishes"
+  "onemoreclient.screen.dishes": "%s dishes",
+  "onemoreclient.book.tab.all": "All",
+  "onemoreclient.book.tab.recent": "Recent",
+  "onemoreclient.book.only_ready": "Only what you have",
+  "onemoreclient.book.showing_all": "Showing all",
+  "onemoreclient.book.seconds": "%s s",
+  "onemoreclient.book.minutes": "%s min",
+  "onemoreclient.book.bonus": "+%s%%",
+  "onemoreclient.book.combo": "Combo"
 }

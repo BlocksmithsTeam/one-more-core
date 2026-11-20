@@ -234,10 +234,16 @@ public final class ScreenPainter {
     }
 
     /** Puts the canvas of a screen rectangle on the pose: top left at the rectangle's top left, 10 units per model pixel. */
-    static void place(PoseStack pose, com.onemorestudios.onemoreclient.ScreenRect r, float turn) {
+    static void place(PoseStack pose, com.onemorestudios.onemoreclient.ScreenRect r, float turn, float tilt) {
         pose.translate(0.5, 0, 0.5);
         pose.mulPose(Axis.YP.rotationDegrees(-turn));
         pose.translate(-0.5, 0, -0.5);
+        if (tilt != 0) {
+            // Turned down about the bottom back edge (y 2, z 0), as the model: the top comes out.
+            pose.translate(0, 2 / 16f, 0);
+            pose.mulPose(Axis.XP.rotationDegrees(tilt));
+            pose.translate(0, -2 / 16f, 0);
+        }
         pose.translate(r.x0() / 16, r.y1() / 16, (r.z() + 0.05f) / 16);
         pose.scale(1 / 160f, -1 / 160f, 1 / 160f);
     }

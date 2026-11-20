@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    "onemoreclient:menu_board",
+    "onemoreclient:order_board"
+  ]
+}

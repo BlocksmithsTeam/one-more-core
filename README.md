@@ -8,7 +8,7 @@ The mod does not add food. It works with the items of any mod.
 1. Place an **Open/Closed Sign** on the floor, on a wall or under a ceiling. It shows CLOSED or OPEN and turns when the restaurant opens or closes.
 2. Place a **Restaurant Computer** at most 32 blocks from the sign and use it. Open the **Manager** app and select "Edit". The camera flies through walls. Right click the first corner of the area; the box grows to where you look, and a second right click sets it. Hold Alt to point in the air (the wheel changes the distance). Keys 1, 2 and 3 change to the customer spawn point and the delivery container. Escape returns to the computer.
 3. Put seats next to serving surfaces inside the area. Serving surfaces that touch each other are one table: one group sits at a table, a group takes the smallest free table that fits it, and a table rests for a moment after its group left. Sneak-click a table with an empty hand while the restaurant is closed to turn it off (customers do not use it) or on again; the Manager's tool 4 does the same.
-   Place a **Menu Screen** on a wall: a television that shows the dishes that customers can order now, by kind, and the combos, like the menu over a fast food counter.
+   Place a **Menu Screen** on a wall: a television that shows the dishes that customers can order now, by kind, and the combos, like the menu over a fast food counter. Look up while you place a screen to hang it turned down (22.5 or 45 degrees); sneak-click it with an empty hand to change the angle.
 4. Click the sign. A player alone in the area starts the day at once. With more players, a panel opens for every player inside the area: each one holds **R** (key "Get ready (hold)"). When all of them are ready, a short countdown starts the day. Hold the key again to cancel.
 5. Click a seated customer to take the order. Look at an item in the speech bubble to read its tooltip.
 6. Hold the ordered item and click the customer, or the surface in front of the customer.
@@ -18,8 +18,8 @@ The mod does not add food. It works with the items of any mod.
 8. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
    A broken sign keeps the money, the day, the unlocks and the paid orders in the item, like a shulker box. Place it again and set the area again.
 9. A party leaves stains where it ate; a stain can go over the joins of a table's blocks. A table is one thing to clean: it gets no customer until `dirtCleanFraction` of all its dirt is wiped, then all of it is clean.
-10. A **Menu Book** on a table shows the menu on pages, like a restaurant's menu folder (with Diegesis: the open book up close).
-11. Televisions of other mods can show the menu or the orders too. In the Manager's free camera, tool 5 (Screens) clicks a television: off, menu, orders. `screenBlocks` lists the televisions and where their picture is (MrCrayfish's Refurbished Furniture television is included).
+10. A **Menu Book** on a table shows the menu on pages. With Diegesis it is the recipe book of Hands On Delight: it opens over the table, with a tab for each kind, a page for each dish (a combo shows its dishes) with its price, search and page turning. Without Diegesis it opens as a book screen.
+11. Televisions of other mods can show the menu or the orders too. In the Manager's free camera, tool 5 (Screens) clicks a television: off, menu, orders. The televisions of MrCrayfish's Refurbished Furniture and Yuushya Townscape work without a config line; `screenBlocks` adds others. With Yuushya Townscape installed, the mod's own screens (Yuushya's wall TV) are hidden from the creative tab and recipe viewers: use Yuushya's televisions.
 
 Optional [Diegesis](https://github.com/Pocky-l/diegesis) adds a camera above the table and a folded 3D cloth.
 Use NeoForge 1.21.1 with Diegesis beta.11 or newer on the client and server.

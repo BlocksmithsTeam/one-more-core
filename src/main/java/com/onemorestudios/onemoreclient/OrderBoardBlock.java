@@ -44,6 +44,7 @@ public class OrderBoardBlock extends MenuBoardBlock {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+        if (player.isShiftKeyDown()) return super.useWithoutItem(state, level, pos, player, hit);
         if (!(level instanceof ServerLevel sl)) return InteractionResult.SUCCESS;
         List<OrderBoardBlockEntity.Ticket> tickets = ticketsAt(sl, pos);
         float[] at = ScreenRect.OWN.canvas(pos, state, hit.getLocation());

@@ -1,5 +1,5 @@
 {
- "credit": "Yuushya Townscape (MIT), wall TV",
+ "credit": "Wall TV of Yuushya Townscape (MIT), made thin",
  "ambientocclusion": false,
  "textures": {
   "2": "onemoreclient:block/screen",
@@ -10,22 +10,13 @@
    "from": [
     -12,
     2,
-    0
+    0.0
    ],
    "to": [
     28,
     24,
-    2
+    0.6
    ],
-   "rotation": {
-    "angle": 0,
-    "axis": "y",
-    "origin": [
-     8,
-     10,
-     8
-    ]
-   },
    "faces": {
     "north": {
      "uv": [
@@ -87,22 +78,13 @@
    "from": [
     -12,
     2,
-    2
+    0.6
    ],
    "to": [
     28,
     3,
-    2.5
+    0.9
    ],
-   "rotation": {
-    "angle": 0,
-    "axis": "y",
-    "origin": [
-     8,
-     10,
-     10
-    ]
-   },
    "faces": {
     "north": {
      "uv": [
@@ -164,22 +146,13 @@
    "from": [
     -12,
     23,
-    2
+    0.6
    ],
    "to": [
     28,
     24,
-    2.5
+    0.9
    ],
-   "rotation": {
-    "angle": 0,
-    "axis": "y",
-    "origin": [
-     8,
-     31,
-     10
-    ]
-   },
    "faces": {
     "north": {
      "uv": [
@@ -241,22 +214,13 @@
    "from": [
     -12,
     3,
-    2
+    0.6
    ],
    "to": [
     -11,
     23,
-    2.5
+    0.9
    ],
-   "rotation": {
-    "angle": 0,
-    "axis": "y",
-    "origin": [
-     -4,
-     11,
-     10
-    ]
-   },
    "faces": {
     "north": {
      "uv": [
@@ -318,22 +282,13 @@
    "from": [
     27,
     3,
-    2
+    0.6
    ],
    "to": [
     28,
     23,
-    2.5
+    0.9
    ],
-   "rotation": {
-    "angle": 0,
-    "axis": "y",
-    "origin": [
-     35,
-     11,
-     10
-    ]
-   },
    "faces": {
     "north": {
      "uv": [

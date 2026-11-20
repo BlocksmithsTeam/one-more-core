@@ -66,7 +66,7 @@ public class ScreenRenderer<T extends net.minecraft.world.level.block.entity.Blo
             List<MenuBoardBlockEntity.Line> lines, List<OrderBoardBlockEntity.Ticket> tickets) {
         float[] hover = pointer(pos, state, r);
         pose.pushPose();
-        ScreenPainter.place(pose, r, r.turn(state));
+        ScreenPainter.place(pose, r, r.turn(state), ScreenRect.tilt(state));
         ScreenPainter.Canvas c = new ScreenPainter.Canvas(pose, buffers, r.width(), r.height(), hover[0], hover[1]);
         ItemStack over = mode == Restaurant.SCREEN_ORDERS ? ScreenPainter.orders(c, tickets) : ScreenPainter.menu(c, lines);
         pose.popPose();
@@ -126,7 +126,7 @@ public class ScreenRenderer<T extends net.minecraft.world.level.block.entity.Blo
         });
         // A use click on an order card gives its ticket, also where the television is wider than its block.
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.InputEvent.InteractionKeyMappingTriggered e) -> {
-            if (!e.isUseItem() || cardIndex < 0 || Minecraft.getInstance().screen != null) return;
+            if (!e.isUseItem() || cardIndex < 0 || Minecraft.getInstance().screen != null || Minecraft.getInstance().player.isShiftKeyDown()) return;
             net.neoforged.neoforge.network.PacketDistributor.sendToServer(new com.onemorestudios.onemoreclient.ScreenClick(cardPos, cardIndex));
             e.setSwingHand(false);
             e.setCanceled(true);

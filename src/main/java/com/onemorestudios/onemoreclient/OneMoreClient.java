@@ -113,9 +113,11 @@ public class OneMoreClient {
             .displayItems((parameters, output) -> {
                 output.accept(OPEN_SIGN_ITEM);
                 output.accept(COMPUTER_ITEM);
-                output.accept(MENU_BOARD_ITEM);
+                // With Yuushya Townscape, its own wall televisions show the menu and the orders (the Screens tool): ours, its model, hide.
+                boolean yuushya = net.neoforged.fml.ModList.get().isLoaded("yuushya");
+                if (!yuushya) output.accept(MENU_BOARD_ITEM);
                 output.accept(MENU_BOOK_ITEM);
-                output.accept(ORDER_BOARD_ITEM);
+                if (!yuushya) output.accept(ORDER_BOARD_ITEM);
                 output.accept(TRAY_RACK_ITEM);
                 output.accept(TRAY_ITEM);
                 output.accept(COIN);
@@ -139,6 +141,13 @@ public class OneMoreClient {
         COMPONENTS.register(bus);
         BLOCK_ENTITIES.register(bus);
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        // With Yuushya Townscape, a built-in data pack hides the mod's screens (its wall TV) from recipe viewers too.
+        bus.addListener((net.neoforged.neoforge.event.AddPackFindersEvent e) -> {
+            if (net.neoforged.fml.ModList.get().isLoaded("yuushya"))
+                e.addPackFinders(ResourceLocation.fromNamespaceAndPath(MODID, "data/onemoreclient/datapacks/yuushya"), net.minecraft.server.packs.PackType.SERVER_DATA,
+                        net.minecraft.network.chat.Component.literal("One More Client: Yuushya"), net.minecraft.server.packs.repository.PackSource.BUILT_IN,
+                        true, net.minecraft.server.packs.repository.Pack.Position.TOP);
+        });
         bus.addListener((EntityAttributeCreationEvent e) -> e.put(CUSTOMER.get(), Customer.createAttributes().build()));
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> Menu.load(e.getServer().registryAccess()));
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> SkinPool.start(e.getServer()));

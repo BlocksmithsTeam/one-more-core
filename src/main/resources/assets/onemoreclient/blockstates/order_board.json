@@ -1,19 +1,49 @@
 {
  "variants": {
-  "facing=south": {
-   "model": "onemoreclient:block/screen"
-  },
-  "facing=west": {
-   "model": "onemoreclient:block/screen",
-   "y": 90
-  },
-  "facing=north": {
+  "facing=north,tilt=0": {
    "model": "onemoreclient:block/screen",
    "y": 180
   },
-  "facing=east": {
+  "facing=north,tilt=1": {
+   "model": "onemoreclient:block/screen_tilt1",
+   "y": 180
+  },
+  "facing=north,tilt=2": {
+   "model": "onemoreclient:block/screen_tilt2",
+   "y": 180
+  },
+  "facing=east,tilt=0": {
    "model": "onemoreclient:block/screen",
    "y": 270
+  },
+  "facing=east,tilt=1": {
+   "model": "onemoreclient:block/screen_tilt1",
+   "y": 270
+  },
+  "facing=east,tilt=2": {
+   "model": "onemoreclient:block/screen_tilt2",
+   "y": 270
+  },
+  "facing=south,tilt=0": {
+   "model": "onemoreclient:block/screen"
+  },
+  "facing=south,tilt=1": {
+   "model": "onemoreclient:block/screen_tilt1"
+  },
+  "facing=south,tilt=2": {
+   "model": "onemoreclient:block/screen_tilt2"
+  },
+  "facing=west,tilt=0": {
+   "model": "onemoreclient:block/screen",
+   "y": 90
+  },
+  "facing=west,tilt=1": {
+   "model": "onemoreclient:block/screen_tilt1",
+   "y": 90
+  },
+  "facing=west,tilt=2": {
+   "model": "onemoreclient:block/screen_tilt2",
+   "y": 90
   }
  }
 }
