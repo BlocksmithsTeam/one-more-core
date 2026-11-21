@@ -419,7 +419,7 @@ public class Customer extends PathfinderMob {
                 if (wants(dish)) serve(player, dish); else left.add(dish);
             }
             held.set(net.minecraft.core.component.DataComponents.CONTAINER, net.minecraft.world.item.component.ItemContainerContents.fromItems(left));
-            if (left.isEmpty()) held.remove(OneMoreCore.TABLE.get());
+            if (left.isEmpty()) held.remove(OneMoreCore.LABEL.get());
             checkServed();
             return true;
         }
@@ -443,7 +443,10 @@ public class Customer extends PathfinderMob {
         if (surface != null && level() instanceof ServerLevel level) restaurant.recordServed(level, party, surface, line.price());
         tipBase += (long) line.price() * line.tipPercent();
         List<ItemStack> served = new ArrayList<>(getServed());
-        served.add(held.copyWithCount(1));
+        // The main dish goes first: it stands big right in front of the guest, the rest smaller beside it.
+        boolean main = restaurant != null && Menu.entries.stream().anyMatch(e -> "main".equals(restaurant.kind(e))
+                && (e.tag() != null ? held.is(e.tag()) : ItemStack.isSameItem(held, e.stack())));
+        if (main) served.add(0, held.copyWithCount(1)); else served.add(held.copyWithCount(1));
         entityData.set(SERVED, served);
         syncOrder();
         effect(SoundEvents.ITEM_PICKUP, null);

@@ -68,13 +68,14 @@ public final class ScreenGameTests {
         UUID id = displayedOrders(helper).getFirst().orderId();
         var player = GameTestSupport.player(helper);
         ScreenClick click = aim(helper, player, id, 50);
-        BlockPos wall = POS.west().south();
+        // The block between the eye and the card point (one block in front of the screen), in world coordinates.
+        BlockPos wall = BlockPos.containing(player.getEyePosition().add(0, 0, -1));
 
-        helper.setBlock(wall, Blocks.STONE);
+        helper.getLevel().setBlockAndUpdate(wall, Blocks.STONE.defaultBlockState());
         request(click, player);
         assertNoTicket(helper, player);
 
-        helper.setBlock(wall, Blocks.AIR);
+        helper.getLevel().setBlockAndUpdate(wall, Blocks.AIR.defaultBlockState());
         player.setPos(player.getX(), player.getY(), player.getZ() + 11);
         request(click, player);
         assertNoTicket(helper, player);

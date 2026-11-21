@@ -44,6 +44,12 @@ public class MenuBoardBlockEntity extends BlockEntity {
 
     void serverTick(ServerLevel level) {
         if (level.getGameTime() % 40 != Math.floorMod(worldPosition.asLong(), 40)) return;
+        if (getBlockState().getBlock() instanceof MenuBoardBlock board) {
+            // A screen of the mod joins the restaurant it stands in (or the nearest one), showing its default at first.
+            Restaurant r = ScreenSettings.owner(level, worldPosition);
+            if (r != null) r.ensureScreen(worldPosition, board.defaultMode());
+            return;
+        }
         CompoundTag now = build(Restaurants.get(level).forComputer(worldPosition), level.registryAccess());
         if (now.equals(menu)) return;
         menu = now;

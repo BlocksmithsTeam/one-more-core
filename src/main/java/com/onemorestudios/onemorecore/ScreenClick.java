@@ -27,13 +27,19 @@ public record ScreenClick(BlockPos pos, UUID orderId, float x, float y) implemen
     static void handle(ScreenClick click, ServerPlayer player) {
         var level = player.serverLevel();
         if (player.isSpectator() || !level.isLoaded(click.pos) || !level.mayInteract(player, click.pos)) return;
+        // Screens that join are one picture, drawn and clicked at their anchor.
+        ScreenGroups.Group group = ScreenGroups.of(level, click.pos);
+        if (group == null || !group.anchor().equals(click.pos)) return;
         var state = level.getBlockState(click.pos);
-        ScreenRect rect = ScreenRect.of(state);
-        if (rect == null || rect.cardSlot(click.x, click.y) < 0) return;
+        Restaurant r = ScreenSettings.owner(level, click.pos);
+        if (r == null) return;
+        ScreenRect rect = group.rect();
+        float unit = ScreenRect.unit(ScreenRect.of(state), r.screens.getOrDefault(click.pos, Restaurant.SCREEN_OFF));
+        if (rect.cardSlot(unit, click.x, click.y) < 0) return;
         Vec3 point = rect.cardPoint(click.pos, state, click.x, click.y);
         Vec3 eye = player.getEyePosition();
         if (eye.distanceToSqr(point) > REACH * REACH || !rect.faces(state, eye.subtract(point))
-                || !ScreenRect.visible(level, player, click.pos, eye, point)) return;
+                || !ScreenRect.visible(level, player, group.members(), eye, point)) return;
         OrderBoardBlock.giveTicket(level, player, click.pos, OrderBoardBlock.ticketsAt(level, click.pos), click.orderId);
     }
 
