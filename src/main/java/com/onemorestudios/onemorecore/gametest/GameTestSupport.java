@@ -79,8 +79,13 @@ public final class GameTestSupport {
     }
 
     static InteractionResult click(GameTestHelper helper, TestPlayer player, BlockPos pos) {
+        return click(helper, player, pos, 0.5);
+    }
+
+    static InteractionResult click(GameTestHelper helper, TestPlayer player, BlockPos pos, double height) {
         BlockPos absolutePos = helper.absolutePos(pos);
-        BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(absolutePos), Direction.UP, absolutePos, false);
+        Vec3 spot = Vec3.atBottomCenterOf(absolutePos).add(0, height, 0);
+        BlockHitResult hit = new BlockHitResult(spot, Direction.UP, absolutePos, false);
         return player.gameMode.useItemOn(player, helper.getLevel(), player.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
     }
 }

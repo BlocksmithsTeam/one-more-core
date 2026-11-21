@@ -20,7 +20,7 @@ The mod does not add food. It works with the items of any mod.
 8. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
    Breaking the sign clears the coins from the tables and puts their value in the dropped sign's register. Any excess drops at the sign as currency. The sign item keeps the money, the day, the unlocks and the paid orders, like a shulker box. Place it again and set the area again.
 9. A party leaves stains where it ate; a stain can go over the joins of a table's blocks. A table is one thing to clean: it gets no customer until `dirtCleanFraction` of all its dirt is wiped, then all of it is clean. Cleaning progress survives a restart.
-10. A **Menu Book** on a table shows the menu on pages. With Diegesis it is the recipe book of Hands On Delight: it opens over the table, with a tab for each kind, a page for each dish (a combo shows its dishes) with its price, search and page turning. Without Diegesis it opens as a book screen.
+10. A **Menu Book** on a table shows the menu on pages. With Diegesis it opens over the table using the Hands On Delight recipe book, with a tab for each kind, a page for each dish (a combo shows its dishes) with its price, search and page turning. Without Diegesis it opens as a book screen.
     Menu Screens and Menu Books show up to 256 dishes and combos in total, with space for available combos. They show each dish's item variant.
 11. Televisions of other mods can show the menu or the orders too. In the Manager's free camera, tool 5 (Screens) clicks a television: off, menu, orders. The televisions of MrCrayfish's Refurbished Furniture and Yuushya Townscape work without a config line; `screenBlocks` adds others. With Yuushya Townscape installed, the mod's own screens (Yuushya's wall TV) are hidden from the creative tab and recipe viewers: use Yuushya's televisions.
     Players approaching the televisions see the current menu or orders. Switching off the last configured television clears its picture for players who saw it, even if they have moved away.
@@ -58,7 +58,7 @@ Shop orders arrive after a delay at the delivery point set at checkout. Large or
 
 ## Configuration
 
-- `config/onemorecore-common.toml`: currency item, patience, customer count, group size and chance, dirt, tip, seat heights, food display, shop delivery time, computer apps (`appMenu`, `appShop`, `appManager`, `appUpgrades`). The default currency is the mod's coin. Setting `currencyItem` to `onemorecore:tray` or `onemorecore:ticket` also uses the mod's coin.
+- `config/onemorecore-common.toml`: currency item, patience, customer count, group size and chance, dirt, tip, seat heights, food display, shop delivery time, computer apps (`appMenu`, `appShop`, `appManager`, `appUpgrades`). The default currency is the mod's coin. Setting `currencyItem` to `onemorecore:tray`, `onemorecore:iron_tray` or `onemorecore:ticket` also uses the mod's coin.
 - `lostCustomerPenalty`: money lost per customer who leaves without food. Default: 0 (off). The register stays at or above 0.
 - `readyCountdownTicks`: ticks between "everyone is ready" and the start of the day, when more than one player is in the area. Default: 60. 0 starts at once.
 - `maxLostPerDay`: lost customers that fail the day. Default: 0 (off). A failed day repeats; earned money stays.
@@ -115,4 +115,4 @@ Add blocks of other mods with a datapack. Entries for several furniture mods are
 
 MIT. The stain and the cloth are original MIT art.
 The app icon symbols of the Restaurant Computer come from [game-icons.net](https://game-icons.net) (hot-meal, shopping-cart, checklist and upgrade by Delapouite), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), drawn on the mod's own tiles.
-The television of the Menu Screen and the Order Screen is from [Yuushya Townscape](https://github.com/XiLaiTL/Yuushya-Townscape) (MIT). The Menu Book is the recipe book of [Hands On Delight](https://github.com/Pocky-l/handson-delight) (MIT). See `THIRD_PARTY_NOTICES.md`.
+The television of the Menu Screen and the Order Screen is from [Yuushya Townscape](https://github.com/XiLaiTL/Yuushya-Townscape) (MIT). The Menu Book's Diegesis close-up uses the animated recipe book from [Hands On Delight](https://github.com/Pocky-l/handson-delight) (MIT). See `THIRD_PARTY_NOTICES.md`.

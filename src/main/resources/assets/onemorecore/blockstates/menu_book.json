@@ -1,19 +1,19 @@
 {
- "variants": {
-  "facing=north": {
-   "model": "onemorecore:block/menu_book"
-  },
-  "facing=east": {
-   "model": "onemorecore:block/menu_book",
-   "y": 90
-  },
-  "facing=south": {
-   "model": "onemorecore:block/menu_book",
-   "y": 180
-  },
-  "facing=west": {
-   "model": "onemorecore:block/menu_book",
-   "y": 270
+  "variants": {
+    "facing=north": {
+      "model": "onemorecore:block/recipe_book_kc_closed"
+    },
+    "facing=east": {
+      "model": "onemorecore:block/recipe_book_kc_closed",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "onemorecore:block/recipe_book_kc_closed",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "onemorecore:block/recipe_book_kc_closed",
+      "y": 270
+    }
   }
- }
 }

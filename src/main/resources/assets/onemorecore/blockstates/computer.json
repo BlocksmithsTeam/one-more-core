@@ -1,1 +1,19 @@
-{"variants":{"facing=north":{"model":"onemorecore:block/computer"},"facing=east":{"model":"onemorecore:block/computer","y":90},"facing=south":{"model":"onemorecore:block/computer","y":180},"facing=west":{"model":"onemorecore:block/computer","y":270}}}
+{
+  "variants": {
+    "facing=north": {
+      "model": "onemorecore:block/crt_computer"
+    },
+    "facing=east": {
+      "model": "onemorecore:block/crt_computer",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "onemorecore:block/crt_computer",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "onemorecore:block/crt_computer",
+      "y": 270
+    }
+  }
+}
