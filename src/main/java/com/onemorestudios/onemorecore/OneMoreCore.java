@@ -40,12 +40,15 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.TagsUpdatedEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ChunkWatchEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
@@ -155,15 +158,34 @@ public class OneMoreCore {
         NeoForge.EVENT_BUS.addListener((LevelTickEvent.Post e) -> {
             if (e.getLevel() instanceof ServerLevel level) Restaurants.get(level).tick(level);
         });
+        NeoForge.EVENT_BUS.addListener((BlockEvent.BreakEvent e) -> {
+            if (e.getLevel() instanceof ServerLevel level) Restaurants.get(level).blockChanged(e.getPos());
+        });
+        NeoForge.EVENT_BUS.addListener((BlockEvent.EntityPlaceEvent e) -> {
+            if (e.getLevel() instanceof ServerLevel level) {
+                Restaurants all = Restaurants.get(level);
+                if (e instanceof BlockEvent.EntityMultiPlaceEvent multi)
+                    multi.getReplacedBlockSnapshots().forEach(snapshot -> all.blockChanged(snapshot.getPos()));
+                else all.blockChanged(e.getPos());
+            }
+        });
+        NeoForge.EVENT_BUS.addListener((BlockEvent.NeighborNotifyEvent e) -> {
+            if (e.getLevel() instanceof ServerLevel level) Restaurants.get(level).blockChanged(e.getPos());
+        });
+        NeoForge.EVENT_BUS.addListener((TagsUpdatedEvent e) -> {
+            if (e.getUpdateCause() != TagsUpdatedEvent.UpdateCause.SERVER_DATA_LOAD) return;
+            var server = ServerLifecycleHooks.getCurrentServer();
+            if (server != null) server.execute(() -> server.getAllLevels().forEach(level -> Restaurants.get(level).invalidateLayouts()));
+        });
         bus.addListener((RegisterPayloadHandlersEvent e) -> e.registrar("1").playToClient(Dirt.TYPE, Dirt.CODEC, (dirt, context) -> Dirt.receive(dirt))
-                .playToClient(Status.TYPE, Status.CODEC, (status, context) -> { Status.client = status; Status.clientTime = System.currentTimeMillis(); })
                 .playToClient(TableItems.TYPE, TableItems.CODEC, (t, context) -> TableItems.receive(t))
                 .playToClient(TableMarks.TYPE, TableMarks.CODEC, (t, context) -> TableMarks.receive(t))
                 .playToClient(ScreenData.TYPE, ScreenData.CODEC, (t, context) -> ScreenData.receive(t))
                 .playToClient(MenuBookBlockEntity.Open.TYPE, MenuBookBlockEntity.Open.CODEC, (o, context) -> MenuBookBlockEntity.Open.handler.accept(o))
                 .playToClient(TableItems.Collected.TYPE, TableItems.Collected.CODEC, (c, context) -> TableItems.Collected.receive(c))
                 .playToServer(ReadyRequest.TYPE, ReadyRequest.CODEC, (request, context) -> ReadyRequest.handle(request, (ServerPlayer) context.player()))
-                .playToServer(ScreenClick.TYPE, ScreenClick.CODEC, (click, context) -> ScreenClick.handle(click, (ServerPlayer) context.player())));
+                .playToServer(ScreenClick.TYPE, ScreenClick.CODEC, (click, context) -> ScreenClick.handle(click, (ServerPlayer) context.player()))
+                .versioned("2").playToClient(Status.TYPE, Status.CODEC, (status, context) -> Status.receive(status)));
         NeoForge.EVENT_BUS.addListener((ChunkWatchEvent.Sent e) -> {
             Restaurants all = Restaurants.get(e.getLevel());
             all.sendDirt(e.getPlayer(), e.getPos());
@@ -175,7 +197,7 @@ public class OneMoreCore {
                 TableItems.CLIENT.clear();
                 TableMarks.CLIENT.clear();
                 ScreenData.CLIENT.clear();
-                Status.client = null;
+                Status.clearClient();
             }
         });
         NeoForge.EVENT_BUS.addListener(OneMoreCore::onRightClickBlock);

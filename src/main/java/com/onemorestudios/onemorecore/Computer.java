@@ -485,7 +485,7 @@ public class Computer extends Block {
         List<ShopLine> shop = new ArrayList<>();
         for (Shop.Entry e : Shop.entries) shop.add(new ShopLine(e.id(), e.stack(), e.icon(), e.price()));
         BoundingBox a = r.area();
-        List<Restaurant.Seat> seats = !manager || a == null ? List.of() : r.isOpen() ? r.seats : r.scanSeats(level);
+        List<Restaurant.Seat> seats = !manager || a == null ? List.of() : r.scanSeats(level);
         Component none = Component.translatable("onemorecore.computer.info.not_set");
         List<Component> info = !manager ? List.of() : List.of(
                 Component.translatable("onemorecore.computer.info.day", r.day()),
