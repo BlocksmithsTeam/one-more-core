@@ -17,6 +17,7 @@ import net.minecraft.client.model.geom.EntityModelSet;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
@@ -28,13 +29,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemContainerContents;
 
 /**
- * The dishes on a tray, in 3D as on a table, in two rows of three, and the order ticket on its front rim with the table
+ * The dishes on a tray, in 3D as on a table, in one row of three, and the order ticket on its front rim with the table
  * number. The same drawing for a tray on a counter and a tray in the hand.
  */
 public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     static final RenderType PAPER = RenderType.entityCutout(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/block/ticket_paper.png"));
     /** Places of the dishes on the tray bed, in pixels of a tray that faces north. */
-    private static final float[][] SPOTS = {{4, 5.6f}, {8, 5.6f}, {12, 5.6f}, {4, 10.4f}, {8, 10.4f}, {12, 10.4f}};
+    private static final float[][] SPOTS = {{4, 8}, {8, 8}, {12, 8}};
+    private static final float BED_HEIGHT = 1 / 16f;
+    private static final float SPOT_WIDTH = 4 / 16f;
 
     public TrayRenderer(BlockEntityRendererProvider.Context context) {}
 
@@ -55,9 +58,17 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
         for (int i = 0; i < dishes.size() && i < SPOTS.length; i++) {
             ItemStack dish = dishes.get(i);
             if (dish.isEmpty()) continue;
+            // Measure in dish space after the model has applied its FIXED display transform and food offset.
+            DishBounds bounds = new DishBounds();
+            CustomerRenderer.renderFood(dish, level, new PoseStack(), type -> bounds.consumer(), light, scale, i);
             pose.pushPose();
-            pose.translate(SPOTS[i][0] / 16, 2 / 16.0, SPOTS[i][1] / 16);
+            pose.translate(SPOTS[i][0] / 16, BED_HEIGHT, SPOTS[i][1] / 16);
             pose.mulPose(Axis.YP.rotationDegrees(180));
+            if (Float.isFinite(bounds.minY)) {
+                float fit = Math.min(1, SPOT_WIDTH / Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ));
+                pose.scale(fit, fit, fit);
+                pose.translate(-(bounds.minX + bounds.maxX) / 2, -bounds.minY, -(bounds.minZ + bounds.maxZ) / 2);
+            }
             CustomerRenderer.renderFood(dish, level, pose, buffers, light, scale, i);
             pose.popPose();
         }
@@ -76,6 +87,42 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
         pose.scale(s, -s, s);
         font.drawInBatch(text, -font.width(text) / 2f, -3.5f, 0xFF202020, false, pose.last().pose(), buffers, Font.DisplayMode.POLYGON_OFFSET, 0, light);
         pose.popPose();
+    }
+
+    private static final class DishBounds {
+        private float minX = Float.POSITIVE_INFINITY, minY = Float.POSITIVE_INFINITY, minZ = Float.POSITIVE_INFINITY;
+        private float maxX = Float.NEGATIVE_INFINITY, maxZ = Float.NEGATIVE_INFINITY;
+
+        VertexConsumer consumer() {
+            // The base model and the glint require distinct consumers.
+            return new VertexConsumer() {
+                @Override
+                public VertexConsumer addVertex(float x, float y, float z) {
+                    minX = Math.min(minX, x);
+                    minY = Math.min(minY, y);
+                    minZ = Math.min(minZ, z);
+                    maxX = Math.max(maxX, x);
+                    maxZ = Math.max(maxZ, z);
+                    return this;
+                }
+
+                @Override
+                public void putBulkData(PoseStack.Pose pose, BakedQuad quad, float[] brightness, float red, float green,
+                        float blue, float alpha, int[] light, int overlay, boolean readAlpha) {
+                    int[] vertices = quad.getVertices();
+                    for (int i = 0; i < vertices.length; i += 8) {
+                        addVertex(pose, Float.intBitsToFloat(vertices[i]), Float.intBitsToFloat(vertices[i + 1]),
+                                Float.intBitsToFloat(vertices[i + 2]));
+                    }
+                }
+
+                @Override public VertexConsumer setColor(int r, int g, int b, int a) { return this; }
+                @Override public VertexConsumer setUv(float u, float v) { return this; }
+                @Override public VertexConsumer setUv1(int u, int v) { return this; }
+                @Override public VertexConsumer setUv2(int u, int v) { return this; }
+                @Override public VertexConsumer setNormal(float x, float y, float z) { return this; }
+            };
+        }
     }
 
     /** A quad from (x0, y0) to (x1, y1) at z, facing -z; the whole texture. Drawn from both sides. */

@@ -67,7 +67,7 @@ public class Computer extends Block {
             new double[] {9, 0, 15, 13, 1, 16});
     public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
             TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9, SET_KIND = 10, ADD_COMBO = 11, REMOVE_COMBO = 12,
-            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17, REFRESH_MANAGER = 18, CLOSE = 19;
+            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17, REFRESH_MANAGER = 18, CLOSE = 19, EDIT_COMBO = 20;
     public static final int MAX_REQUEST_LENGTH = 1024, MAX_CART_LINES = 32, MAX_CART_COUNT = 64;
     /** How far from the computer the manager app may set a point, in blocks per axis. */
     public static final int PLACE_RANGE = 48;
@@ -327,7 +327,7 @@ public class Computer extends Block {
             String key = !near(request.pos, p) || !level.isLoaded(p) ? "too_far" : !r.cycleScreen(level, p) ? "not_screen"
                     : "screen_" + r.screens.getOrDefault(p, Restaurant.SCREEN_OFF);
             message = Component.translatable("onemorecore.tool." + key, PLACE_RANGE);
-        } else if (request.action >= SET_KIND && request.action <= SET_COMBO_PRICE) {
+        } else if ((request.action >= SET_KIND && request.action <= SET_COMBO_PRICE) || request.action == EDIT_COMBO) {
             if (r == null || !Config.APP_MENU.get()) return null;
             String key;
             if (request.action == REMOVE_COMBO) {
@@ -344,15 +344,24 @@ public class Computer extends Block {
                     int price;
                     try { price = Integer.parseInt(tail); } catch (NumberFormatException e) { return null; }
                     if (request.action == SET_COMBO_PRICE) key = r.setComboPrice(head, price) ? "price_set" : "price_range";
-                    else key = switch (r.addCombo(List.of(head.split(";")), price)) {
-                        case OK -> "combo_added";
-                        case DISHES -> "combo_dishes";
-                        case PRICE -> "price_range";
-                        case FULL -> "combo_full";
-                    };
+                    else {
+                        String comboId = null;
+                        if (request.action == EDIT_COMBO) {
+                            int separator = head.indexOf(',');
+                            if (separator < 1) return null;
+                            comboId = head.substring(0, separator);
+                            head = head.substring(separator + 1);
+                        }
+                        key = switch (r.saveCombo(comboId, List.of(head.split(";")), price)) {
+                            case OK -> comboId == null ? "combo_added" : "combo_saved";
+                            case DISHES -> "combo_dishes";
+                            case PRICE -> "price_range";
+                            case FULL -> "combo_full";
+                        };
+                    }
                 }
             }
-            message = Component.translatable("onemorecore.computer." + key, Config.MAX_DISH_PRICE.get() * Restaurant.MAX_COMBO_DISHES);
+            message = Component.translatable("onemorecore.computer." + key, Config.MAX_DISH_PRICE.get() * Restaurant.COMBO_PRICE_MULTIPLIER);
         } else if (request.action >= TOGGLE_DISH && request.action <= SET_PRICE) {
             if (r == null || !Config.APP_MENU.get()) return null;
             String key;

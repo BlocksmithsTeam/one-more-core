@@ -398,19 +398,10 @@ public class Customer extends PathfinderMob {
         return InteractionResult.SUCCESS;
     }
 
-    /** The dishes on a tray (empty for any other item). */
-    static List<ItemStack> trayDishes(ItemStack tray) {
-        if (!(tray.getItem() instanceof TrayItem)) return List.of();
-        List<ItemStack> out = new ArrayList<>();
-        tray.getOrDefault(net.minecraft.core.component.DataComponents.CONTAINER, net.minecraft.world.item.component.ItemContainerContents.EMPTY)
-                .nonEmptyItems().forEach(s -> out.add(s.copy()));
-        return out;
-    }
-
     /** True if the customer still waits for this item (on a tray: for one of its dishes). Works on both sides; the client only compares the item type. */
     public boolean wants(ItemStack held) {
         if (getState() != State.WAITING_FOOD || held.isEmpty()) return false;
-        if (held.getItem() instanceof TrayItem) return trayDishes(held).stream().anyMatch(this::wants);
+        if (held.getItem() instanceof TrayItem) return TrayItem.dishes(held).stream().anyMatch(this::wants);
         if (level().isClientSide) return getOrder().stream().anyMatch(s -> ItemStack.isSameItem(s, held));
         return wanted.stream().anyMatch(l -> l.matches(held));
     }
@@ -421,8 +412,9 @@ public class Customer extends PathfinderMob {
      */
     public boolean deliver(Player player, ItemStack held) {
         if (held.getItem() instanceof TrayItem) {
+            TrayItem.returnOverflow(player, held);
             if (!wants(held)) return false;
-            List<ItemStack> dishes = trayDishes(held), left = new ArrayList<>();
+            List<ItemStack> dishes = TrayItem.dishes(held), left = new ArrayList<>();
             for (ItemStack dish : dishes) {
                 if (wants(dish)) serve(player, dish); else left.add(dish);
             }

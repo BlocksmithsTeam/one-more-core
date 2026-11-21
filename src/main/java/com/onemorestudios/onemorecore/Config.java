@@ -56,7 +56,9 @@ public class Config {
             .comment("Ticks a customer waits for the food after the order is taken.")
             .defineInRange("foodPatienceTicks", 6000, 20, 72000);
     static final ModConfigSpec.IntValue EAT_TICKS = B.defineInRange("eatTicks", 200, 0, 72000);
-    static final ModConfigSpec.IntValue MAX_ORDER_ITEMS = B.defineInRange("maxOrderItems", 2, 1, 6);
+    static final ModConfigSpec.IntValue MAX_ORDER_ITEMS = B
+            .comment("Maximum base order size before guest preferences, capped at three dishes per customer.")
+            .defineInRange("maxOrderItems", 2, 1, 6);
     static final ModConfigSpec.IntValue MAX_TIP = B
             .comment("Maximum tip as a percentage of the order price. The tip scales with the patience that is left.")
             .defineInRange("maxTipPercent", 50, 0, 1000);

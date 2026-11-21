@@ -21,7 +21,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * Loaded only when Diegesis is present. The tray up close: drag dishes from the inventory onto it and back (its six
+ * Loaded only when Diegesis is present. The tray up close: drag dishes from the inventory onto it and back (its three
  * places are the tray's own slots). The order rail up close: click a ticket to take a copy of it.
  */
 public final class KitchenStations {

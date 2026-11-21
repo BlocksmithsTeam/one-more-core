@@ -1,5 +1,7 @@
 package com.onemorestudios.onemorecore;
 
+import javax.annotation.Nullable;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -8,6 +10,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -80,6 +83,28 @@ public class TrayBlock extends Block implements EntityBlock {
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
         return new TrayBlockEntity(pos, state);
+    }
+
+    @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+        if (level.isClientSide || !(level.getBlockEntity(pos) instanceof TrayBlockEntity tray) || !tray.hasOverflow()) return;
+        Player player = placer instanceof Player p ? p : null;
+        // Creative keeps the tray item. Its overflow still transfers to the player just once.
+        if (player != null && player.hasInfiniteMaterials()) TrayItem.trimOverflow(stack);
+        // NeoForge calls onPlace after a captured placement has been accepted.
+        if (level.captureBlockSnapshots) tray.placingPlayer = player;
+        else tray.releaseOverflow(player);
+    }
+
+    @Override
+    protected void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean moved) {
+        super.onPlace(state, level, pos, oldState, moved);
+        if (!level.restoringBlockSnapshots && level.getBlockEntity(pos) instanceof TrayBlockEntity tray
+                && tray.placingPlayer != null) {
+            Player player = tray.placingPlayer;
+            tray.placingPlayer = null;
+            tray.releaseOverflow(player);
+        }
     }
 
     @Override
