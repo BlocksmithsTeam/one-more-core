@@ -33,7 +33,7 @@ import net.neoforged.neoforge.client.event.RenderPlayerEvent;
 import org.joml.Vector3f;
 
 public final class TrayCarryRenderer {
-    private static final float FIRST_PERSON_SCALE = 0.68f;
+    private static final float FIRST_PERSON_SCALE = 0.85f;
     private static final float THIRD_PERSON_SCALE = 0.72f;
     private static final float ARM_PITCH = -61 * Mth.DEG_TO_RAD;
     private static final float RIM_HEIGHT = 2 / 16f;
