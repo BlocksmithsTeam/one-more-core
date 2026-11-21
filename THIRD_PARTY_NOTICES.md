@@ -2,7 +2,7 @@
 
 ## Yuushya Townscape
 
-- Files: `src/main/resources/assets/onemoreclient/models/block/screen.json`, `screen_tilt1.json`, `screen_tilt2.json`, `src/main/resources/assets/onemoreclient/textures/block/screen.png` (the wall television of the Menu Screen and the Order Screen)
+- Files: `src/main/resources/assets/onemorecore/models/block/screen.json`, `screen_tilt1.json`, `screen_tilt2.json`, `src/main/resources/assets/onemorecore/textures/block/screen.png` (the wall television of the Menu Screen and the Order Screen)
 - Source: https://github.com/XiLaiTL/Yuushya-Townscape (`models/extra_building_material/tv_wall.json`, `textures/0extra_building_material/preview/tv.png`)
 - Changes: texture names, made thin, turned down by 22.5 and 45 degrees
 - License: MIT
@@ -33,7 +33,7 @@ SOFTWARE.
 
 ## Hands On Delight
 
-- Files: `src/main/java/com/onemorestudios/onemoreclient/client/book/` (`RecipeBook`, `RecipeBookModel`, `BookTabs`, `BookMath`, `IconLight`), `src/main/resources/assets/onemoreclient/textures/entity/recipe_book.png`, `recipe_book_paper.png`, `src/main/resources/assets/onemoreclient/models/block/menu_book.json`, `src/main/resources/assets/onemoreclient/textures/block/menu_book.png` (the Menu Book)
+- Files: `src/main/java/com/onemorestudios/onemorecore/client/book/` (`RecipeBook`, `RecipeBookModel`, `BookTabs`, `BookMath`, `IconLight`), `src/main/resources/assets/onemorecore/textures/entity/recipe_book.png`, `recipe_book_paper.png`, `src/main/resources/assets/onemorecore/models/block/menu_book.json`, `src/main/resources/assets/onemorecore/textures/block/menu_book.png` (the Menu Book)
 - Source: https://github.com/Pocky-l/handson-delight, branch 1.21.1 (`common/src/main/java/com/pockyl/handson_delight/client/`, `art/models/recipe_book/recipe_book.bbmodel`, `textures/entity/recipe_book.png`, `textures/entity/recipe_book_paper.png`)
 - Changes: package and ids, the menu instead of recipes (no stars), the entity model also made into a closed block model
 - License: MIT

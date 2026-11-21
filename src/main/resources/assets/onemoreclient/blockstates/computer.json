@@ -1,1 +1,0 @@
-{"variants":{"facing=north":{"model":"onemoreclient:block/computer"},"facing=east":{"model":"onemoreclient:block/computer","y":90},"facing=south":{"model":"onemoreclient:block/computer","y":180},"facing=west":{"model":"onemoreclient:block/computer","y":270}}}

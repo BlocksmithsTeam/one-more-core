@@ -1,0 +1,19 @@
+{
+ "variants": {
+  "facing=north": {
+   "model": "onemorecore:block/menu_book"
+  },
+  "facing=east": {
+   "model": "onemorecore:block/menu_book",
+   "y": 90
+  },
+  "facing=south": {
+   "model": "onemorecore:block/menu_book",
+   "y": 180
+  },
+  "facing=west": {
+   "model": "onemorecore:block/menu_book",
+   "y": 270
+  }
+ }
+}
