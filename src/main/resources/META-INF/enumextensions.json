@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "enum": "net/minecraft/client/model/HumanoidModel$ArmPose",
+      "name": "ONEMORECORE_TRAY_CARRY",
+      "constructor": "(ZLnet/neoforged/neoforge/client/IArmPoseTransformer;)V",
+      "parameters": {
+        "class": "com/onemorestudios/onemorecore/client/TrayCarryRenderer",
+        "field": "TRAY_POSE"
+      }
+    }
+  ]
+}
