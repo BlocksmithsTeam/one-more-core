@@ -37,7 +37,7 @@ public final class TrayCarryRenderer {
     private static final float THIRD_PERSON_SCALE = 0.72f;
     private static final float ARM_PITCH = -61 * Mth.DEG_TO_RAD;
     private static final float RIM_HEIGHT = 2 / 16f;
-    private static final float GRIP_X = 7.5f / 16;
+    private static final float GRIP_X = 9 / 16f;
     private static final float HAND_Y = 9 / 16f;
 
     public static final EnumProxy<HumanoidModel.ArmPose> TRAY_POSE = new EnumProxy<>(HumanoidModel.ArmPose.class,
@@ -251,6 +251,8 @@ public final class TrayCarryRenderer {
             Vector3f rightGrip = grip(model.rightArm, -center);
             Vector3f leftGrip = grip(model.leftArm, center);
             pose.pushPose();
+            // Center the tray between the hands. At this scale the handles sit 6.48 model pixels out,
+            // inside the grip of both the regular and slim arms.
             pose.translate((rightGrip.x + leftGrip.x) * 0.5f, (rightGrip.y + leftGrip.y) * 0.5f
                     + RIM_HEIGHT * THIRD_PERSON_SCALE - 0.025f, (rightGrip.z + leftGrip.z) * 0.5f);
             // Model coordinates are down-positive and mirrored relative to block coordinates.

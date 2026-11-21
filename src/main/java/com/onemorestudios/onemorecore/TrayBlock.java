@@ -38,13 +38,11 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 public class TrayBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
     private static final VoxelShape[] SHAPES = BoxShapes.byFacing(
-            new double[] {1, 0, 2, 15, 1, 14},
-            new double[] {1, 1, 2, 15, 2, 3},
-            new double[] {1, 1, 13, 15, 2, 14},
-            new double[] {1, 1, 3, 2, 2, 13},
-            new double[] {14, 1, 3, 15, 2, 13},
-            new double[] {0, 1, 5, 1, 2, 11},
-            new double[] {15, 1, 5, 16, 2, 11});
+            new double[] {0, 0, 2, 16, 1, 14},
+            new double[] {0, 1, 2, 16, 2, 3},
+            new double[] {0, 1, 13, 16, 2, 14},
+            new double[] {0, 1, 3, 0.5, 2, 13},
+            new double[] {15.5, 1, 3, 16, 2, 13});
 
     public TrayBlock(Properties properties) {
         super(properties);

@@ -35,9 +35,9 @@ import net.minecraft.world.item.component.ItemContainerContents;
 public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     static final RenderType PAPER = RenderType.entityCutout(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/block/ticket_paper.png"));
     /** Places of the dishes on the tray bed, in pixels of a tray that faces north. */
-    private static final float[][] SPOTS = {{4, 8}, {8, 8}, {12, 8}};
+    private static final float[][] SPOTS = {{3, 8}, {8, 8}, {13, 8}};
     private static final float BED_HEIGHT = 1 / 16f;
-    private static final float SPOT_WIDTH = 4 / 16f;
+    private static final float SPOT_WIDTH = 5 / 16f;
 
     public TrayRenderer(BlockEntityRendererProvider.Context context) {}
 
