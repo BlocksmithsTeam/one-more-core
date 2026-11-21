@@ -1,4 +1,4 @@
-# One More Client
+# One More Core
 
 Restaurant customers for Minecraft 1.21.1 (NeoForge). Customers arrive each day, order food, wait, eat and pay.
 The mod does not add food. It works with the items of any mod.
@@ -53,13 +53,13 @@ The order goes into this container. If the container is full or gone, the items 
 
 ## Configuration
 
-- `config/onemoreclient-common.toml`: currency item, patience, customer count, group size and chance, dirt, tip, seat heights, food display, shop delivery time, computer apps (`appMenu`, `appShop`, `appManager`, `appUpgrades`). The default currency is the mod's coin.
+- `config/onemorecore-common.toml`: currency item, patience, customer count, group size and chance, dirt, tip, seat heights, food display, shop delivery time, computer apps (`appMenu`, `appShop`, `appManager`, `appUpgrades`). The default currency is the mod's coin.
 - `lostCustomerPenalty`: money lost per customer who leaves without food. Default: 0 (off). The register stays at or above 0.
 - `readyCountdownTicks`: ticks between "everyone is ready" and the start of the day, when more than one player is in the area. Default: 60. 0 starts at once.
 - `maxLostPerDay`: lost customers that fail the day. Default: 0 (off). A failed day repeats; earned money stays.
 - `screenBlocks`: televisions of other mods, `"mod:block=x0,y0,x1,y1,z,flip"`: the picture's corners and plane in model pixels of the block facing south, and `flip = 1` when the picture is on the side opposite to the block's facing.
-- `config/onemoreclient/menu.json`: the orderable items. `/onemoreclient reload` reads it again.
-- `config/onemoreclient/shop.json`: the items of the Shop app. `/onemoreclient reload` reads it again.
+- `config/onemorecore/menu.json`: the orderable items. `/onemorecore reload` reads it again.
+- `config/onemorecore/shop.json`: the items of the Shop app. `/onemorecore reload` reads it again.
 
 ```json
 [
@@ -70,7 +70,7 @@ The order goes into this container. If the container is full or gone, the items 
 ```
 
 `item` is an item id, a `#tag`, or a full item stack with components. `match` is `ignore` (default) or `exact` (components must be equal).
-An entry with `cost` is bought with `/onemoreclient unlock <id>` or in the Menu app; the money comes from the register. `category` (`main`, `drink`, `starter`, `dessert`) is optional; without it the kind comes from the item.
+An entry with `cost` is bought with `/onemorecore unlock <id>` or in the Menu app; the money comes from the register. `category` (`main`, `drink`, `starter`, `dessert`) is optional; without it the kind comes from the item.
 
 Kaleidoscope Cookery chairs, stools, benches and tables use the furniture tags shipped with this mod.
 Kaleidoscope Tavern tables and bar counters also work as serving surfaces.
@@ -92,7 +92,7 @@ For Kaleidoscope food, the `kaleidoscope_cookery:quality` component uses names s
 
 Without setup, customers use the default skins and have no name.
 
-- `skinNames` in `config/onemoreclient-common.toml` is a list of Minecraft account names, for example `["Notch", "jeb_"]`. A customer gets the skin of one account. The account name is shown above the customer.
+- `skinNames` in `config/onemorecore-common.toml` is a list of Minecraft account names, for example `["Notch", "jeb_"]`. A customer gets the skin of one account. The account name is shown above the customer.
 - Streamers: set `chatPlatform` to `"twitch"`, `"kick"` or `"youtube"` and `chatChannel` to the channel name (YouTube: the channel handle, `@name`, or the video id of the stream). Kick and YouTube have no public chat API for this; the mod reads them like their web pages do, which can stop working when they change. A viewer writes `!omc <Minecraft name>` in the chat. A customer gets the skin of that account and the chat name of the viewer. Each viewer has one entry; a new command replaces it. `skinPoolSize` limits the number of viewers, and `chatCommand` changes the command.
 
 The mod only reads the chat. It needs no login and no token, and it sends nothing. Restart the world or the server after you change the chat settings.
@@ -101,7 +101,7 @@ Each client downloads the skins from the Minecraft skin servers. Only Twitch is 
 
 ## Compatibility
 
-Seats and serving surfaces are block tags: `onemoreclient:seats` and `onemoreclient:serving_surfaces`.
+Seats and serving surfaces are block tags: `onemorecore:seats` and `onemorecore:serving_surfaces`.
 Add blocks of other mods with a datapack. Entries for several furniture mods are included.
 
 ## License

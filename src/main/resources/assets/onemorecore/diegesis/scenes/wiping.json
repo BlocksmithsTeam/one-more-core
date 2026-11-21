@@ -1,0 +1,122 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Pocky-l/diegesis/1.21.1/docs/schema/scene.schema.json",
+  "camera": {
+    "position": [
+      8,
+      37,
+      -3
+    ],
+    "target": [
+      8,
+      16,
+      8
+    ],
+    "fov": 48,
+    "neighbors": {
+      "enabled": false
+    }
+  },
+  "work_plane": 16,
+  "interface": {
+    "inventory_panel": false,
+    "hide_player": true,
+    "carry_margin": 0,
+    "shadows": false
+  },
+  "nodes": [
+    {
+      "id": "table",
+      "pos": [
+        0,
+        16,
+        0
+      ],
+      "collider": {
+        "from": [
+          0,
+          -16,
+          0
+        ],
+        "to": [
+          16,
+          16,
+          16
+        ]
+      },
+      "trigger": true
+    },
+    {
+      "id": "cloth",
+      "pos": [
+        8,
+        16.1,
+        2
+      ],
+      "tooltip": "onemorecore.wiping.cloth",
+      "collider": {
+        "from": [
+          -3,
+          0,
+          -3
+        ],
+        "to": [
+          3,
+          2,
+          3
+        ]
+      },
+      "grabbable": {
+        "lift": 0.15,
+        "sway": 0.12,
+        "grip": [
+          0,
+          0,
+          0
+        ],
+        "contact": {
+          "from": [
+            -3,
+            0,
+            -3
+          ],
+          "to": [
+            3,
+            1,
+            3
+          ]
+        }
+      },
+      "children": [
+        {
+          "id": "cloth_model",
+          "visual": {
+            "model": "onemorecore:diegesis/cloth"
+          },
+          "pickable": false
+        }
+      ]
+    },
+    {
+      "id": "coins",
+      "pos": [
+        11,
+        16,
+        11
+      ],
+      "tooltip": "onemorecore.wiping.coins",
+      "collider": {
+        "from": [
+          -4,
+          0,
+          -4
+        ],
+        "to": [
+          4,
+          3,
+          4
+        ]
+      }
+    }
+  ],
+  "idle_visible": false
+}
