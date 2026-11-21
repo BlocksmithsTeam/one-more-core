@@ -129,9 +129,10 @@ public class MenuBoardBlockEntity extends BlockEntity {
         for (Tag t : tag.getList("lines", Tag.TAG_COMPOUND)) {
             if (out.size() >= MAX_ROWS) break;
             CompoundTag c = (CompoundTag) t;
+            ListTag stacks = c.getList("items", Tag.TAG_COMPOUND);
+            if (stacks.size() > Restaurant.MAX_ORDER_ITEMS) continue;
             List<ItemStack> items = new ArrayList<>();
-            for (Tag stack : c.getList("items", Tag.TAG_COMPOUND)) {
-                if (items.size() >= Restaurant.MAX_COMBO_DISHES) break;
+            for (Tag stack : stacks) {
                 items.add(ItemStack.parseOptional(registries, (CompoundTag) stack));
             }
             if (!items.isEmpty()) out.add(new Line(c.getString("id"), c.getString("kind"), items, c.getInt("price")));

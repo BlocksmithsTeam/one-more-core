@@ -30,6 +30,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -383,10 +384,13 @@ public class Restaurant {
         return true;
     }
 
-    /** Most combos of one restaurant, and most dishes in one combo. */
-    static final int MAX_COMBOS = 16, MAX_COMBO_DISHES = 4;
+    /** Every customer's order must fit on one tray. */
+    public static final int MAX_ORDER_ITEMS = TrayBlockEntity.SIZE;
+    static final int MAX_COMBOS = 16;
+    private static final int LEGACY_COMBO_PLACES = 4;
+    static final int COMBO_PRICE_MULTIPLIER = 4;
 
-    /** Result of {@link #addCombo}. */
+    /** Result of {@link #saveCombo}. */
     public enum AddCombo { OK, DISHES, PRICE, FULL }
 
     /** The kinds a combo place can ask for as a whole ("kind:drink": any drink on the menu). */
@@ -397,19 +401,22 @@ public class Restaurant {
         return slot.startsWith("kind:") && KINDS.contains(slot.substring(5)) ? slot.substring(5) : null;
     }
 
-    /**
-     * Adds a combo of 2 to MAX_COMBO_DISHES places, with a price from 1 to maxDishPrice times the places. A place is a dish
-     * of this restaurant or a whole kind ("kind:drink"); a dish is in a combo at most once.
-     */
-    AddCombo addCombo(List<String> ids, int price) {
-        List<String> dishIds = ids.stream().filter(id -> slotKind(id) == null).toList();
-        if (ids.size() < 2 || ids.size() > MAX_COMBO_DISHES || dishIds.stream().distinct().count() != dishIds.size()
-                || dishIds.stream().anyMatch(id -> dish(id) == null)) return AddCombo.DISHES;
-        if (price < 1 || price > Config.MAX_DISH_PRICE.get() * MAX_COMBO_DISHES) return AddCombo.PRICE;
-        if (combos.size() >= MAX_COMBOS) return AddCombo.FULL;
-        int n = 1;
-        while (combo("combo:" + n) != null) n++;
-        combos.add(new Combo("combo:" + n, List.copyOf(ids), price));
+    /** Creates a combo, or replaces the places and price of an existing combo. */
+    AddCombo saveCombo(String id, List<String> places, int price) {
+        List<String> dishIds = places.stream().filter(place -> slotKind(place) == null).toList();
+        if (places.size() < 2 || places.size() > MAX_ORDER_ITEMS || dishIds.stream().distinct().count() != dishIds.size()
+                || dishIds.stream().anyMatch(dishId -> dish(dishId) == null)) return AddCombo.DISHES;
+        if (price < 1 || price > Config.MAX_DISH_PRICE.get() * COMBO_PRICE_MULTIPLIER) return AddCombo.PRICE;
+        if (id != null) {
+            Combo existing = combo(id);
+            if (existing == null) return AddCombo.DISHES;
+            combos.set(combos.indexOf(existing), new Combo(id, List.copyOf(places), price));
+        } else {
+            if (combos.size() >= MAX_COMBOS) return AddCombo.FULL;
+            int n = 1;
+            while (combo("combo:" + n) != null) n++;
+            combos.add(new Combo("combo:" + n, List.copyOf(places), price));
+        }
         owner.setDirty();
         return AddCombo.OK;
     }
@@ -426,7 +433,7 @@ public class Restaurant {
     }
 
     boolean setComboPrice(String id, int price) {
-        if (price < 1 || price > Config.MAX_DISH_PRICE.get() * MAX_COMBO_DISHES) return false;
+        if (price < 1 || price > Config.MAX_DISH_PRICE.get() * COMBO_PRICE_MULTIPLIER) return false;
         for (int i = 0; i < combos.size(); i++) {
             if (!combos.get(i).id().equals(id)) continue;
             combos.set(i, new Combo(id, combos.get(i).dishes(), price));
@@ -438,6 +445,7 @@ public class Restaurant {
 
     /** A combo can be ordered when every one of its places can: a dish that can be ordered, or a kind with such a dish. */
     boolean canOrder(Combo c) {
+        if (c.dishes().size() < 2 || c.dishes().size() > MAX_ORDER_ITEMS) return false;
         for (String id : c.dishes()) {
             String kind = slotKind(id);
             if (kind != null) {
@@ -880,7 +888,7 @@ public class Restaurant {
         else if (!favourites.isEmpty() && roll < Config.VIP_CHANCE.get() + Config.REGULAR_CHANCE.get()) party.type = Customer.Type.REGULAR;
         for (Seat seat : chosen) {
             List<String> ids = new ArrayList<>();
-            List<Customer.Line> order = makeOrder(level, party.type, ids);
+            List<Customer.Line> order = makeOrder(level.random, party.type, ids);
             if (order.isEmpty()) { toSpawn = 0; break; }
             Customer c = new Customer(OneMoreCore.CUSTOMER.get(), level);
             c.setup(this, seat, order, party);
@@ -920,10 +928,10 @@ public class Restaurant {
         return r <= 1.5 ? 100 : (int) Math.round(100 * Math.max(0, 1 - (r - 1.5)));
     }
 
-    private Menu.Entry weighted(List<Menu.Entry> of, ServerLevel level) {
+    private Menu.Entry weighted(List<Menu.Entry> of, RandomSource random) {
         double total = 0;
         for (Menu.Entry e : of) total += orderWeight(e);
-        double x = level.random.nextDouble() * total;
+        double x = random.nextDouble() * total;
         for (Menu.Entry e : of) if ((x -= orderWeight(e)) < 0) return e;
         return of.get(of.size() - 1);
     }
@@ -932,26 +940,22 @@ public class Restaurant {
         return new Customer.Line(stack, price, e.exact(), tipPercent(e), kind(e).equals("drink"));
     }
 
-    private List<Customer.Line> makeOrder(ServerLevel level) {
-        return makeOrder(level, Customer.Type.NORMAL, new ArrayList<>());
-    }
-
-    private List<Customer.Line> makeOrder(ServerLevel level, Customer.Type type, List<String> ids) {
+    private List<Customer.Line> makeOrder(RandomSource random, Customer.Type type, List<String> ids) {
         List<Menu.Entry> available = dishes().stream().filter(this::canOrder).toList();
         List<Customer.Line> order = new ArrayList<>();
         if (available.isEmpty()) return order;
         // A combo: all its dishes; the combo price is split over the lines (the first line takes the rest of the division).
         List<Combo> orderable = combos.stream().filter(this::canOrder).toList();
-        if (!orderable.isEmpty() && level.random.nextDouble() < Config.COMBO_CHANCE.get()) {
-            Combo c = orderable.get(level.random.nextInt(orderable.size()));
+        if (!orderable.isEmpty() && random.nextDouble() < Config.COMBO_CHANCE.get()) {
+            Combo c = orderable.get(random.nextInt(orderable.size()));
             int share = c.price() / c.dishes().size(), rest = c.price() - share * c.dishes().size();
             for (int i = 0; i < c.dishes().size(); i++) {
                 String kind = slotKind(c.dishes().get(i));
                 // A kind place: one dish of that kind, chosen like a single order (prices weigh in), not one already taken.
                 Menu.Entry e = kind == null ? dish(c.dishes().get(i))
                         : weighted(ofKind(kind).stream().filter(x -> !ids.contains(x.id())).toList().isEmpty() ? ofKind(kind)
-                                : ofKind(kind).stream().filter(x -> !ids.contains(x.id())).toList(), level);
-                ItemStack stack = e.pick(level.random);
+                                : ofKind(kind).stream().filter(x -> !ids.contains(x.id())).toList(), random);
+                ItemStack stack = e.pick(random);
                 if (stack.isEmpty()) return new ArrayList<>();
                 order.add(new Customer.Line(stack, share + (i == 0 ? rest : 0), e.exact(), 100, kind(e).equals("drink")));
                 ids.add(e.id());
@@ -963,24 +967,30 @@ public class Restaurant {
         for (Menu.Entry e : available) byKind.computeIfAbsent(kind(e), k -> new ArrayList<>()).add(e);
         List<String> kinds = new ArrayList<>(byKind.keySet());
         // A main dish comes first when there is one; the other kinds in random order.
-        Util.shuffle(kinds, level.random);
+        Util.shuffle(kinds, random);
         if (kinds.remove("main")) kinds.add(0, "main");
-        int n = Math.min(kinds.size(), 1 + level.random.nextInt(Config.MAX_ORDER_ITEMS.get()));
+        int n = Math.min(kinds.size(), 1 + random.nextInt(Math.min(MAX_ORDER_ITEMS, Config.MAX_ORDER_ITEMS.get())));
         List<String> chosen = new ArrayList<>(kinds.subList(0, n));
         // A family takes a dessert too.
-        if (type == Customer.Type.FAMILY && byKind.containsKey("dessert") && !chosen.contains("dessert")) chosen.add("dessert");
+        if (type == Customer.Type.FAMILY && byKind.containsKey("dessert") && !chosen.contains("dessert")) {
+            if (chosen.size() == MAX_ORDER_ITEMS) chosen.removeLast();
+            chosen.add("dessert");
+        }
         // A regular orders one of its favourites.
         Menu.Entry favourite = null;
         if (type == Customer.Type.REGULAR) {
             List<Menu.Entry> fav = available.stream().filter(e -> favourites.contains(e.id())).toList();
             if (!fav.isEmpty()) {
-                favourite = fav.get(level.random.nextInt(fav.size()));
-                if (!chosen.contains(kind(favourite))) chosen.add(0, kind(favourite));
+                favourite = fav.get(random.nextInt(fav.size()));
+                if (!chosen.contains(kind(favourite))) {
+                    if (chosen.size() == MAX_ORDER_ITEMS) chosen.removeLast();
+                    chosen.addFirst(kind(favourite));
+                }
             }
         }
         for (String k : chosen) {
-            Menu.Entry e = favourite != null && kind(favourite).equals(k) ? favourite : weighted(byKind.get(k), level);
-            ItemStack stack = e.pick(level.random);
+            Menu.Entry e = favourite != null && kind(favourite).equals(k) ? favourite : weighted(byKind.get(k), random);
+            ItemStack stack = e.pick(random);
             if (stack.isEmpty()) continue;
             order.add(line(e, stack, e.price()));
             ids.add(e.id());
@@ -1442,7 +1452,7 @@ public class Restaurant {
             CompoundTag c = (CompoundTag) t;
             List<String> ids = new ArrayList<>();
             for (Tag d : c.getList("dishes", Tag.TAG_STRING)) ids.add(d.getAsString());
-            if (ids.size() >= 2 && ids.size() <= MAX_COMBO_DISHES && r.combos.size() < MAX_COMBOS)
+            if (ids.size() >= 2 && ids.size() <= LEGACY_COMBO_PLACES && r.combos.size() < MAX_COMBOS)
                 r.combos.add(new Combo(c.getString("id"), List.copyOf(ids), Math.max(1, c.getInt("price"))));
         }
         for (long p : tag.getLongArray("tables_off")) r.offTables.add(BlockPos.of(p));

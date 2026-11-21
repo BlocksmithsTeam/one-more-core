@@ -47,13 +47,14 @@ public class ComputerScreen extends Screen {
     private List<String> building;
     /** The price of the combo being made; -1 follows the suggested price until the player changes it. */
     private int comboPrice = -1;
+    private String editingCombo;
     /** The shop's cart: entry id and count, in the order added. */
     private final java.util.LinkedHashMap<String, Integer> cart = new java.util.LinkedHashMap<>();
     private static long nextCheckoutId;
     private long pendingCheckout;
     /** The shop shows the cart instead of the catalog. */
     private boolean cartOpen;
-    private static final int SIDEBAR = 62, ROW = 22, COMBO_PLACES = 4;
+    private static final int SIDEBAR = 62, ROW = 22, COMBO_PLACES = Restaurant.MAX_ORDER_ITEMS;
     private static final String[] FILTERS = {"all", "main", "drink", "starter", "dessert", "combos"};
     private static final int CHIPS = 13;
     private double scroll;
@@ -235,7 +236,7 @@ public class ComputerScreen extends Screen {
         rounded(g, wx, wy, ww, wh, WINDOW);
         g.fill(wx + 1, wy, wx + ww - 1, wy + TITLE, TITLE_BAR);
         g.blitSprite(sprite("app_" + KEYS[i]), wx + 4, wy + 2, 14, 14);
-        Component title = adding ? text("title.add") : building != null ? text("title.combo") : text("title." + KEYS[i]);
+        Component title = adding ? text("title.add") : building != null ? text(editingCombo == null ? "title.combo" : "combo_edit") : text("title." + KEYS[i]);
         g.drawString(font, title, wx + 22, wy + 5, WHITE, false);
         // The register, at the right of the title bar.
         String money = String.valueOf(state.balance());
@@ -488,18 +489,23 @@ public class ComputerScreen extends Screen {
     /** The combos as rows: their places joined by "+", the price (- and +), a cross that removes one, and a row that makes a new one. */
     private ItemStack drawCombos(GuiGraphics g, int mouseX, int mouseY) {
         List<Computer.ComboLine> combos = state.combos();
-        int h = ROW + 2, count = combos.size() + 1;
-        scroll = Mth.clamp(scroll, 0, Math.max(0, count * (h + 2) - 2 - ch));
+        int count = combos.size() + 1;
+        int height = count * (ROW + 4) + 13 * (int) combos.stream().filter(c -> c.dishes().size() > COMBO_PLACES).count();
+        scroll = Mth.clamp(scroll, 0, Math.max(0, height - 2 - ch));
         ItemStack hovered = ItemStack.EMPTY;
+        int top = cy - (int) scroll;
         for (int i = 0; i < count; i++) {
-            int x = cx, y = cy + i * (h + 2) - (int) scroll, w = cw;
+            boolean oversized = i < combos.size() && combos.get(i).dishes().size() > COMBO_PLACES;
+            int h = ROW + 2 + (oversized ? 13 : 0);
+            int x = cx, y = top, w = cw;
+            top += h + 2;
             if (y + h < cy || y > cy + ch) continue;
             boolean over = inside(mouseX, mouseY, x, y, w, h);
             if (i == combos.size()) {
                 rounded(g, x, y, w, h, over ? CARD_HOVER : 0xFF20252C);
                 g.blitSprite(sprite("add"), x + 5, y + 6, 12, 12);
                 g.drawString(font, text("combo_new"), x + 24, y + 8, over ? WHITE : GREY, false);
-                clipHit(x, y, w, h, () -> { building = new ArrayList<>(); comboPrice = -1; scroll = 0; search.setValue(""); });
+                clipHit(x, y, w, h, () -> { building = new ArrayList<>(); editingCombo = null; comboPrice = -1; scroll = 0; search.setValue(""); });
                 continue;
             }
             Computer.ComboLine c = combos.get(i);
@@ -517,8 +523,19 @@ public class ComputerScreen extends Screen {
             button(g, right - 27 - pw, y + 6, 11, 12, Component.literal("-"), OFF, CARD_HOVER, c.price() > 1, mouseX, mouseY,
                     () -> send(Computer.SET_COMBO_PRICE, c.id() + "," + Math.max(1, c.price() - step())));
             if (over) button(g, x + w - 12, y + 1, 9, 9, Component.literal("\u00d7"), 0xAA000000, RED, true, mouseX, mouseY, () -> send(Computer.REMOVE_COMBO, c.id()));
-            // A combo that cannot be ordered now (a dish off the menu) is dimmed.
             if (!c.orderable()) rounded(g, x, y, w, h, 0x88151A20);
+            if (oversized) {
+                g.drawString(font, text("combo_too_large"), x + 5, y + ROW + 3, YELLOW, false);
+                Component edit = text("combo_edit");
+                int editWidth = font.width(edit) + 10;
+                button(g, right - editWidth, y + ROW, editWidth, 13, edit, OFF, CARD_HOVER, true, mouseX, mouseY, () -> {
+                    building = new ArrayList<>(c.dishes());
+                    editingCombo = c.id();
+                    comboPrice = c.price();
+                    scroll = 0;
+                    search.setValue("");
+                });
+            }
         }
         return hovered;
     }
@@ -534,19 +551,24 @@ public class ComputerScreen extends Screen {
         // Left pane.
         rounded(g, cx, cy, lw, ch, 0xFF20252C);
         int y = cy + 4;
+        boolean oversized = building.size() > COMBO_PLACES;
+        int placeSpace = ch - (oversized ? 26 : 42);
+        boolean compact = oversized || building.size() * 30 - 8 > placeSpace;
+        int placeHeight = compact ? Mth.clamp(placeSpace / building.size(), 16, 20) : 20;
         for (int k = 0; k < building.size(); k++) {
             String slot = building.get(k);
-            boolean over = inside(mouseX, mouseY, cx + 3, y, lw - 6, 20);
-            rounded(g, cx + 3, y, lw - 6, 20, over ? CARD_HOVER : CARD);
-            slotChip(g, slot, cx + 6, y + 2);
-            if (inside(mouseX, mouseY, cx + 6, y + 2, 16, 16)) hovered = slotIcon(slot);
-            g.drawString(font, font.plainSubstrByWidth(slotName(slot).getString(), lw - 46), cx + 26, y + 6, WHITE, false);
+            boolean over = inside(mouseX, mouseY, cx + 3, y, lw - 6, placeHeight);
+            rounded(g, cx + 3, y, lw - 6, placeHeight, over ? CARD_HOVER : CARD);
+            int iconY = y + (placeHeight - 16) / 2;
+            slotChip(g, slot, cx + 6, iconY);
+            if (inside(mouseX, mouseY, cx + 6, iconY, 16, 16)) hovered = slotIcon(slot);
+            g.drawString(font, font.plainSubstrByWidth(slotName(slot).getString(), lw - 46), cx + 26, iconY + 4, WHITE, false);
             int index = k;
-            button(g, cx + lw - 16, y + 5, 10, 10, Component.literal("\u00d7"), 0xAA000000, RED, true, mouseX, mouseY, () -> {
+            button(g, cx + lw - 16, iconY + 3, 10, 10, Component.literal("\u00d7"), 0xAA000000, RED, true, mouseX, mouseY, () -> {
                 if (building == builder && index < builder.size() && slot.equals(builder.get(index))) builder.remove(index);
             });
-            y += 22;
-            if (k < building.size() - 1) { g.drawCenteredString(font, "+", cx + lw / 2, y - 1, GREY); y += 8; }
+            y += placeHeight + (compact ? 0 : 2);
+            if (!compact && k < building.size() - 1) { g.drawCenteredString(font, "+", cx + lw / 2, y - 1, GREY); y += 8; }
         }
         // The hint, when it fits above the price row.
         if (building.size() < COMBO_PLACES && y + 16 <= cy + ch - 38) {
@@ -558,7 +580,7 @@ public class ComputerScreen extends Screen {
         int p = comboPrice < 0 ? suggested : comboPrice;
         // The price row under the places, and the Create button at the bottom.
         int by = Math.min(y + 2, cy + ch - 38);
-        if (building.size() >= 2) {
+        if (!oversized && building.size() >= 2) {
             g.drawString(font, text("combo_price"), cx + 6, by + 3, GREY, false);
             int pw = font.width(String.valueOf(p)) + 12;
             button(g, cx + lw - 17, by, 11, 12, Component.literal("+"), OFF, CARD_HOVER, true, mouseX, mouseY, () -> {
@@ -569,9 +591,13 @@ public class ComputerScreen extends Screen {
                 if (building == builder && builder.size() >= 2) comboPrice = Math.max(1, p - step());
             });
         }
-        button(g, cx + 3, cy + ch - 20, lw - 6, 16, text("combo_create"), GREEN, GREEN_HOVER, building.size() >= 2, mouseX, mouseY, () -> {
-            if (building != builder || builder.size() < 2) return;
-            send(Computer.ADD_COMBO, String.join(";", builder) + "," + p);
+        boolean canSave = building.size() >= 2 && building.size() <= COMBO_PLACES;
+        button(g, cx + 3, cy + ch - 20, lw - 6, 16, text(editingCombo == null ? "combo_create" : "combo_save"),
+                GREEN, GREEN_HOVER, canSave, mouseX, mouseY, () -> {
+            if (building != builder || builder.size() < 2 || builder.size() > COMBO_PLACES) return;
+            String data = String.join(";", builder) + "," + p;
+            if (editingCombo == null) send(Computer.ADD_COMBO, data);
+            else send(Computer.EDIT_COMBO, editingCombo + "," + data);
             building = null;
             filter = "combos";
         });
