@@ -25,8 +25,9 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
- * A chalkboard on a wall that shows the menu of the restaurant: the dishes that are on the menu, by kind, with their
- * prices, and the combos. The board is two blocks wide and one and a half high, centred on its block.
+ * A TV on a wall (the Menu Screen; the Order Screen and the Monitor build on it). The TV is 3 blocks wide and 2 high, its block
+ * the middle one at the bottom; it keeps the other 5 cells with parts (ScreenPartBlock). The Monitor is one block. What it shows
+ * is the restaurant's (ScreenSettings): a new screen shows the menu (the Order Screen: the orders).
  */
 public class MenuBoardBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
@@ -55,21 +56,53 @@ public class MenuBoardBlock extends Block implements EntityBlock {
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         Direction face = context.getClickedFace();
         float pitch = context.getPlayer() == null ? 0 : context.getPlayer().getXRot();
-        return defaultBlockState().setValue(FACING, face.getAxis().isHorizontal() ? face : context.getHorizontalDirection().getOpposite())
+        BlockState state = defaultBlockState().setValue(FACING, face.getAxis().isHorizontal() ? face : context.getHorizontalDirection().getOpposite())
                 .setValue(TILT, tiltFor(pitch));
+        // A TV needs its whole space.
+        if (wide()) for (BlockPos cell : partCells(context.getClickedPos(), state.getValue(FACING)))
+            if (context.getLevel().isOutsideBuildHeight(cell) || !context.getLevel().getWorldBorder().isWithinBounds(cell)
+                    || !context.getLevel().getBlockState(cell).canBeReplaced(context)) return null;
+        return state;
+    }
+
+    /** 3 x 2 blocks; the Monitor is one. */
+    public boolean wide() {
+        return true;
+    }
+
+    /** What a new screen of this block shows. */
+    public int defaultMode() {
+        return Restaurant.SCREEN_MENU;
+    }
+
+    /** The cells of a wide screen besides its own block: one to each side along the wall, and the row above. */
+    public static java.util.List<BlockPos> partCells(BlockPos pos, Direction facing) {
+        Direction side = facing.getClockWise();
+        java.util.List<BlockPos> cells = new java.util.ArrayList<>();
+        for (int up = 0; up <= 1; up++)
+            for (int k = -1; k <= 1; k++) if (up != 0 || k != 0) cells.add(pos.relative(side, k).above(up));
+        return cells;
+    }
+
+    @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, net.minecraft.world.entity.LivingEntity placer, net.minecraft.world.item.ItemStack stack) {
+        if (level.isClientSide || !wide()) return;
+        for (BlockPos cell : partCells(pos, state.getValue(FACING))) level.setBlock(cell, ScreenPartBlock.towards(cell, pos), 3);
+    }
+
+    /** The TV goes with its parts. */
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
+        if (!level.isClientSide && wide() && !newState.is(this))
+            for (BlockPos cell : partCells(pos, state.getValue(FACING)))
+                if (level.getBlockState(cell).is(OneMoreCore.SCREEN_PART.get())
+                        && ScreenPartBlock.main(cell, level.getBlockState(cell)).equals(pos)) level.removeBlock(cell, false);
+        super.onRemove(state, level, pos, newState, moved);
     }
 
     /** Looking up more than 35 degrees: 45; more than 12: 22.5; else straight. */
     static int tiltFor(float pitch) {
         return pitch < -35 ? 2 : pitch < -12 ? 1 : 0;
-    }
-
-    /** Sneak-click with an empty hand: the next tilt. */
-    @Override
-    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (!player.isShiftKeyDown()) return InteractionResult.PASS;
-        if (!level.isClientSide) level.setBlockAndUpdate(pos, state.cycle(TILT));
-        return InteractionResult.sidedSuccess(level.isClientSide);
     }
 
     @Override

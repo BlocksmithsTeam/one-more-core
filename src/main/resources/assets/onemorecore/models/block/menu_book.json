@@ -1,4 +1,5 @@
 {
+ "parent": "block/block",
  "credit": "Recipe book of Hands On Delight by Pocky (MIT)",
  "textures": {
   "book": "onemorecore:block/menu_book",

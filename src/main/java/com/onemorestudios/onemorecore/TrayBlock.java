@@ -77,7 +77,7 @@ public class TrayBlock extends Block implements EntityBlock {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         if (level.isClientSide) return ItemInteractionResult.SUCCESS;
         if (stack.is(OneMoreCore.TICKET.get())) {
-            tray.label = Math.max(0, stack.getOrDefault(OneMoreCore.TABLE.get(), 0));
+            tray.label = TableCards.clean(stack.getOrDefault(OneMoreCore.LABEL.get(), ""));
             tray.changed();
             stack.consume(1, player);
             level.playSound(null, pos, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8f, 1.3f);

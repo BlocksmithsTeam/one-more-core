@@ -22,7 +22,10 @@ public record ScreenClick(BlockPos pos, int index) implements CustomPacketPayloa
 
     static void handle(ScreenClick click, ServerPlayer player) {
         var level = player.serverLevel();
-        if (!level.isLoaded(click.pos) || player.distanceToSqr(Vec3.atCenterOf(click.pos)) > REACH * REACH) return;
+        if (!level.isLoaded(click.pos)) return;
+        ScreenGroups.Group group = ScreenGroups.of(level, click.pos);
+        if (group == null || !group.anchor().equals(click.pos)
+                || group.members().stream().noneMatch(p -> player.distanceToSqr(Vec3.atCenterOf(p)) <= REACH * REACH)) return;
         OrderBoardBlock.giveTicket(level, player, click.pos, OrderBoardBlock.ticketsAt(level, click.pos), click.index);
     }
 
