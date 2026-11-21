@@ -37,22 +37,23 @@ public class RestaurantHud {
 
     private static void render(GuiGraphics g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
-        Status s = Status.client;
-        // The server sends a status every 10 ticks. One second without one: the player left the restaurant.
-        if (s == null || mc.options.hideGui || ComputerCamera.active() || mc.getDebugOverlay().showDebugScreen() || System.currentTimeMillis() - Status.clientTime > 1500) return;
+        if (mc.player == null || mc.options.hideGui || ComputerCamera.active() || mc.getDebugOverlay().showDebugScreen()) return;
+        Status.Received received = Status.near(mc.player.blockPosition(), false);
+        if (received == null) return;
+        Status s = received.status();
         Font font = mc.font;
         Component day = text("day", s.day());
         Component state = s.open() ? text("open").withStyle(ChatFormatting.GREEN) : text("closed").withStyle(ChatFormatting.RED);
         String money = String.valueOf(s.register()), earned = s.open() && s.earned() > 0 ? "+" + s.earned() : "";
         // With a day length: the time of service left (counted on from the last status); otherwise the customers left.
         boolean timed = s.serviceLeft() > 0;
-        long ticks = Math.max(0, s.serviceLeft() - (System.currentTimeMillis() - Status.clientTime) / 50);
+        long ticks = Math.max(0, s.serviceLeft() - (System.currentTimeMillis() - received.time()) / 50);
         String left = timed ? String.format("%d:%02d", ticks / 1200, ticks / 20 % 60) : String.valueOf(s.left());
         String served = String.valueOf(s.served());
         String lost = s.maxLost() > 0 ? s.lost() + "/" + s.maxLost() : String.valueOf(s.lost());
         // Closed and outside the ready panel: one grey line that says what to do.
         Component hint = s.open() || ReadyHud.status() != null ? null
-                : s.readyCount() > 0 ? text("ready", s.readyCount(), s.players().size()) : text("click_sign");
+                : s.readyCheckActive() ? text("ready", s.readyCount(), s.players().size()) : text("click_sign");
 
         // Lines: day and state; when open, the counters; the register; the hint.
         int counters = 3 * 12 + font.width(left) + font.width(served) + font.width(lost) + 2 * 8;

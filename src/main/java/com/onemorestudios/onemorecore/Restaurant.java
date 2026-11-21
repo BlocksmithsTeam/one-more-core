@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.WeakHashMap;
 
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
@@ -33,6 +34,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.neoforged.neoforge.capabilities.Capabilities;
@@ -185,6 +187,7 @@ public class Restaurant {
 
     /** Moves bills into the sign's balance and clears their displays. */
     void settleOnRemoval(ServerLevel level) {
+        clearScreens(level);
         for (BlockPos surface : List.copyOf(coins.keySet())) {
             payRegister(level, coins.remove(surface));
             sendTable(level, surface);
@@ -261,14 +264,20 @@ public class Restaurant {
     int toSpawn, spawnTimer, served, lost, earned;
     long penalties;
     final Set<UUID> ready = new HashSet<>();
+    private static final Map<Player, Integer> LAST_READY_CHANGE = new WeakHashMap<>();
+    private boolean readyCheckActive;
+    private UUID readyInitiator;
     /** Ticks until the day starts, after every player is ready. 0: no countdown. */
     int countdown;
     List<Seat> seats = List.of();
     /** The seats, grouped by table. One party sits at a table. */
     List<List<Seat>> tables = List.of();
+    private final Map<BlockPos, Set<BlockPos>> tableSurfaces = new HashMap<>();
+    private boolean layoutDirty = true;
+    private Set<ChunkPos> loadedLayoutChunks = Set.of();
     /** Group members that wait to walk in. They are in {@link #customers} already. */
     final List<Customer> arriving = new ArrayList<>();
-    int arriveTimer, seatScanTimer;
+    int arriveTimer;
     final List<Customer> customers = new ArrayList<>();
 
     Restaurant(Restaurants owner, BlockPos sign) {
@@ -446,17 +455,25 @@ public class Restaurant {
         return dishes().stream().filter(e -> canOrder(e) && kind(e).equals(kind)).toList();
     }
 
-    /** The serving surfaces that touch the one at pos (one table), inside the area, at most 256. */
+    /** The serving surfaces that touch the one at pos (one table), inside the area. */
     Set<BlockPos> tableAt(ServerLevel level, BlockPos pos) {
+        if (area == null) return new HashSet<>();
+        Set<BlockPos> cached = layoutDirty ? null : tableSurfaces.get(pos);
+        if (cached != null && layoutChunksMatch(level)) return new HashSet<>(cached);
+        return connectedTable(level, area, pos);
+    }
+
+    static Set<BlockPos> connectedTable(Level level, BoundingBox area, BlockPos pos) {
         Set<BlockPos> table = new HashSet<>();
-        if (area == null || !level.getBlockState(pos).is(OneMoreCore.SURFACES)) return table;
+        if (!area.isInside(pos) || !level.isLoaded(pos) || !level.getBlockState(pos).is(OneMoreCore.SURFACES)) return table;
         ArrayDeque<BlockPos> todo = new ArrayDeque<>(List.of(pos.immutable()));
         table.add(pos.immutable());
-        while (!todo.isEmpty() && table.size() < 256) {
+        while (!todo.isEmpty()) {
             BlockPos p = todo.pop();
             for (Direction dir : Direction.Plane.HORIZONTAL) {
                 BlockPos next = p.relative(dir);
-                if (area.isInside(next) && level.getBlockState(next).is(OneMoreCore.SURFACES) && table.add(next)) todo.push(next);
+                if (!table.contains(next) && area.isInside(next) && level.isLoaded(next)
+                        && level.getBlockState(next).is(OneMoreCore.SURFACES) && table.add(next)) todo.push(next);
             }
         }
         return table;
@@ -508,7 +525,12 @@ public class Restaurant {
         return Unlock.OK;
     }
 
-    void setArea(BoundingBox box) { area = box; owner.setDirty(); }
+    void setArea(BoundingBox box) {
+        area = box;
+        invalidateLayout();
+        resetReadyCheck();
+        owner.setDirty();
+    }
     void setSpawn(BlockPos pos) { spawn = pos; owner.setDirty(); }
     void setDelivery(BlockPos pos) { delivery = pos; owner.setDirty(); }
 
@@ -635,30 +657,30 @@ public class Restaurant {
         setReady(level, player, true);
     }
 
-    /** Why the day cannot start, as a lang key suffix, or null. Scans the seats. */
+    /** Why the day cannot start, as a lang key suffix, or null. */
     private String problem(ServerLevel level) {
-        String problem = area == null ? "no_area" : spawn == null ? "no_spawn"
-                : dishes().stream().noneMatch(this::canOrder) ? "no_menu" : null;
-        if (problem == null && (seats = scanSeats(level)).isEmpty()) problem = "no_seats";
-        return problem;
+        if (area == null) return "no_area";
+        if (spawn == null) return "no_spawn";
+        if (dishes().stream().noneMatch(this::canOrder)) return "no_menu";
+        if (scanSeats(level).isEmpty() || Config.DAY_LENGTH.get() == 0 && !hasEnabledTable()) return "no_seats";
+        return null;
     }
 
-    /** True if every player inside the area is ready, or the ready check is off. */
-    private boolean allReady(ServerLevel level) {
-        if (!Config.READY_CHECK.get()) return true;
-        for (ServerPlayer p : level.players()) if (area.isInside(p.blockPosition()) && !ready.contains(p.getUUID())) return false;
-        return true;
+    private List<ServerPlayer> requiredPlayers(ServerLevel level) {
+        BoundingBox near = area.inflatedBy(8);
+        return level.players().stream().filter(p -> area.isInside(p.blockPosition())
+                || p.getUUID().equals(readyInitiator) && near.isInside(p.blockPosition())).toList();
     }
 
-    /**
-     * Marks the player ready or not ready. When every player inside the area is ready, the countdown starts;
-     * the day starts when it ends. A player who is alone starts the day at once. The player who clicks counts even when
-     * outside the area.
-     */
+    /** Marks the player ready or not ready. An outside sign clicker also counts for the check they start. */
     void setReady(ServerLevel level, Player player, boolean on) {
-        if (open) return;
+        UUID id = player.getUUID();
+        if (open || countdown > 0 || ready.contains(id) == on) return;
+        int now = level.getServer().getTickCount();
+        if (now - LAST_READY_CHANGE.getOrDefault(player, now - 10) < 10) return;
+        LAST_READY_CHANGE.put(player, now);
         if (!on) {
-            if (ready.remove(player.getUUID()) && countdown > 0) stopCountdown(level);
+            ready.remove(id);
             return;
         }
         String problem = problem(level);
@@ -666,10 +688,14 @@ public class Restaurant {
             player.displayClientMessage(Component.translatable("onemorecore.open." + problem), true);
             return;
         }
+        if (!readyCheckActive) {
+            readyCheckActive = true;
+            readyInitiator = id;
+        }
         Set<UUID> needed = new HashSet<>();
-        needed.add(player.getUUID());
-        for (ServerPlayer p : level.players()) if (area.isInside(p.blockPosition())) needed.add(p.getUUID());
-        ready.add(player.getUUID());
+        for (ServerPlayer p : requiredPlayers(level)) needed.add(p.getUUID());
+        needed.add(id);
+        ready.add(id);
         ready.retainAll(needed);
         if (Config.READY_CHECK.get() && ready.size() < needed.size()) {
             BoundingBox near = area.inflatedBy(16);
@@ -678,10 +704,15 @@ public class Restaurant {
             level.playSound(null, sign, SoundEvents.NOTE_BLOCK_CHIME.value(), SoundSource.BLOCKS, 1, 1.4f);
             return;
         }
-        if (countdown > 0) return;
-        // Alone, the day starts at once; with others, after a countdown in which a player can still cancel.
         countdown = needed.size() <= 1 ? 0 : Config.READY_COUNTDOWN.get();
         if (countdown == 0) startDay(level);
+    }
+
+    private void resetReadyCheck() {
+        ready.clear();
+        readyCheckActive = false;
+        readyInitiator = null;
+        countdown = 0;
     }
 
     private void stopCountdown(ServerLevel level) {
@@ -692,14 +723,26 @@ public class Restaurant {
         level.playSound(null, sign, SoundEvents.NOTE_BLOCK_BASS.value(), SoundSource.BLOCKS, 1, 0.8f);
     }
 
-    /** One tick of the countdown. It stops when a player inside the area is not ready, and the day starts at 0. */
-    private void tickCountdown(ServerLevel level) {
-        if (!allReady(level)) { stopCountdown(level); return; }
-        if (countdown % 20 == 0) level.playSound(null, sign, SoundEvents.NOTE_BLOCK_HAT.value(), SoundSource.BLOCKS, 1, 1.2f);
-        if (--countdown > 0) return;
+    /** Update the check as players come and go; revalidate the layout before opening. */
+    private void tickReadyCheck(ServerLevel level) {
+        Set<UUID> required = new HashSet<>();
+        for (ServerPlayer p : requiredPlayers(level)) required.add(p.getUUID());
+        if (required.isEmpty()) { resetReadyCheck(); return; }
+        ready.retainAll(required);
+        if (Config.READY_CHECK.get() && ready.size() < required.size()) {
+            if (countdown > 0) stopCountdown(level);
+            return;
+        }
+        if (countdown > 0) {
+            if (countdown % 20 == 0) level.playSound(null, sign, SoundEvents.NOTE_BLOCK_HAT.value(), SoundSource.BLOCKS, 1, 1.2f);
+            if (--countdown > 0) return;
+        } else if (required.size() > 1 && Config.READY_COUNTDOWN.get() > 0) {
+            countdown = Config.READY_COUNTDOWN.get();
+            return;
+        }
         String problem = problem(level);
         if (problem == null) { startDay(level); return; }
-        ready.clear();
+        resetReadyCheck();
         BoundingBox near = area.inflatedBy(16);
         for (ServerPlayer p : level.players())
             if (near.isInside(p.blockPosition())) p.displayClientMessage(Component.translatable("onemorecore.open." + problem), true);
@@ -707,10 +750,7 @@ public class Restaurant {
 
     /** Starts the service. The seats are scanned already. */
     private void startDay(ServerLevel level) {
-        countdown = 0;
-        ready.clear();
-        seatScanTimer = 0;
-        tables = groupTables(level, seats);
+        resetReadyCheck();
         arriving.clear();
         open = true;
         served = lost = earned = 0;
@@ -730,24 +770,35 @@ public class Restaurant {
         serverLevel = level;
         // Hidden chunks can unload entities without calling Customer.remove or a second tracking callback.
         for (Customer c : List.copyOf(customers)) if (c.isRemoved()) c.removeFromRestaurant();
+        if (level.getGameTime() % 10 == 5) sendScreens(level);
         if (!level.isLoaded(sign)) return;
         BlockState state = level.getBlockState(sign);
         if (!state.is(OneMoreCore.OPEN_SIGN)) return;
         recoverInterruptedBills(level);
         tickDeliveries(level);
         if (state.getValue(OpenSignBlock.OPEN) != open) level.setBlockAndUpdate(sign, state.setValue(OpenSignBlock.OPEN, open));
-        if (!open && countdown > 0 && area != null) tickCountdown(level);
+        if (!open && readyCheckActive) tickReadyCheck(level);
         if (area != null && level.getGameTime() % 10 == 0) sendStatus(level);
         if (area != null && level.getGameTime() % 100 == Math.floorMod(sign.asLong(), 100)) numberTables(level);
-        if (area != null && level.getGameTime() % 10 == 5) sendScreens(level);
         if (!open) return;
+        scanSeats(level);
+        if (!hasEnabledTable()) {
+            toSpawn = 0;
+            serviceLeft = 0;
+            interruptedBills.addAll(servedBills.values());
+            servedBills.clear();
+            recoverInterruptedBills(level);
+            endDay(level, false);
+            for (Customer c : List.copyOf(customers)) c.discard();
+            return;
+        }
         if (serviceLeft > 0 && --serviceLeft == 0) {
             // The service is over: no new parties. Parties that are on their way and the customers inside finish, then the day ends.
             toSpawn = 0;
         }
-        if (seatScanTimer > 0) seatScanTimer--;
         if (!arriving.isEmpty() && --arriveTimer <= 0) {
-            level.addFreshEntity(arriving.remove(0));
+            Customer customer = arriving.removeFirst();
+            if (!level.addFreshEntity(customer)) rejectArrival(level, customer);
             arriveTimer = 10;
         }
         if (toSpawn > 0) {
@@ -755,16 +806,26 @@ public class Restaurant {
             int size = 1;
             if (Config.MAX_GROUP.get() > 1 && level.random.nextDouble() < Config.GROUP_CHANCE.get())
                 size = groupSize(level.random.nextDouble(), Config.MAX_GROUP.get());
-            if (spawnParty(level, size) == 0) {
-                if (seatScanTimer == 0) {
-                    seats = scanSeats(level);
-                    tables = groupTables(level, seats);
-                    seatScanTimer = 100;
-                }
-                if (seats.isEmpty() && customers.isEmpty()) toSpawn = 0;
-            } else spawnTimer = nextInterval(level);
+            if (spawnParty(level, size) > 0) spawnTimer = nextInterval(level);
         }
         if (toSpawn == 0 && customers.isEmpty()) endDay(level, false);
+    }
+
+    /** A rejected join never counts as a guest who left without food. */
+    private void rejectArrival(ServerLevel level, Customer customer) {
+        Customer.Party party = customer.party();
+        customers.remove(customer);
+        party.members.remove(customer);
+        if (party.members.isEmpty()) return;
+        Set<BlockPos> table = tableAt(level, party.members.getFirst().getSurface());
+        if (party.members.stream().allMatch(c -> table.contains(c.getSurface()) && isSeat(level, new Seat(c.seat, c.getSurface())))) return;
+        party.settled = true;
+        for (Customer c : List.copyOf(party.members)) {
+            if (arriving.remove(c)) {
+                customers.remove(c);
+                party.members.remove(c);
+            } else c.discard();
+        }
     }
 
     /** Size of a group (2 to max) from a uniform u in [0, 1): size k has weight 2^-(k-2), so pairs are the most common. */
@@ -937,74 +998,107 @@ public class Restaurant {
         List<List<Seat>> free = new ArrayList<>();
         int most = 0;
         long now = level.getGameTime();
+        scanSeats(level);
         for (List<Seat> table : tables) {
-            if (table.stream().anyMatch(s -> customers.stream().anyMatch(c -> s.seat().equals(c.seat)))) continue;
-            if ((!dirt.isEmpty() || !coins.isEmpty()) && tableAt(level, table.get(0).surface()).stream()
-                    .anyMatch(p -> dirt.containsKey(p) || hasTableItems(p))) continue;
-            if (table.stream().anyMatch(s -> offTables.contains(s.surface())
-                    || now - freedAt.getOrDefault(s.surface(), Long.MIN_VALUE / 2) < Config.TABLE_PAUSE.get())) continue;
-            List<Seat> seated = new ArrayList<>(table.stream().filter(s -> isSeat(level, s)).toList());
-            if (seated.isEmpty() || !isTableOn(tableSurfaces(table))) continue;
-            free.add(seated);
-            most = Math.max(most, seated.size());
+            Set<BlockPos> surfaces = tableSurfaces.get(table.getFirst().surface());
+            if (!isTableOn(surfaces) || customers.stream().anyMatch(c -> surfaces.contains(c.getSurface())
+                    || table.stream().anyMatch(s -> s.seat().equals(c.seat)))) continue;
+            if (surfaces.stream().anyMatch(p -> dirt.containsKey(p) || hasTableItems(p)
+                    || now - freedAt.getOrDefault(p, Long.MIN_VALUE / 2) < Config.TABLE_PAUSE.get())) continue;
+            free.add(table);
+            most = Math.max(most, table.size());
         }
         int size = Math.min(wanted, most);
         free.removeIf(t -> t.size() < size);
         if (free.isEmpty()) return List.of();
         int smallest = free.stream().mapToInt(List::size).min().orElseThrow();
         free.removeIf(t -> t.size() != smallest);
-        List<Seat> table = free.get(level.random.nextInt(free.size()));
+        List<Seat> table = new ArrayList<>(free.get(level.random.nextInt(free.size())));
         Util.shuffle(table, level.random);
         return table.subList(0, size);
     }
 
-    private static Set<BlockPos> tableSurfaces(List<Seat> table) {
-        Set<BlockPos> out = new HashSet<>();
-        for (Seat s : table) out.add(s.surface());
-        return out;
+    private boolean hasEnabledTable() {
+        return tables.stream().anyMatch(t -> isTableOn(tableSurfaces.get(t.getFirst().surface())));
     }
 
     private static boolean isSeat(ServerLevel level, Seat s) {
-        return level.getBlockState(s.seat()).is(OneMoreCore.SEATS) && level.getBlockState(s.surface()).is(OneMoreCore.SURFACES);
+        return level.isLoaded(s.seat()) && level.isLoaded(s.surface())
+                && level.getBlockState(s.seat()).is(OneMoreCore.SEATS) && level.getBlockState(s.surface()).is(OneMoreCore.SURFACES);
     }
 
-    /** A seat is a block in the seats tag with a block in the serving_surfaces tag next to it. */
+    void invalidateLayout() {
+        layoutDirty = true;
+    }
+
+    private boolean layoutChunksMatch(ServerLevel level) {
+        int count = 0;
+        int y = Math.max(area.minY(), level.getMinBuildHeight());
+        if (y > area.maxY()) return loadedLayoutChunks.isEmpty();
+        for (int z = area.minZ() >> 4; z <= area.maxZ() >> 4; z++) {
+            for (int x = area.minX() >> 4; x <= area.maxX() >> 4; x++) {
+                if (!level.isLoaded(new BlockPos(x << 4, y, z << 4))) continue;
+                if (!loadedLayoutChunks.contains(new ChunkPos(x, z))) return false;
+                count++;
+            }
+        }
+        return count == loadedLayoutChunks.size();
+    }
+
+    /** Reuses the loaded seats and connected tables until the area, blocks or available chunks change. */
     List<Seat> scanSeats(ServerLevel level) {
+        if (area == null) return List.of();
+        if (!layoutDirty && layoutChunksMatch(level)) return seats;
+        Set<ChunkPos> loaded = new HashSet<>();
         List<Seat> found = new ArrayList<>();
-        for (BlockPos pos : BlockPos.betweenClosed(area.minX(), area.minY(), area.minZ(), area.maxX(), area.maxY(), area.maxZ())) {
-            if (!level.getBlockState(pos).is(OneMoreCore.SEATS)) continue;
-            for (Direction dir : Direction.Plane.HORIZONTAL) {
-                BlockPos surface = pos.relative(dir);
-                if (area.isInside(surface) && level.getBlockState(surface).is(OneMoreCore.SURFACES)) {
-                    found.add(new Seat(pos.immutable(), surface));
-                    break;
+        int minY = Math.max(area.minY(), level.getMinBuildHeight()), maxY = Math.min(area.maxY(), level.getMaxBuildHeight() - 1);
+        for (int z = area.minZ() >> 4; z <= area.maxZ() >> 4; z++) {
+            for (int x = area.minX() >> 4; x <= area.maxX() >> 4; x++) {
+                if (minY > maxY || !level.isLoaded(new BlockPos(x << 4, minY, z << 4))) continue;
+                loaded.add(new ChunkPos(x, z));
+                int minX = Math.max(x << 4, area.minX()), maxX = Math.min((x << 4) + 15, area.maxX());
+                int minZ = Math.max(z << 4, area.minZ()), maxZ = Math.min((z << 4) + 15, area.maxZ());
+                for (BlockPos pos : BlockPos.betweenClosed(minX, minY, minZ, maxX, maxY, maxZ)) {
+                    if (!level.getBlockState(pos).is(OneMoreCore.SEATS)) continue;
+                    for (Direction dir : Direction.Plane.HORIZONTAL) {
+                        BlockPos surface = pos.relative(dir);
+                        if (area.isInside(surface) && level.isLoaded(surface) && level.getBlockState(surface).is(OneMoreCore.SURFACES)) {
+                            found.add(new Seat(pos.immutable(), surface));
+                            break;
+                        }
+                    }
                 }
             }
         }
-        return found;
+        seats = List.copyOf(found);
+        loadedLayoutChunks = loaded;
+        rebuildTables(level);
+        layoutDirty = false;
+        return seats;
     }
 
-    /** A table is a set of serving surfaces that touch each other. Its seats are the seats next to these surfaces. */
-    List<List<Seat>> groupTables(ServerLevel level, List<Seat> seats) {
+    private void rebuildTables(ServerLevel level) {
         List<List<Seat>> found = new ArrayList<>();
         Map<BlockPos, List<Seat>> tableOf = new HashMap<>();
+        tableSurfaces.clear();
         for (Seat s : seats) {
             List<Seat> table = tableOf.get(s.surface());
             if (table == null) {
                 found.add(table = new ArrayList<>());
-                tableOf.put(s.surface(), table);
-                ArrayDeque<BlockPos> todo = new ArrayDeque<>(List.of(s.surface()));
-                while (!todo.isEmpty()) {
-                    BlockPos pos = todo.pop();
-                    for (Direction dir : Direction.Plane.HORIZONTAL) {
-                        BlockPos next = pos.relative(dir);
-                        if (area.isInside(next) && level.getBlockState(next).is(OneMoreCore.SURFACES) && tableOf.putIfAbsent(next, table) == null) todo.push(next);
-                    }
+                Set<BlockPos> surfaces = connectedTable(level, area, s.surface());
+                for (BlockPos pos : surfaces) {
+                    tableOf.put(pos, table);
+                    tableSurfaces.put(pos, surfaces);
                 }
             }
             table.add(s);
         }
-        return found;
+        tables = found;
+    }
+
+    List<List<Seat>> groupTables(ServerLevel level, List<Seat> seats) {
+        scanSeats(level);
+        return tables;
     }
 
     /**
@@ -1043,7 +1137,8 @@ public class Restaurant {
 
     /** Televisions of other mods that show something: 1 the menu, 2 the orders. */
     final Map<BlockPos, Integer> screens = new HashMap<>();
-    private CompoundTag sentScreens = new CompoundTag();
+    private final Map<ServerPlayer, CompoundTag> sentScreens = new HashMap<>();
+    private final Set<ServerPlayer> nearbyScreenViewers = new HashSet<>();
 
     /** Screen modes: none, the menu, the orders. */
     public static final int SCREEN_OFF = 0, SCREEN_MENU = 1, SCREEN_ORDERS = 2;
@@ -1053,27 +1148,51 @@ public class Restaurant {
         if (ScreenRect.of(level.getBlockState(pos)) == null || level.getBlockState(pos).is(OneMoreCore.MENU_BOARD.get())
                 || level.getBlockState(pos).is(OneMoreCore.ORDER_BOARD.get())) return false;
         int next = (screens.getOrDefault(pos, SCREEN_OFF) + 1) % 3;
-        if (next == SCREEN_OFF) screens.remove(pos); else screens.put(pos.immutable(), next);
+        if (next == SCREEN_OFF) {
+            screens.remove(pos);
+            if (screens.isEmpty()) clearScreens(level);
+        } else screens.put(pos.immutable(), next);
         owner.setDirty();
-        sentScreens = new CompoundTag();
         return true;
     }
 
-    /** Sends the televisions, the menu and the tickets to the players near the area, when they changed. */
+    /** Sends a baseline on arrival and subsequent changes to viewers still in range. */
     private void sendScreens(ServerLevel level) {
-        screens.keySet().removeIf(p -> level.isLoaded(p) && ScreenRect.of(level.getBlockState(p)) == null);
-        CompoundTag now = new CompoundTag();
-        if (!screens.isEmpty()) {
-            now.put("menu", MenuBoardBlockEntity.build(this, level.registryAccess()));
-            now.put("tickets", OrderBoardBlockEntity.encode(tickets(), level.registryAccess()));
-            now.putLongArray("pos", screens.keySet().stream().mapToLong(BlockPos::asLong).toArray());
-            now.putIntArray("mode", screens.values().stream().mapToInt(Integer::intValue).toArray());
+        if (screens.keySet().removeIf(p -> level.isLoaded(p) && ScreenRect.of(level.getBlockState(p)) == null)) owner.setDirty();
+        if (screens.isEmpty()) { clearScreens(level); return; }
+        List<ServerPlayer> players = level.players();
+        sentScreens.keySet().retainAll(players);
+        BoundingBox near = area == null ? null : area.inflatedBy(32);
+        Set<ServerPlayer> viewers = new HashSet<>();
+        for (ServerPlayer p : players) {
+            BlockPos pos = p.blockPosition();
+            if (near != null && near.isInside(pos) || screens.keySet().stream().anyMatch(screen -> screen.closerThan(pos, 33)))
+                viewers.add(p);
         }
-        if (now.equals(sentScreens)) return;
-        sentScreens = now;
-        BoundingBox near = area.inflatedBy(32);
+        nearbyScreenViewers.retainAll(viewers);
+        if (viewers.isEmpty()) return;
+
+        CompoundTag now = new CompoundTag();
+        now.put("menu", MenuBoardBlockEntity.build(this, level.registryAccess()));
+        now.put("tickets", OrderBoardBlockEntity.encode(tickets(), level.registryAccess()));
+        List<Map.Entry<BlockPos, Integer>> configured = List.copyOf(screens.entrySet());
+        now.putLongArray("pos", configured.stream().mapToLong(e -> e.getKey().asLong()).toArray());
+        now.putIntArray("mode", configured.stream().mapToInt(Map.Entry::getValue).toArray());
         ScreenData packet = new ScreenData(sign, now);
-        for (ServerPlayer p : level.players()) if (near.isInside(p.blockPosition())) PacketDistributor.sendToPlayer(p, packet);
+        for (ServerPlayer p : viewers) {
+            if (nearbyScreenViewers.add(p) || !now.equals(sentScreens.get(p))) {
+                PacketDistributor.sendToPlayer(p, packet);
+                sentScreens.put(p, now);
+            }
+        }
+    }
+
+    private void clearScreens(ServerLevel level) {
+        if (sentScreens.isEmpty()) return;
+        ScreenData clear = new ScreenData(sign, new CompoundTag());
+        for (ServerPlayer p : level.players()) if (sentScreens.containsKey(p)) PacketDistributor.sendToPlayer(p, clear);
+        sentScreens.clear();
+        nearbyScreenViewers.clear();
     }
 
     /** Table numbers by serving surface, from the last numbering. */
@@ -1082,16 +1201,11 @@ public class Restaurant {
     /**
      * Numbers the tables that have seats, 1 first, in reading order (north to south, then west to east), and sends a
      * mark (the surface nearest the middle of each table) to the players near the area. Every 5 seconds.
-     * ponytail: scans the whole area each time; keep the numbers from the day's scan if large areas lag.
      */
     void numberTables(ServerLevel level) {
-        List<List<Seat>> all = new ArrayList<>(groupTables(level, open ? seats : scanSeats(level)));
+        scanSeats(level);
         List<Set<BlockPos>> surfaces = new ArrayList<>();
-        // A seat list of the open day can name a table that a player broke since: it has no surfaces now and no number.
-        for (List<Seat> t : all) {
-            Set<BlockPos> table = tableAt(level, t.get(0).surface());
-            if (!table.isEmpty()) surfaces.add(table);
-        }
+        for (List<Seat> table : tables) surfaces.add(tableSurfaces.get(table.getFirst().surface()));
         java.util.Comparator<Set<BlockPos>> reading = java.util.Comparator.comparingInt((Set<BlockPos> t) -> t.stream().mapToInt(BlockPos::getZ).min().orElse(0))
                 .thenComparingInt(t -> t.stream().mapToInt(BlockPos::getX).min().orElse(0));
         surfaces.sort(reading);
@@ -1208,23 +1322,16 @@ public class Restaurant {
         }
     }
 
-    // ponytail: a player near two restaurants gets both, and the HUD shows the last one. Pick the nearest if this shows.
     void sendStatus(ServerLevel level) {
         BoundingBox near = area.inflatedBy(8);
-        Status status = null;
-        for (ServerPlayer p : level.players()) {
-            if (!near.isInside(p.blockPosition())) continue;
-            if (status == null) {
-                // The players inside the area; a ready player who left does not count, like in setReady.
-                List<Status.Member> members = new ArrayList<>();
-                for (ServerPlayer q : level.players())
-                    if (area.isInside(q.blockPosition()))
-                        members.add(new Status.Member(q.getUUID(), q.getGameProfile().getName(), ready.contains(q.getUUID())));
-                status = new Status(open, day, serviceLeft > 0 ? customers.size() : toSpawn + customers.size(), served, lost, Config.MAX_LOST_PER_DAY.get(), register, earned,
-                        BuiltInRegistries.ITEM.getKey(Config.currency()), members, countdown, open ? serviceLeft : 0);
-            }
-            PacketDistributor.sendToPlayer(p, status);
-        }
+        List<ServerPlayer> viewers = level.players().stream().filter(p -> near.isInside(p.blockPosition())).toList();
+        if (viewers.isEmpty()) return;
+        List<Status.Member> members = readyCheckActive ? requiredPlayers(level).stream()
+                .map(p -> new Status.Member(p.getUUID(), p.getGameProfile().getName(), ready.contains(p.getUUID()))).toList() : List.of();
+        Status status = new Status(open, day, serviceLeft > 0 ? customers.size() : toSpawn + customers.size(), served, lost,
+                Config.MAX_LOST_PER_DAY.get(), register, earned, BuiltInRegistries.ITEM.getKey(Config.currency()), members,
+                countdown, open ? serviceLeft : 0, sign, area, readyCheckActive);
+        for (ServerPlayer p : viewers) PacketDistributor.sendToPlayer(p, status);
     }
 
     CompoundTag save() {

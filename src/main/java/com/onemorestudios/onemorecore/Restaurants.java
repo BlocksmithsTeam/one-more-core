@@ -54,6 +54,7 @@ public class Restaurants extends SavedData {
         Restaurant best = null;
         long bestDistance = Long.MAX_VALUE;
         for (Restaurant r : bySign.values()) {
+            if (r.area != null) continue;
             BlockPos s = r.sign;
             if (Math.abs(s.getX() - pos.getX()) > COMPUTER_RANGE || Math.abs(s.getY() - pos.getY()) > COMPUTER_RANGE
                     || Math.abs(s.getZ() - pos.getZ()) > COMPUTER_RANGE) continue;
@@ -103,6 +104,15 @@ public class Restaurants extends SavedData {
             r.dirt.forEach((pos, cells) -> {
                 if (chunk.equals(new ChunkPos(pos))) PacketDistributor.sendToPlayer(player, new Dirt(pos, cells));
             });
+    }
+
+    void blockChanged(BlockPos pos) {
+        Restaurant r = containing(pos);
+        if (r != null) r.invalidateLayout();
+    }
+
+    void invalidateLayouts() {
+        bySign.values().forEach(Restaurant::invalidateLayout);
     }
 
     void tick(ServerLevel level) {

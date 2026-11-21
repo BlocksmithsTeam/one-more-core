@@ -228,16 +228,21 @@ public final class ScreenGameTests {
         var restaurant = placeRestaurant(helper);
         disableConfiguredDishes(restaurant);
         var tag = new Menu.Entry("test:tag", null, ItemTags.FISHES, 4, false, 0, 0, "starter");
-        addDish(restaurant, tag);
-        addCombo(restaurant, new Restaurant.Combo("combo:test", List.of(tag.id(), "kind:starter"), 6));
+        var custom = field(Restaurant.class, "custom", restaurant, List.class);
+        custom.add(tag);
+        try {
+            addCombo(restaurant, new Restaurant.Combo("combo:test", List.of(tag.id(), "kind:starter"), 6));
 
-        var lines = menu(helper, restaurant);
-        var standalone = lines.stream().filter(line -> line.id().equals(tag.id())).findFirst().orElseThrow().items().getFirst();
-        var combo = lines.stream().filter(line -> line.id().equals("combo:test")).findFirst().orElseThrow();
-        helper.assertTrue(!standalone.isEmpty() && standalone.is(ItemTags.FISHES), "The representative icon belongs to the tag");
-        helper.assertValueEqual(combo.items().size(), 2, "combo slot count");
-        helper.assertTrue(combo.items().stream().allMatch(stack -> ItemStack.matches(stack, standalone)),
-                "Both combo slots have the same representative icon");
+            var lines = menu(helper, restaurant);
+            var standalone = lines.stream().filter(line -> line.id().equals(tag.id())).findFirst().orElseThrow().items().getFirst();
+            var combo = lines.stream().filter(line -> line.id().equals("combo:test")).findFirst().orElseThrow();
+            helper.assertTrue(!standalone.isEmpty() && standalone.is(ItemTags.FISHES), "The representative icon belongs to the tag");
+            helper.assertValueEqual(combo.items().size(), 2, "combo slot count");
+            helper.assertTrue(combo.items().stream().allMatch(stack -> ItemStack.matches(stack, standalone)),
+                    "Both combo slots have the same representative icon");
+        } finally {
+            custom.remove(tag);
+        }
         helper.succeed();
     }
 

@@ -18,6 +18,7 @@ import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.client.resources.PlayerSkin;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
@@ -41,6 +42,7 @@ public class ReadyHud {
     private static final int CARD_H = 22;
 
     private static int held;
+    private static BlockPos heldAt;
     /** True after a hold sent a request, until the key is released. One hold sends one request. */
     private static boolean sent;
 
@@ -56,15 +58,14 @@ public class ReadyHud {
         event.registerBelow(VanillaGuiLayers.DEBUG_OVERLAY, ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "ready"), ReadyHud::render);
     }
 
-    /**
-     * The fresh status of a closed restaurant whose area contains this player and in which a player clicked the sign
-     * (at least one player is ready), or null.
-     */
-    static Status status() {
+    /** The active check for this player, preferring the restaurant that contains them. */
+    static Status.Received status() {
         Minecraft mc = Minecraft.getInstance();
-        Status s = Status.client;
-        if (s == null || s.open() || s.readyCount() == 0 || mc.player == null || System.currentTimeMillis() - Status.clientTime > 1500) return null;
-        return me(s) == null ? null : s;
+        if (mc.player == null) return null;
+        Status.Received received = Status.near(mc.player.blockPosition(), false);
+        if (received == null) return null;
+        Status s = received.status();
+        return !s.open() && s.readyCheckActive() && me(s) != null ? received : null;
     }
 
     private static Status.Member me(Status s) {
@@ -76,11 +77,21 @@ public class ReadyHud {
     /** Counts the held ticks. A full hold toggles the ready state on the server. */
     static void tick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
-        Status s = status();
+        Status.Received received = status();
+        Status s = received == null ? null : received.status();
         if (s == null || mc.screen != null || !KEY.isDown()) {
             held = 0;
+            heldAt = null;
             sent = false;
             return;
+        }
+        if (s.countdown() > 0 || !s.area().isInside(mc.player.blockPosition())) {
+            held = 0;
+            return;
+        }
+        if (!s.sign().equals(heldAt)) {
+            held = 0;
+            heldAt = s.sign();
         }
         if (sent || ++held < HOLD) return;
         PacketDistributor.sendToServer(new ReadyRequest(!me(s).ready()));
@@ -88,10 +99,9 @@ public class ReadyHud {
         held = 0;
     }
 
-    /** Ticks left until the day starts, counted on from the last status. */
-    static float countdownLeft(Status s) {
-        if (s.countdown() <= 0) return 0;
-        return Math.max(0, s.countdown() - (System.currentTimeMillis() - Status.clientTime) / 50f);
+    /** Ticks left until the day starts, counted on from this restaurant's last status. */
+    static float countdownLeft(Status.Received received) {
+        return Math.max(0, received.status().countdown() - (System.currentTimeMillis() - received.time()) / 50f);
     }
 
     /** Face, name and a slot for the ready check, so a card keeps its width when the player gets ready. */
@@ -107,19 +117,21 @@ public class ReadyHud {
 
     private static void render(GuiGraphics g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
-        Status s = status();
-        if (s == null || mc.options.hideGui) return;
+        Status.Received received = status();
+        if (received == null || mc.options.hideGui) return;
+        Status s = received.status();
+        boolean canReady = s.countdown() == 0 && s.area().isInside(mc.player.blockPosition());
         Font font = mc.font;
         List<Status.Member> players = s.players();
         Status.Member me = me(s);
-        float left = countdownLeft(s);
+        float left = countdownLeft(received);
 
         // Bottom centre, above the hotbar and the action bar text.
         Component title = Component.translatable("onemorecore.ready.title", s.day());
         Component prompt = Component.translatable(me.ready() ? "onemorecore.ready.cancel" : "onemorecore.ready.hold");
         // The key as a glyph (a key cap, or a mouse if the player bound a mouse button), then the action.
         int keyW = KeyGlyphs.width(font, KEY);
-        int promptW = keyW + 4 + font.width(prompt);
+        int promptW = canReady ? keyW + 4 + font.width(prompt) : 0;
         // Cards: face, ready mark and name side by side; the cards wrap into rows that fit the screen.
         int maxRow = Math.max(80, g.guiWidth() - 40);
         List<List<Status.Member>> rows = new java.util.ArrayList<>();
@@ -134,7 +146,7 @@ public class ReadyHud {
         }
         int cardsW = rowWidths.stream().mapToInt(Integer::intValue).max().orElse(0);
         int w = Math.max(Math.max(cardsW, promptW), font.width(title)) + 16;
-        int h = 16 + rows.size() * (CARD_H + 3) + 4 + 18;
+        int h = 16 + rows.size() * (CARD_H + 3) + (canReady ? 22 : 4);
         int x = (g.guiWidth() - w) / 2, y = g.guiHeight() - 72 - h;
         g.blitSprite(PANEL, x, y, w, h);
         g.drawString(font, title, x + (w - font.width(title)) / 2, y + 5, 0xFFFFFFFF, false);
@@ -154,12 +166,14 @@ public class ReadyHud {
         cy -= CARD_H + 3;
 
         // The key prompt and the progress of the hold under it. The countdown is the large number above the panel.
-        int py = cy + CARD_H + 4, px = x + (w - promptW) / 2;
-        KeyGlyphs.draw(g, font, px, py, KEY, 0xFFFFFFFF);
-        g.drawString(font, prompt, px + keyW + 4, py + 3, 0xFFB0B0B0, false);
-        float progress = sent ? 1 : Mth.clamp((held + (KEY.isDown() && !sent ? delta.getGameTimeDeltaPartialTick(false) : 0)) / HOLD, 0, 1);
-        g.fill(px, py + 15, px + promptW, py + 16, 0x40FFFFFF);
-        if (progress > 0) g.fill(px, py + 15, px + Math.round(promptW * progress), py + 16, me.ready() ? 0xFFE0705A : 0xFF7ADB64);
+        if (canReady) {
+            int py = cy + CARD_H + 4, px = x + (w - promptW) / 2;
+            KeyGlyphs.draw(g, font, px, py, KEY, 0xFFFFFFFF);
+            g.drawString(font, prompt, px + keyW + 4, py + 3, 0xFFB0B0B0, false);
+            float progress = sent ? 1 : Mth.clamp((held + (KEY.isDown() && !sent ? delta.getGameTimeDeltaPartialTick(false) : 0)) / HOLD, 0, 1);
+            g.fill(px, py + 15, px + promptW, py + 16, 0x40FFFFFF);
+            if (progress > 0) g.fill(px, py + 15, px + Math.round(promptW * progress), py + 16, me.ready() ? 0xFFE0705A : 0xFF7ADB64);
+        }
 
         // The countdown number above the panel, larger in the first part of each second.
         if (left > 0) {

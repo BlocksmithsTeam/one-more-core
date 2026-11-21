@@ -16,6 +16,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 
 /** Loaded only when Diegesis is present. Restaurant remains the owner of dirt and its saved cells. */
@@ -36,9 +37,14 @@ public final class WipingStation implements StationLogic {
                 || player.isSpectator() || !player.canInteractWithBlock(pos, 1)) return false;
         if (player.level() instanceof ServerLevel level) {
             Restaurant r = Restaurants.get(level).containing(pos);
-            return r != null && (r.tableDirty(level, pos) || r.hasTableItems(pos));
+            return r != null && (!r.dirt.isEmpty() || !r.coins.isEmpty())
+                    && r.tableAt(level, pos).stream().anyMatch(p -> r.dirt.containsKey(p) || r.hasTableItems(p));
         }
-        return Dirt.tableDirty(player.level(), pos) || TableItems.CLIENT.containsKey(pos);
+        if (Dirt.CLIENT.isEmpty() && TableItems.CLIENT.isEmpty()) return false;
+        Status.Received status = Status.near(pos, true);
+        BoundingBox area = status == null ? new BoundingBox(pos).inflatedBy(Config.MAX_AREA.get()) : status.status().area();
+        return Restaurant.connectedTable(player.level(), area, pos).stream()
+                .anyMatch(p -> Dirt.CLIENT.containsKey(p) || TableItems.CLIENT.containsKey(p));
     }
 
     @Override
