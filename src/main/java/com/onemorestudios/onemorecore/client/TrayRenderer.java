@@ -38,6 +38,8 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     private static final float[][] SPOTS = {{3, 8}, {8, 8}, {13, 8}};
     private static final float BED_HEIGHT = 1 / 16f;
     private static final float SPOT_WIDTH = 5 / 16f;
+    /** Dishes are drawn this much larger than the fit to their square (the user asked for 30-40% bigger). */
+    private static final float DISH_DISPLAY_SCALE = 1.35f;
 
     public TrayRenderer(BlockEntityRendererProvider.Context context) {}
 
@@ -65,7 +67,7 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
             pose.translate(SPOTS[i][0] / 16, BED_HEIGHT, SPOTS[i][1] / 16);
             pose.mulPose(Axis.YP.rotationDegrees(180));
             if (Float.isFinite(bounds.minY)) {
-                float fit = Math.min(1, SPOT_WIDTH / Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ));
+                float fit = DISH_DISPLAY_SCALE * Math.min(1, SPOT_WIDTH / Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ));
                 pose.scale(fit, fit, fit);
                 pose.translate(-(bounds.minX + bounds.maxX) / 2, -bounds.minY, -(bounds.minZ + bounds.maxZ) / 2);
             }
