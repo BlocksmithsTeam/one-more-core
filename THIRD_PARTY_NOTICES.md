@@ -4,6 +4,7 @@
 
 - Files: `src/main/resources/assets/onemorecore/models/block/screen.json`, `screen_tilt1.json`, `screen_tilt2.json`, `src/main/resources/assets/onemorecore/textures/block/screen.png` (the wall television of the Menu Screen and the Order Screen)
 - Source: https://github.com/XiLaiTL/Yuushya-Townscape (`models/extra_building_material/tv_wall.json`, `textures/0extra_building_material/preview/tv.png`)
+- Tray Rack: Yuushya Townscape 2.3.0 plate_shelf.json and its oak table, light gray plate and light gray concrete textures. The inventory view and texture paths are adapted.
 - Changes: texture names, made thin, turned down by 22.5 and 45 degrees
 - License: MIT
 

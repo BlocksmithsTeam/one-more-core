@@ -13,7 +13,16 @@ final class DiegesisHook {
         return LOADED && Inner.focusedAt(pos);
     }
 
+    static boolean focused() {
+        return LOADED && Inner.focused();
+    }
+
     private static final class Inner {
+        static boolean focused() {
+            return com.pockyl.diegesis.api.client.DiegesisClient.focusedStation()
+                    .filter(view -> view.type() == com.onemorestudios.onemorecore.KitchenStations.SCREEN).isPresent();
+        }
+
         static boolean focusedAt(BlockPos pos) {
             return com.pockyl.diegesis.api.client.DiegesisClient.focusedStation().map(v -> v.pos().equals(pos)).orElse(false);
         }

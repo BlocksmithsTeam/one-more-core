@@ -514,7 +514,7 @@ public class Restaurant {
     /** Day, register, unlocks and paid orders: what the sign item keeps when the sign is broken. Positions are not kept. */
     CompoundTag progress() {
         CompoundTag tag = save();
-        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "tables_off", "table_items", "screens", "screen_modes")) tag.remove(key);
+        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "tables_off", "table_items", "screens", "screen_modes", "cards")) tag.remove(key);
         return tag;
     }
 
@@ -947,22 +947,33 @@ public class Restaurant {
         });
     }
 
-    /** Televisions of other mods that show something: 1 the menu, 2 the orders. */
+    /** The screens of the restaurant (the mod's own and other mods' televisions) and what they show (ScreenSettings, packed). */
     final Map<BlockPos, Integer> screens = new HashMap<>();
     private CompoundTag sentScreens = new CompoundTag();
+    private final java.util.Set<java.util.UUID> screenViewers = new java.util.HashSet<>();
 
     /** Screen modes: none, the menu, the orders. */
     public static final int SCREEN_OFF = 0, SCREEN_MENU = 1, SCREEN_ORDERS = 2;
 
-    /** Turns a television to the next mode (off, menu, orders). False if the block is no known television. */
+    /** Turns a screen to the next mode (off, menu, orders), its other settings kept. False if the block is no known screen. */
     boolean cycleScreen(ServerLevel level, BlockPos pos) {
-        if (ScreenRect.of(level.getBlockState(pos)) == null || level.getBlockState(pos).is(OneMoreCore.MENU_BOARD.get())
-                || level.getBlockState(pos).is(OneMoreCore.ORDER_BOARD.get())) return false;
-        int next = (screens.getOrDefault(pos, SCREEN_OFF) + 1) % 3;
-        if (next == SCREEN_OFF) screens.remove(pos); else screens.put(pos.immutable(), next);
-        owner.setDirty();
-        sentScreens = new CompoundTag();
+        ScreenGroups.Group group = ScreenGroups.of(level, pos);
+        if (group == null) return false;
+        pos = group.anchor();
+        int now = screens.getOrDefault(pos, ScreenSettings.pack(SCREEN_OFF, 0, 0, true));
+        setScreen(pos, ScreenSettings.withMode(now, (ScreenSettings.mode(now) + 1) % 3));
         return true;
+    }
+
+    /** Sets what a screen shows (ScreenSettings, packed). */
+    void setScreen(BlockPos pos, int settings) {
+        screens.put(pos.immutable(), settings);
+        owner.setDirty();
+    }
+
+    /** A screen of the mod that is not known yet shows its default (the menu or the orders). */
+    void ensureScreen(BlockPos pos, int mode) {
+        if (!screens.containsKey(pos) && screens.size() < 256) setScreen(pos, ScreenSettings.pack(mode, 0, 0, true));
     }
 
     /** Sends the televisions, the menu and the tickets to the players near the area, when they changed. */
@@ -975,50 +986,81 @@ public class Restaurant {
             now.putLongArray("pos", screens.keySet().stream().mapToLong(BlockPos::asLong).toArray());
             now.putIntArray("mode", screens.values().stream().mapToInt(Integer::intValue).toArray());
         }
-        if (now.equals(sentScreens)) return;
+        boolean changed = !now.equals(sentScreens);
         sentScreens = now;
         BoundingBox near = area.inflatedBy(32);
         ScreenData packet = new ScreenData(sign, now);
-        for (ServerPlayer p : level.players()) if (near.isInside(p.blockPosition())) PacketDistributor.sendToPlayer(p, packet);
+        java.util.Set<java.util.UUID> nearby = new java.util.HashSet<>();
+        for (ServerPlayer player : level.players()) {
+            if (!near.isInside(player.blockPosition())) continue;
+            nearby.add(player.getUUID());
+            if (changed || !screenViewers.contains(player.getUUID())) PacketDistributor.sendToPlayer(player, packet);
+        }
+        screenViewers.retainAll(nearby);
+        screenViewers.addAll(nearby);
     }
 
-    /** Table numbers by serving surface, from the last numbering. */
-    private final Map<BlockPos, Integer> tableNumbers = new HashMap<>();
+    /** The table number cards, by the surface they stand on. */
+    final Map<BlockPos, TableCards.Card> cards = new HashMap<>();
+    /** The text of each table's card, by serving surface (every surface of the table), from the last scan. */
+    private final Map<BlockPos, String> tableLabels = new HashMap<>();
 
     /**
-     * Numbers the tables that have seats, 1 first, in reading order (north to south, then west to east), and sends a
-     * mark (the surface nearest the middle of each table) to the players near the area. Every 5 seconds.
-     * ponytail: scans the whole area each time; keep the numbers from the day's scan if large areas lag.
+     * Names the tables by their cards (a table is all its touching surfaces), forgets cards whose table is gone, and sends the
+     * cards to the players near the area. Every 5 seconds and when a card changes.
      */
     void numberTables(ServerLevel level) {
-        List<List<Seat>> all = new ArrayList<>(groupTables(level, open ? seats : scanSeats(level)));
-        List<Set<BlockPos>> surfaces = new ArrayList<>();
-        // A seat list of the open day can name a table that a player broke since: it has no surfaces now and no number.
-        for (List<Seat> t : all) {
-            Set<BlockPos> table = tableAt(level, t.get(0).surface());
-            if (!table.isEmpty()) surfaces.add(table);
-        }
-        java.util.Comparator<Set<BlockPos>> reading = java.util.Comparator.comparingInt((Set<BlockPos> t) -> t.stream().mapToInt(BlockPos::getZ).min().orElse(0))
-                .thenComparingInt(t -> t.stream().mapToInt(BlockPos::getX).min().orElse(0));
-        surfaces.sort(reading);
-        tableNumbers.clear();
+        cards.keySet().removeIf(p -> level.isLoaded(p) && !level.getBlockState(p).is(OneMoreCore.SURFACES));
+        tableLabels.clear();
         List<BlockPos> marks = new ArrayList<>();
-        List<Integer> numbers = new ArrayList<>();
-        for (int i = 0; i < surfaces.size() && i < 256; i++) {
-            Set<BlockPos> t = surfaces.get(i);
-            for (BlockPos p : t) tableNumbers.put(p, i + 1);
-            double cx = t.stream().mapToDouble(BlockPos::getX).average().orElse(0), cz = t.stream().mapToDouble(BlockPos::getZ).average().orElse(0);
-            marks.add(t.stream().min(java.util.Comparator.comparingDouble(p -> (p.getX() - cx) * (p.getX() - cx) + (p.getZ() - cz) * (p.getZ() - cz))).orElseThrow());
-            numbers.add(i + 1);
+        List<String> texts = new ArrayList<>();
+        List<Float> places = new ArrayList<>();
+        for (var e : cards.entrySet()) {
+            if (marks.size() >= 256) break;
+            for (BlockPos p : tableAt(level, e.getKey())) tableLabels.put(p, e.getValue().text());
+            marks.add(e.getKey());
+            texts.add(e.getValue().text());
+            places.addAll(List.of(e.getValue().x(), e.getValue().z(), e.getValue().yaw()));
         }
         BoundingBox near = area.inflatedBy(32);
-        TableMarks packet = new TableMarks(sign, marks, numbers);
+        TableMarks packet = new TableMarks(sign, marks, texts, places);
         for (ServerPlayer p : level.players()) if (near.isInside(p.blockPosition())) PacketDistributor.sendToPlayer(p, packet);
     }
 
-    /** The number of the table of a serving surface, 0 if it has none yet. */
-    int tableNumber(BlockPos surface) {
-        return surface == null ? 0 : tableNumbers.getOrDefault(surface, 0);
+    /** The card text of the table of a serving surface, "" when it has no card. */
+    String tableLabel(BlockPos surface) {
+        return surface == null ? "" : tableLabels.getOrDefault(surface, "");
+    }
+
+    /** Puts a card on a surface; a card elsewhere on the same table moves here with its text. True when a card moved. */
+    boolean placeCard(ServerLevel level, BlockPos surface, TableCards.Card card) {
+        String text = card.text();
+        boolean moved = false;
+        for (BlockPos p : tableAt(level, surface)) {
+            TableCards.Card old = cards.remove(p);
+            if (old != null) {
+                moved = true;
+                text = old.text();
+            }
+        }
+        cards.put(surface.immutable(), new TableCards.Card(text, card.x(), card.z(), card.yaw()));
+        owner.setDirty();
+        numberTables(level);
+        return moved;
+    }
+
+    void removeCard(ServerLevel level, BlockPos surface) {
+        if (cards.remove(surface) == null) return;
+        owner.setDirty();
+        numberTables(level);
+    }
+
+    void setCardText(ServerLevel level, BlockPos surface, String text) {
+        TableCards.Card c = cards.get(surface);
+        if (c == null) return;
+        cards.put(surface, new TableCards.Card(text, c.x(), c.z(), c.yaw()));
+        owner.setDirty();
+        numberTables(level);
     }
 
     /** The taken orders, oldest first: one ticket per party that waits for its food. */
@@ -1027,13 +1069,14 @@ public class Restaurant {
         Set<Customer.Party> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         for (Customer c : customers) {
             if (c.getState() != Customer.State.WAITING_FOOD || !seen.add(c.party())) continue;
-            List<ItemStack> items = new ArrayList<>();
+            // A row for each guest of the party that still waits for something.
+            List<List<ItemStack>> rows = new ArrayList<>();
             int price = 0;
             for (Customer m : c.party().members) {
-                items.addAll(m.getOrder());
+                if (!m.getOrder().isEmpty()) rows.add(List.copyOf(m.getOrder()));
                 for (Customer.Line l : m.wantedLines()) price += l.price();
             }
-            out.add(new OrderBoardBlockEntity.Ticket(tableNumber(c.getSurface()), items, c.party().patience / (float) Math.max(1, c.party().patienceMax), price));
+            out.add(new OrderBoardBlockEntity.Ticket(tableLabel(c.getSurface()), rows, c.party().patience / (float) Math.max(1, c.party().patienceMax), price));
         }
         return out;
     }
@@ -1198,6 +1241,13 @@ public class Restaurant {
         tag.putLongArray("tables_off", tablesOff);
         tag.putLongArray("screens", screens.keySet().stream().mapToLong(BlockPos::asLong).toArray());
         tag.putIntArray("screen_modes", screens.values().stream().mapToInt(Integer::intValue).toArray());
+        ListTag cardList = new ListTag();
+        for (var e : cards.entrySet()) {
+            CompoundTag t = e.getValue().save();
+            t.putLong("pos", e.getKey().asLong());
+            cardList.add(t);
+        }
+        tag.put("cards", cardList);
         if (delivery != null) tag.putLong("delivery", delivery.asLong());
         ListTag pending = new ListTag();
         for (Delivery d : deliveries) {
@@ -1240,7 +1290,11 @@ public class Restaurant {
         for (long p : tag.getLongArray("tables_off")) r.offTables.add(BlockPos.of(p));
         long[] sp = tag.getLongArray("screens");
         int[] sm = tag.getIntArray("screen_modes");
-        for (int i = 0; i < sp.length && i < sm.length && i < 256; i++) if (sm[i] == SCREEN_MENU || sm[i] == SCREEN_ORDERS) r.screens.put(BlockPos.of(sp[i]), sm[i]);
+        for (int i = 0; i < sp.length && i < sm.length && i < 256; i++) r.screens.put(BlockPos.of(sp[i]), ScreenSettings.valid(sm[i]));
+        for (Tag t : tag.getList("cards", Tag.TAG_COMPOUND)) {
+            if (r.cards.size() >= 256) break;
+            r.cards.put(BlockPos.of(((CompoundTag) t).getLong("pos")), TableCards.Card.load((CompoundTag) t));
+        }
         CompoundTag up = tag.getCompound("upgrades");
         for (String id : up.getAllKeys()) if (upgradeCosts(id) != null) r.upgrades.put(id, Math.max(0, Math.min(upgradeCosts(id).size(), up.getInt(id))));
         for (Tag t : tag.getList("favourites", Tag.TAG_STRING)) r.favourites.add(t.getAsString());

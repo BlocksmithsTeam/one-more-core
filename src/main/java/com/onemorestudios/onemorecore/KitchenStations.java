@@ -37,15 +37,8 @@ public final class KitchenStations {
      * (tooltips of the dishes), and on the order screen a click on a card gives its ticket.
      */
     public static final StationType SCREEN = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "screen"))
-            .block(OneMoreCore.MENU_BOARD).block(OneMoreCore.ORDER_BOARD)
+            .block(OneMoreCore.MENU_BOARD).block(OneMoreCore.ORDER_BOARD).block(OneMoreCore.MONITOR)
             .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown())
-            .logic(context -> new StationLogic() {
-                @Override
-                public void onCustomAction(StationContext station, Player player, String action, net.minecraft.nbt.CompoundTag data) {
-                    if (!"ticket".equals(action) || !(station.level() instanceof ServerLevel level) || !station.users().contains(player)) return;
-                    OrderBoardBlock.giveTicket(level, player, station.pos(), OrderBoardBlock.ticketsAt(level, station.pos()), data.getInt("index"));
-                }
-            })
             .build();
 
     /** The menu book up close: the open book on the table, its pages turned by clicks (client only, it shows the synced menu). */

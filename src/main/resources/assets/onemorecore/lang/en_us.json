@@ -116,6 +116,8 @@
   "onemorecore.tool.table_off": "This table is off. Customers do not use it.",
   "onemorecore.tool.not_table": "This is not a table of the restaurant.",
   "onemorecore.free.tables": "Tables",
+  "block.onemorecore.monitor": "Monitor",
+  "block.onemorecore.screen_part": "TV Panel",
   "block.onemorecore.menu_board": "Menu Screen",
   "onemorecore.board.title": "MENU",
   "onemorecore.board.empty": "Nothing on the menu yet",
@@ -187,9 +189,9 @@
   "onemorecore.tool.screen_0": "The television shows nothing of the restaurant.",
   "onemorecore.tool.screen_1": "The television shows the menu.",
   "onemorecore.tool.screen_2": "The television shows the orders.",
+  "onemorecore.screen.no_restaurant": "Place this screen near a restaurant",
   "onemorecore.screen.orders": "ACTIVE ORDERS",
   "onemorecore.screen.table": "TABLE %s",
-  "onemorecore.screen.items": "ITEMS",
   "onemorecore.screen.menu": "MENU",
   "onemorecore.screen.no_orders": "No orders yet",
   "onemorecore.screen.dishes": "%s dishes",
@@ -200,5 +202,8 @@
   "onemorecore.book.seconds": "%s s",
   "onemorecore.book.minutes": "%s min",
   "onemorecore.book.bonus": "+%s%%",
-  "onemorecore.book.combo": "Combo"
+  "onemorecore.book.combo": "Combo",
+  "item.onemorecore.table_number": "Table Number",
+  "onemorecore.card.title": "Table number",
+  "onemorecore.card.no_restaurant": "Put it on a table of a restaurant"
 }

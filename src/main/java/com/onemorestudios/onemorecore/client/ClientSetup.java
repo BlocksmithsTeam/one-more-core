@@ -21,7 +21,7 @@ public class ClientSetup {
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerEntityRenderer(OneMoreCore.CUSTOMER.get(), CustomerRenderer::new));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.OPEN_SIGN_ENTITY.get(), OpenSignRenderer::new));
         bus.addListener(OpenSignRenderer::registerModels);
-        bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.MENU_BOARD_ENTITY.get(), ScreenRenderer::new));
+        bus.addListener(TableMarkRenderer::registerModels);
         bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
             private OpenSignRenderer.Item renderer;
 
@@ -34,7 +34,6 @@ public class ClientSetup {
         }, OneMoreCore.OPEN_SIGN_ITEM.get()));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.TRAY_ENTITY.get(), TrayRenderer::new));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.MENU_BOOK_ENTITY.get(), MenuBookRenderer::new));
-        bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.ORDER_BOARD_ENTITY.get(), ScreenRenderer::new));
         bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
             private TrayRenderer.Item renderer;
 
@@ -47,6 +46,7 @@ public class ClientSetup {
         }, OneMoreCore.TRAY_ITEM.get()));
         TableMarkRenderer.register();
         ScreenRenderer.register();
+        com.onemorestudios.onemorecore.ScreenSettings.Open.handler = o -> Minecraft.getInstance().setScreen(new ScreenSettingsScreen(o));
         MenuBook.register();
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderOrderTooltip);
         // Up close with Diegesis a screen is open: the tooltip of the television item under the mouse.
@@ -63,7 +63,6 @@ public class ClientSetup {
         ComputerCamera.register();
         if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) {
             WipingBehavior.register();
-            ScreenBehavior.register();
         }
     }
 

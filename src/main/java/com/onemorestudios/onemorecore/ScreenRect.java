@@ -15,14 +15,17 @@ import net.minecraft.world.phys.Vec3;
  * The mod's own screens use the Yuushya wall TV model; other mods' televisions come from the config (screenBlocks).
  */
 public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolean flip) {
-    /** The mod's own screens: the Yuushya wall TV made thin, 2.5 blocks wide, its picture inside a 1 px bezel. */
-    public static final ScreenRect OWN = new ScreenRect(-11, 3, 27, 23, 1.0f, false);
+    /** The mod's TV: the Yuushya wall TV made thin and 3 x 2 blocks (x -16..32, y 0..32), its picture inside the bezel. */
+    public static final ScreenRect OWN = new ScreenRect(-14.8f, 1.4545f, 30.8f, 30.5455f, 1.0f, false);
+    /** The Monitor: the same, one block. */
+    public static final ScreenRect MONITOR = new ScreenRect(0.4f, 0.7273f, 15.6f, 15.2727f, 1.0f, false);
     /** The bottom back edge of the mod's own screens, model pixels: a tilted screen turns about it, its top coming out. */
-    static final float PIVOT_Y = 2, PIVOT_Z = 0;
+    static final float PIVOT_Y = 0, PIVOT_Z = 0;
 
     /** The rectangle of a block, or null when it is no screen. */
     public static ScreenRect of(BlockState state) {
         if (state.is(OneMoreCore.MENU_BOARD.get()) || state.is(OneMoreCore.ORDER_BOARD.get())) return OWN;
+        if (state.is(OneMoreCore.MONITOR.get())) return MONITOR;
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
         var key = net.minecraft.resources.ResourceLocation.parse(id);
         String value = Config.lookup(Config.SCREEN_BLOCKS.get(), key);
@@ -81,9 +84,8 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
         return new float[] {(float) (u * width()), (float) (v * height())};
     }
 
-    /** Order cards on one page of a canvas, and the page shown at a game time (a page every 6 seconds). */
-    public static int ordersPerPage(float w, float h) {
-        float u = h / 200;
+    /** Order cards on one page of a canvas w wide with u canvas units a layout unit, and the page shown at a game time (a page every 6 seconds). */
+    public static int ordersPerPage(float w, float u) {
         return Math.max(1, (int) ((w - 6 * u) / (88 * u)));
     }
 
@@ -92,14 +94,20 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
     }
 
     /** The order card under canvas point x (oldest first over all pages), or -1. */
-    public static int orderAt(float w, float h, int count, long gameTime, float x, float y) {
-        float u = h / 200, gap = 6 * u;
+    public static int orderAt(float w, float u, int count, long gameTime, float x, float y) {
+        float gap = 6 * u;
         if (y < 30 * u) return -1;
-        int per = ordersPerPage(w, h), pages = (count + per - 1) / per;
+        int per = ordersPerPage(w, u), pages = (count + per - 1) / per;
         float cardW = (w - gap * (per + 1)) / per;
-        int i = (int) Math.floor((x - gap / 2) / (cardW + gap));
+        int i = (int) Math.floor((x - gap) / (cardW + gap));
+        if (x - gap - i * (cardW + gap) > cardW) return -1;
         int index = page(pages, gameTime) * per + i;
         return i >= 0 && i < per && index < count ? index : -1;
+    }
+
+    /** A rectangle grown by whole cells: cols to the right and rows down of this one, tile w x h model pixels. */
+    public ScreenRect grown(int cols, int rows, float w, float h) {
+        return new ScreenRect(x0, y0 - (rows - 1) * h, x1 + (cols - 1) * w, y1, z, flip);
     }
 
     /** Canvas size in units (10 per model pixel). */
