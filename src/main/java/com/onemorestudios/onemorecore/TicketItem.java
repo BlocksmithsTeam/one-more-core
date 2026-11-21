@@ -18,8 +18,8 @@ public class TicketItem extends Item {
 
     @Override
     public Component getName(ItemStack stack) {
-        int table = stack.getOrDefault(OneMoreCore.TABLE.get(), 0);
-        return table > 0 ? Component.translatable("item.onemorecore.ticket.table", table) : super.getName(stack);
+        String table = stack.getOrDefault(OneMoreCore.LABEL.get(), "");
+        return !table.isEmpty() ? Component.translatable("item.onemorecore.ticket.table", table) : super.getName(stack);
     }
 
     @Override

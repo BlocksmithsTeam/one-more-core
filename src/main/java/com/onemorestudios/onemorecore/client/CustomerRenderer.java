@@ -301,13 +301,16 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         float facing = (float) (Mth.atan2(dx, dz) * Mth.RAD_TO_DEG);
         int light = LevelRenderer.getLightColor(customer.level(), surface.above());
         float scale = Config.FOOD_SCALE.get().floatValue();
+        // The first item (the main dish, as the server puts it first) stands big right in front of the guest; the others are
+        // smaller, to the left and right of it and a little further in.
         for (int i = 0; i < served.size(); i++) {
             ItemStack stack = served.get(i);
-            double side = (i - (served.size() - 1) / 2.0) * 0.4;
+            int k = i == 0 ? 0 : (i + 1) / 2 * (i % 2 == 1 ? 1 : -1);
+            double side = k * 0.27, in = i == 0 ? 0.22 : 0.08;
             pose.pushPose();
-            pose.translate(x - dx * 0.2 - dz * side, y, z - dz * 0.2 + dx * side);
+            pose.translate(x - dx * in - dz * side, y, z - dz * in + dx * side);
             pose.mulPose(Axis.YP.rotationDegrees(facing));
-            renderFood(stack, customer.level(), pose, buffers, light, scale, customer.getId() + i);
+            renderFood(stack, customer.level(), pose, buffers, light, scale * (i == 0 ? 1.15f : 0.75f), customer.getId() + i);
             pose.popPose();
         }
     }

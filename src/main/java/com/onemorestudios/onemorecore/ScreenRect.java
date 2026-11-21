@@ -22,14 +22,17 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * The mod's own screens use the Yuushya wall TV model; other mods' televisions come from the config (screenBlocks).
  */
 public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolean flip) {
-    /** The mod's own screens: the Yuushya wall TV made thin, 2.5 blocks wide, its picture inside a 1 px bezel. */
-    public static final ScreenRect OWN = new ScreenRect(-11, 3, 27, 23, 1.0f, false);
+    /** The mod's TV: the Yuushya wall TV made thin and 3 x 2 blocks (x -16..32, y 0..32), its picture inside the bezel. */
+    public static final ScreenRect OWN = new ScreenRect(-14.8f, 1.4545f, 30.8f, 30.5455f, 1.0f, false);
+    /** The Monitor: the same, one block. */
+    public static final ScreenRect MONITOR = new ScreenRect(0.4f, 0.7273f, 15.6f, 15.2727f, 1.0f, false);
     /** The bottom back edge of the mod's own screens, model pixels: a tilted screen turns about it, its top coming out. */
-    static final float PIVOT_Y = 2, PIVOT_Z = 0;
+    static final float PIVOT_Y = 0, PIVOT_Z = 0;
 
     /** The rectangle of a block, or null when it is no screen. */
     public static ScreenRect of(BlockState state) {
         if (state.is(OneMoreCore.MENU_BOARD.get()) || state.is(OneMoreCore.ORDER_BOARD.get())) return OWN;
+        if (state.is(OneMoreCore.MONITOR.get())) return MONITOR;
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
         var key = net.minecraft.resources.ResourceLocation.parse(id);
         String value = Config.lookup(Config.SCREEN_BLOCKS.get(), key);
@@ -99,19 +102,18 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
                 .add(0, -Math.sin(angle), 0).dot(towardViewer) > 0;
     }
 
-    /** The television itself can enclose the picture, but foreground blocks must leave it visible. */
-    public static boolean visible(Level level, Entity viewer, BlockPos screen, Vec3 from, Vec3 to) {
+    /** The screens themselves (a group's screens and their TV parts) can enclose the picture, but foreground blocks must leave it visible. */
+    public static boolean visible(Level level, Entity viewer, java.util.Collection<BlockPos> screens, Vec3 from, Vec3 to) {
         return level.clip(new ClipContext(from, to, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, viewer) {
             @Override
             public VoxelShape getBlockShape(BlockState state, BlockGetter getter, BlockPos pos) {
-                return pos.equals(screen) ? Shapes.empty() : super.getBlockShape(state, getter, pos);
+                return screens.contains(ScreenGroups.main(getter, pos)) ? Shapes.empty() : super.getBlockShape(state, getter, pos);
             }
         }).getType() == HitResult.Type.MISS;
     }
 
-    /** Order cards on one page of a canvas, and the page shown at a game time (a page every 6 seconds). */
-    public static int ordersPerPage(float w, float h) {
-        float u = h / 200;
+    /** Order cards on one page of a canvas w wide with u canvas units a layout unit, and the page shown at a game time (a page every 6 seconds). */
+    public static int ordersPerPage(float w, float u) {
         return Math.max(1, (int) ((w - 6 * u) / (88 * u)));
     }
 
@@ -120,25 +122,36 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
     }
 
     /** The order card under canvas point x (oldest first over all pages), or -1. */
-    public static int orderAt(float w, float h, int count, long gameTime, float x, float y) {
-        int i = cardSlot(w, h, x, y);
+    public static int orderAt(float w, float h, float u, int count, long gameTime, float x, float y) {
+        int i = cardSlot(w, h, u, x, y);
         if (i < 0) return -1;
-        int per = ordersPerPage(w, h), pages = (count + per - 1) / per;
+        int per = ordersPerPage(w, u), pages = (count + per - 1) / per;
         int index = page(pages, gameTime) * per + i;
         return index < count ? index : -1;
     }
 
-    int cardSlot(float x, float y) {
-        return cardSlot(width(), height(), x, y);
+    /** The order card slot on the page under canvas point (x, y) with u canvas units a layout unit, or -1. */
+    int cardSlot(float u, float x, float y) {
+        return cardSlot(width(), height(), u, x, y);
     }
 
-    private static int cardSlot(float w, float h, float x, float y) {
-        float u = h / 200, gap = 6 * u;
+    private static int cardSlot(float w, float h, float u, float x, float y) {
+        float gap = 6 * u;
         if (!Float.isFinite(x) || !Float.isFinite(y) || x < gap || x > w - gap || y < 30 * u || y > h - gap) return -1;
-        int per = ordersPerPage(w, h);
+        int per = ordersPerPage(w, u);
         float cardW = (w - gap * (per + 1)) / per;
         int i = (int) ((x - gap) / (cardW + gap));
         return i < per && x <= gap + i * (cardW + gap) + cardW ? i : -1;
+    }
+
+    /** The layout unit of a screen's picture (its single screen's rectangle) with its settings (ScreenSettings, packed): canvas units. */
+    public static float unit(ScreenRect single, int settings) {
+        return (single.y1() - single.y0()) * 10 / 200 * ScreenSettings.ZOOM[ScreenSettings.size(settings)];
+    }
+
+    /** A rectangle grown by whole cells: cols to the right and rows down of this one, tile w x h model pixels. */
+    public ScreenRect grown(int cols, int rows, float w, float h) {
+        return new ScreenRect(x0, y0 - (rows - 1) * h, x1 + (cols - 1) * w, y1, z, flip);
     }
 
     /** Canvas size in units (10 per model pixel). */

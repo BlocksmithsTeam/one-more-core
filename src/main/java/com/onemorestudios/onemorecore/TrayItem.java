@@ -41,8 +41,8 @@ public class TrayItem extends BlockItem {
 
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> lines, TooltipFlag flag) {
-        int table = stack.getOrDefault(OneMoreCore.TABLE.get(), 0);
-        if (table > 0) lines.add(Component.translatable("onemorecore.tray.label", table).withStyle(ChatFormatting.GOLD));
+        String table = stack.getOrDefault(OneMoreCore.LABEL.get(), "");
+        if (!table.isEmpty()) lines.add(Component.translatable("onemorecore.tray.label", table).withStyle(ChatFormatting.GOLD));
         for (ItemStack dish : stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).nonEmptyItems())
             lines.add(Component.literal("- ").append(dish.getHoverName()).withStyle(ChatFormatting.GRAY));
     }

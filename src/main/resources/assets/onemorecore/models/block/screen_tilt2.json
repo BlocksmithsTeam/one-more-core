@@ -1,5 +1,5 @@
 {
- "credit": "Wall TV of Yuushya Townscape (MIT), made thin",
+ "credit": "Wall TV of Yuushya Townscape (MIT), made thin and resized",
  "ambientocclusion": false,
  "textures": {
   "2": "onemorecore:block/screen",
@@ -8,24 +8,15 @@
  "elements": [
   {
    "from": [
-    -12,
-    2,
+    -16.0,
+    0.0,
     0.0
    ],
    "to": [
-    28,
-    24,
+    32.0,
+    32.0,
     0.6
    ],
-   "rotation": {
-    "angle": 45,
-    "axis": "x",
-    "origin": [
-     8,
-     2,
-     0
-    ]
-   },
    "faces": {
     "north": {
      "uv": [
@@ -81,28 +72,28 @@
      ],
      "texture": "#2"
     }
-   }
-  },
-  {
-   "from": [
-    -12,
-    2,
-    0.6
-   ],
-   "to": [
-    28,
-    3,
-    0.9
-   ],
+   },
    "rotation": {
     "angle": 45,
     "axis": "x",
     "origin": [
      8,
-     2,
+     0,
      0
     ]
-   },
+   }
+  },
+  {
+   "from": [
+    -16.0,
+    0.0,
+    0.6
+   ],
+   "to": [
+    32.0,
+    1.4545,
+    0.9
+   ],
    "faces": {
     "north": {
      "uv": [
@@ -158,28 +149,28 @@
      ],
      "texture": "#2"
     }
-   }
-  },
-  {
-   "from": [
-    -12,
-    23,
-    0.6
-   ],
-   "to": [
-    28,
-    24,
-    0.9
-   ],
+   },
    "rotation": {
     "angle": 45,
     "axis": "x",
     "origin": [
      8,
-     2,
+     0,
      0
     ]
-   },
+   }
+  },
+  {
+   "from": [
+    -16.0,
+    30.5455,
+    0.6
+   ],
+   "to": [
+    32.0,
+    32.0,
+    0.9
+   ],
    "faces": {
     "north": {
      "uv": [
@@ -235,28 +226,28 @@
      ],
      "texture": "#2"
     }
-   }
-  },
-  {
-   "from": [
-    -12,
-    3,
-    0.6
-   ],
-   "to": [
-    -11,
-    23,
-    0.9
-   ],
+   },
    "rotation": {
     "angle": 45,
     "axis": "x",
     "origin": [
      8,
-     2,
+     0,
      0
     ]
-   },
+   }
+  },
+  {
+   "from": [
+    -16.0,
+    1.4545,
+    0.6
+   ],
+   "to": [
+    -14.8,
+    30.5455,
+    0.9
+   ],
    "faces": {
     "north": {
      "uv": [
@@ -312,28 +303,28 @@
      ],
      "texture": "#2"
     }
-   }
-  },
-  {
-   "from": [
-    27,
-    3,
-    0.6
-   ],
-   "to": [
-    28,
-    23,
-    0.9
-   ],
+   },
    "rotation": {
     "angle": 45,
     "axis": "x",
     "origin": [
      8,
-     2,
+     0,
      0
     ]
-   },
+   }
+  },
+  {
+   "from": [
+    30.8,
+    1.4545,
+    0.6
+   ],
+   "to": [
+    32.0,
+    30.5455,
+    0.9
+   ],
    "faces": {
     "north": {
      "uv": [
@@ -389,6 +380,15 @@
      ],
      "texture": "#2"
     }
+   },
+   "rotation": {
+    "angle": 45,
+    "axis": "x",
+    "origin": [
+     8,
+     0,
+     0
+    ]
    }
   }
  ],

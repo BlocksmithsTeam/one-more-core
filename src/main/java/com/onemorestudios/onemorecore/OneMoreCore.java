@@ -71,12 +71,23 @@ public class OneMoreCore {
     public static final DeferredBlock<MenuBoardBlock> MENU_BOARD = BLOCKS.register("menu_board",
             () -> new MenuBoardBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.WOOD)));
     public static final DeferredItem<BlockItem> MENU_BOARD_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOARD);
+    public static final DeferredBlock<MonitorBlock> MONITOR = BLOCKS.register("monitor",
+            () -> new MonitorBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.METAL)));
+    public static final DeferredItem<BlockItem> MONITOR_ITEM = ITEMS.registerSimpleBlockItem(MONITOR);
+    /** The space of a TV besides its own block. */
+    public static final DeferredBlock<ScreenPartBlock> SCREEN_PART = BLOCKS.register("screen_part",
+            () -> new ScreenPartBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().noLootTable().sound(SoundType.METAL)));
     /** The default money of the mod (currencyItem). */
     public static final DeferredItem<Item> COIN = ITEMS.registerSimpleItem("coin", new Item.Properties().stacksTo(99));
     private static final DeferredRegister.DataComponents COMPONENTS = DeferredRegister.createDataComponents(Registries.DATA_COMPONENT_TYPE, MODID);
-    /** The table number of an order ticket and of a tray's label. */
+    /** Old: the automatic table number of a ticket or tray (kept so that old items still load). */
     public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<Integer>> TABLE =
             COMPONENTS.registerComponentType("table", b -> b.persistent(com.mojang.serialization.Codec.INT).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.VAR_INT));
+    /** The table card text of an order ticket and of a tray's label. */
+    public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<String>> LABEL =
+            COMPONENTS.registerComponentType("table_label", b -> b.persistent(com.mojang.serialization.Codec.STRING).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.stringUtf8(16)));
+    /** A table number card: put it on a table and type its text. */
+    public static final DeferredItem<Item> TABLE_NUMBER = ITEMS.registerSimpleItem("table_number", new Item.Properties().stacksTo(16));
     public static final DeferredBlock<TrayBlock> TRAY = BLOCKS.register("tray", () -> new TrayBlock(trayProperties()));
     public static final DeferredItem<TrayItem> TRAY_ITEM = ITEMS.register("tray", () -> new TrayItem(TRAY.get(), new Item.Properties().stacksTo(1)));
     public static final DeferredBlock<TrayBlock> IRON_TRAY = BLOCKS.register("iron_tray", () -> new TrayBlock(trayProperties()));
@@ -101,7 +112,7 @@ public class OneMoreCore {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OpenSignBlockEntity>> OPEN_SIGN_ENTITY = BLOCK_ENTITIES.register("open_sign",
             () -> BlockEntityType.Builder.of(OpenSignBlockEntity::new, OPEN_SIGN.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBoardBlockEntity>> MENU_BOARD_ENTITY = BLOCK_ENTITIES.register("menu_board",
-            () -> BlockEntityType.Builder.of(MenuBoardBlockEntity::new, MENU_BOARD.get()).build(null));
+            () -> BlockEntityType.Builder.of(MenuBoardBlockEntity::new, MENU_BOARD.get(), MONITOR.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TrayBlockEntity>> TRAY_ENTITY = BLOCK_ENTITIES.register("tray",
             () -> BlockEntityType.Builder.of(TrayBlockEntity::new, TRAY.get(), IRON_TRAY.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OrderBoardBlockEntity>> ORDER_BOARD_ENTITY = BLOCK_ENTITIES.register("order_board",
@@ -123,15 +134,15 @@ public class OneMoreCore {
             .displayItems((parameters, output) -> {
                 output.accept(OPEN_SIGN_ITEM);
                 output.accept(COMPUTER_ITEM);
-                // With Yuushya Townscape, its own wall televisions show the menu and the orders (the Screens tool): ours, its model, hide.
-                boolean yuushya = net.neoforged.fml.ModList.get().isLoaded("yuushya");
-                if (!yuushya) output.accept(MENU_BOARD_ITEM);
+                output.accept(MENU_BOARD_ITEM);
                 output.accept(MENU_BOOK_ITEM);
-                if (!yuushya) output.accept(ORDER_BOARD_ITEM);
+                output.accept(ORDER_BOARD_ITEM);
+                output.accept(MONITOR_ITEM);
                 output.accept(TRAY_RACK_ITEM);
                 output.accept(TRAY_ITEM);
                 output.accept(IRON_TRAY_ITEM);
                 output.accept(COIN);
+                output.accept(TABLE_NUMBER);
             }).build());
 
     /** Blocks a customer can sit on. */
@@ -152,13 +163,6 @@ public class OneMoreCore {
         COMPONENTS.register(bus);
         BLOCK_ENTITIES.register(bus);
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
-        // With Yuushya Townscape, a built-in data pack hides the mod's screens (its wall TV) from recipe viewers too.
-        bus.addListener((net.neoforged.neoforge.event.AddPackFindersEvent e) -> {
-            if (net.neoforged.fml.ModList.get().isLoaded("yuushya"))
-                e.addPackFinders(ResourceLocation.fromNamespaceAndPath(MODID, "data/onemorecore/datapacks/yuushya"), net.minecraft.server.packs.PackType.SERVER_DATA,
-                        net.minecraft.network.chat.Component.literal("One More Core: Yuushya"), net.minecraft.server.packs.repository.PackSource.BUILT_IN,
-                        true, net.minecraft.server.packs.repository.Pack.Position.TOP);
-        });
         bus.addListener((EntityAttributeCreationEvent e) -> e.put(CUSTOMER.get(), Customer.createAttributes().build()));
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> Menu.load(e.getServer().registryAccess()));
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> SkinPool.start(e.getServer()));
@@ -193,6 +197,10 @@ public class OneMoreCore {
                 .playToClient(TableItems.Collected.TYPE, TableItems.Collected.CODEC, (c, context) -> TableItems.Collected.receive(c))
                 .playToServer(ReadyRequest.TYPE, ReadyRequest.CODEC, (request, context) -> ReadyRequest.handle(request, (ServerPlayer) context.player()))
                 .playToServer(ScreenClick.TYPE, ScreenClick.CODEC, (click, context) -> ScreenClick.handle(click, (ServerPlayer) context.player()))
+                .playToClient(TableCards.Edit.TYPE, TableCards.Edit.CODEC, (edit, context) -> TableCards.Edit.handler.accept(edit))
+                .playToClient(ScreenSettings.Open.TYPE, ScreenSettings.Open.CODEC, (o, context) -> ScreenSettings.Open.handler.accept(o))
+                .playToServer(ScreenSettings.Save.TYPE, ScreenSettings.Save.CODEC, (save, context) -> ScreenSettings.Save.handle(save, (ServerPlayer) context.player()))
+                .playToServer(TableCards.Text.TYPE, TableCards.Text.CODEC, (text, context) -> TableCards.Text.handle(text, (ServerPlayer) context.player()))
                 .versioned("2").playToClient(Status.TYPE, Status.CODEC, (status, context) -> Status.receive(status)));
         NeoForge.EVENT_BUS.addListener((ChunkWatchEvent.Sent e) -> {
             Restaurants all = Restaurants.get(e.getLevel());
@@ -224,6 +232,7 @@ public class OneMoreCore {
             event.setCancellationResult(InteractionResult.SUCCESS);
             return;
         }
+        if (TableCards.onUse(event) || ScreenSettings.onUse(event)) return;
         ItemStack held = event.getItemStack();
         // Sneak-click with an empty hand on a table of a closed restaurant turns the table off or on (like PlateUp).
         if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND && event.getEntity().isShiftKeyDown()

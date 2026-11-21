@@ -46,11 +46,16 @@ public final class ScreenPainter {
         final PoseStack pose;
         final MultiBufferSource buffers;
         final float w, h, hx, hy;
+        /** Canvas units of one layout unit (a 200-unit-high single screen at normal size), and the screen's settings. */
+        final float u;
+        final int settings;
         final List<Spot> spots = new ArrayList<>();
         float z;
         ItemStack hovered = ItemStack.EMPTY;
 
-        Canvas(PoseStack pose, MultiBufferSource buffers, float w, float h, float hx, float hy) {
+        Canvas(PoseStack pose, MultiBufferSource buffers, float w, float h, float hx, float hy, float u, int settings) {
+            this.u = u;
+            this.settings = settings;
             this.pose = pose;
             this.buffers = buffers;
             this.w = w;
@@ -110,14 +115,15 @@ public final class ScreenPainter {
 
     /** The menu: columns by kind; when the dishes do not fit, the pages change every 6 seconds. */
     static ItemStack menu(Canvas c, List<MenuBoardBlockEntity.Line> lines) {
-        float u = c.h / 200;
+        float u = c.u;
         c.rect(0, 0, c.w, c.h, 0xFF15171C);
         // The title strip.
         c.rect(0, 0, c.w, 22 * u, 0xFF0F1014);
         String title = Component.translatable("onemorecore.screen.menu").getString();
         c.text(title, (c.w - c.width(title, 1.6f * u)) / 2, 5 * u, 1.6f * u, 0xFFFFD866);
         List<String> kinds = new ArrayList<>();
-        for (String k : KINDS) if (lines.stream().anyMatch(l -> l.kind().equals(k))) kinds.add(k);
+        for (String k : KINDS)
+            if (com.onemorestudios.onemorecore.ScreenSettings.showsKind(c.settings, k) && lines.stream().anyMatch(l -> l.kind().equals(k))) kinds.add(k);
         if (kinds.isEmpty()) {
             String none = Component.translatable("onemorecore.board.empty").getString();
             c.text(none, (c.w - c.width(none, 1.1f * u)) / 2, c.h / 2, 1.1f * u, 0xFF8A919C);
@@ -137,9 +143,9 @@ public final class ScreenPainter {
             // Tiles in rows of one or two; the tile height fits the column, at most 4 rows a page.
             float areaTop = top + 17 * u, areaH = c.h - areaTop - gap;
             int perRow = colW > 120 * u ? 2 : 1;
-            int rows = Math.min(4, (of.size() + perRow - 1) / perRow);
+            int rows = Math.min(Math.max(1, (int) (areaH / (38 * u))), (of.size() + perRow - 1) / perRow);
             int perPage = rows * perRow, pages = (of.size() + perPage - 1) / perPage;
-            int page = (int) (System.currentTimeMillis() / 6000 % pages);
+            int page = com.onemorestudios.onemorecore.ScreenSettings.autoPages(c.settings) ? (int) (System.currentTimeMillis() / 6000 % pages) : 0;
             float tileH = (areaH - (rows - 1) * 3 * u) / rows, tileW = (colW - (perRow - 1) * 3 * u) / perRow;
             for (int i = 0; i < perPage && page * perPage + i < of.size(); i++) {
                 MenuBoardBlockEntity.Line l = of.get(page * perPage + i);
@@ -169,7 +175,7 @@ public final class ScreenPainter {
 
     /** The orders: a red title bar with the time left, and a card per order, oldest first. */
     static ItemStack orders(Canvas c, List<OrderBoardBlockEntity.Ticket> tickets) {
-        float u = c.h / 200;
+        float u = c.u;
         c.rect(0, 0, c.w, c.h, 0xFFC9CDD3);
         // A faint pattern of squares, like the screen of the game this copies.
         for (float y = 30 * u; y < c.h - 4 * u; y += 24 * u)
@@ -189,9 +195,9 @@ public final class ScreenPainter {
             return c.hovered;
         }
         float gap = 6 * u, top = 30 * u;
-        int perPage = com.onemorestudios.onemorecore.ScreenRect.ordersPerPage(c.w, c.h);
+        int perPage = com.onemorestudios.onemorecore.ScreenRect.ordersPerPage(c.w, u);
         int pages = (tickets.size() + perPage - 1) / perPage;
-        int page = com.onemorestudios.onemorecore.ScreenRect.page(pages, Minecraft.getInstance().level == null ? 0 : Minecraft.getInstance().level.getGameTime());
+        int page = com.onemorestudios.onemorecore.ScreenRect.page(pages, gameTime(c.settings));
         float cardW = (c.w - gap * (perPage + 1)) / perPage, cardH = c.h - top - gap;
         for (int i = 0; i < perPage && page * perPage + i < tickets.size(); i++) {
             OrderBoardBlockEntity.Ticket t = tickets.get(page * perPage + i);
@@ -200,27 +206,41 @@ public final class ScreenPainter {
             c.rect(x + 1.5f * u, y + 1.5f * u, cardW, cardH, 0x40000000);
             c.rect(x, y, cardW, cardH, 0xFF2B2F36);
             c.rect(x, y, cardW, 26 * u, head);
-            String table = Component.translatable("onemorecore.screen.table", t.table()).getString();
+            String table = Component.translatable("onemorecore.screen.table", t.table().isEmpty() ? "?" : t.table()).getString();
             c.text(c.fit(table, cardW - 8 * u, 1.05f * u), x + 4 * u, y + 4 * u, 1.05f * u, 0xFFFFFFFF);
             // Patience as three dots under the table.
             for (int d = 0; d < 3; d++)
                 c.rect(x + 4 * u + d * 7 * u, y + 17 * u, 5 * u, 5 * u, t.patience() > d / 3f ? 0xFFFFFFFF : 0x55FFFFFF);
-            c.text(Component.translatable("onemorecore.screen.items").getString(), x + 4 * u, y + 31 * u, 0.6f * u, 0xFF9AA3AD);
-            int cols = 3;
-            float icon = Math.min(20 * u, (cardW - 8 * u) / cols * 0.85f), cell = (cardW - 8 * u) / cols;
-            for (int k = 0; k < t.items().size() && k < 9; k++)
-                c.item(t.items().get(k), x + 4 * u + (k % cols + 0.5f) * cell, y + 40 * u + (k / cols + 0.5f) * (icon + 4 * u), icon);
+            // A row for each guest: the dishes of one person side by side, a thin line between guests.
+            float icon = Math.min(16 * u, (cardW - 8 * u) / 3 * 0.8f), rowH = icon + 5 * u, rowsTop = y + 30 * u, bottom = y + cardH - 20 * u;
+            int perRow = Math.max(1, (int) ((cardW - 6 * u) / (icon + 3 * u)));
+            int shownRows = Math.max(1, (int) ((bottom - rowsTop) / rowH));
+            List<List<ItemStack>> rows = t.rows();
+            for (int rIndex = 0; rIndex < rows.size() && rIndex < shownRows; rIndex++) {
+                float ry = rowsTop + rIndex * rowH;
+                if (rIndex > 0) c.rect(x + 4 * u, ry - 1.5f * u, cardW - 8 * u, 0.6f * u, 0xFF3C424B);
+                List<ItemStack> row = rows.get(rIndex);
+                for (int k = 0; k < row.size() && k < perRow; k++)
+                    c.item(row.get(k), x + 4 * u + icon / 2 + k * (icon + 3 * u), ry + rowH / 2 - 1 * u, icon);
+                if (row.size() > perRow) c.text("+" + (row.size() - perRow), x + cardW - 12 * u, ry + 2 * u, 0.6f * u, 0xFFFFFFFF);
+            }
+            if (rows.size() > shownRows) c.text("+" + (rows.size() - shownRows), x + cardW - 14 * u, bottom - 8 * u, 0.7f * u, 0xFFFFFFFF);
             c.rect(x, y + cardH - 18 * u, cardW, 18 * u, 0xFF23262C);
             String price = String.valueOf(t.price());
             c.item(StatusCurrency.get(), x + 9 * u, y + cardH - 9 * u, 10 * u);
             c.text(price, x + 16 * u, y + cardH - 13 * u, 0.95f * u, 0xFF7AE07A);
-            if (t.items().size() > 9) c.text("+" + (t.items().size() - 9), x + cardW - 18 * u, y + cardH - 13 * u, 0.8f * u, 0xFFFFFFFF);
         }
         if (pages > 1) {
             String p = (page + 1) + "/" + pages;
             c.text(p, c.w - c.width(p, 0.7f * u) - 6 * u, c.h - 7 * u, 0.7f * u, 0xFF6B7280);
         }
         return c.hovered;
+    }
+
+    /** The game time that picks the page of the orders: 0 (the first page) when the pages do not change by themselves. */
+    static long gameTime(int settings) {
+        var level = Minecraft.getInstance().level;
+        return level == null || !com.onemorestudios.onemorecore.ScreenSettings.autoPages(settings) ? 0 : level.getGameTime();
     }
 
     /** The currency item of the restaurant, for the price marks. */
@@ -239,10 +259,8 @@ public final class ScreenPainter {
         pose.mulPose(Axis.YP.rotationDegrees(-turn));
         pose.translate(-0.5, 0, -0.5);
         if (tilt != 0) {
-            // Turned down about the bottom back edge (y 2, z 0), as the model: the top comes out.
-            pose.translate(0, 2 / 16f, 0);
+            // Turned down about the bottom back edge (y 0, z 0), as the model: the top comes out.
             pose.mulPose(Axis.XP.rotationDegrees(tilt));
-            pose.translate(0, -2 / 16f, 0);
         }
         pose.translate(r.x0() / 16, r.y1() / 16, (r.z() + 0.05f) / 16);
         pose.scale(1 / 160f, -1 / 160f, 1 / 160f);

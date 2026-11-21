@@ -18,8 +18,8 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * The order screen of the kitchen, a television on a wall: every order that a player took shows as a card (table number,
- * dishes, patience, price), oldest first. A click on a card gives its ticket, to stick on a tray.
+ * The Order Screen: a TV that shows the orders at first: a card for each party (its table card's text, a row of dishes for each
+ * guest, patience, price), oldest first. A click on a card gives its ticket (ScreenClick), to stick on a tray.
  */
 public class OrderBoardBlock extends MenuBoardBlock {
     /** Tickets on the rail; the rail is as wide as the menu board. */
@@ -40,11 +40,18 @@ public class OrderBoardBlock extends MenuBoardBlock {
                 : (l, p, s, be) -> ((OrderBoardBlockEntity) be).serverTick((ServerLevel) l);
     }
 
+    @Override
+    public int defaultMode() {
+        return Restaurant.SCREEN_ORDERS;
+    }
+
     /** The orders that the screen at a position shows (an Order Screen, or a television in orders mode), or null. */
     static List<OrderBoardBlockEntity.Ticket> ticketsAt(ServerLevel level, BlockPos pos) {
-        if (level.getBlockEntity(pos) instanceof OrderBoardBlockEntity board) return board.tickets(level);
-        Restaurant r = Restaurants.get(level).withScreen(pos);
-        return r != null && r.screens.get(pos) == Restaurant.SCREEN_ORDERS ? OrderBoardBlockEntity.tickets(r) : null;
+        BlockState state = level.getBlockState(pos);
+        if (ScreenRect.of(state) == null) return null;
+        Restaurant r = ScreenSettings.owner(level, pos);
+        if (r != null && state.getBlock() instanceof MenuBoardBlock board) r.ensureScreen(pos, board.defaultMode());
+        return r != null && ScreenSettings.mode(r.screens.getOrDefault(pos, Restaurant.SCREEN_OFF)) == Restaurant.SCREEN_ORDERS ? r.tickets() : null;
     }
 
     /** Gives the current ticket for a displayed order if it is still active. */
@@ -53,7 +60,7 @@ public class OrderBoardBlock extends MenuBoardBlock {
         OrderBoardBlockEntity.Ticket t = tickets.stream().filter(ticket -> orderId.equals(ticket.orderId())).findFirst().orElse(null);
         if (t == null) return;
         ItemStack ticket = new ItemStack(OneMoreCore.TICKET.get());
-        ticket.set(OneMoreCore.TABLE.get(), t.table());
+        ticket.set(OneMoreCore.LABEL.get(), t.table().isEmpty() ? "?" : t.table());
         ticket.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(t.items()));
         TrayBlock.give(player, ticket);
         level.playSound(null, pos, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8f, 1.4f);

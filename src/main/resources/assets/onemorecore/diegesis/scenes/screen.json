@@ -12,7 +12,7 @@
     ],
     "fov": 42,
     "neighbors": {
-      "enabled": false
+      "enabled": true
     }
   },
   "work_plane": 15,

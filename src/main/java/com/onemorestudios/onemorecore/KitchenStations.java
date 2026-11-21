@@ -79,16 +79,8 @@ public final class KitchenStations {
      * (tooltips of the dishes), and on the order screen a click on a card gives its ticket.
      */
     public static final StationType SCREEN = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "screen"))
-            .block(OneMoreCore.MENU_BOARD).block(OneMoreCore.ORDER_BOARD)
+            .block(OneMoreCore.MENU_BOARD).block(OneMoreCore.ORDER_BOARD).block(OneMoreCore.MONITOR)
             .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown())
-            .logic(context -> new StationLogic() {
-                @Override
-                public void onCustomAction(StationContext station, Player player, String action, CompoundTag data) {
-                    if (!"ticket".equals(action) || !(player instanceof ServerPlayer serverPlayer) || !station.users().contains(player)
-                            || !data.hasUUID("order")) return;
-                    ScreenClick.handle(new ScreenClick(station.pos(), data.getUUID("order"), data.getFloat("x"), data.getFloat("y")), serverPlayer);
-                }
-            })
             .build();
 
     /** The menu book up close: the open book on the table, its pages turned by clicks (client only, it shows the synced menu). */

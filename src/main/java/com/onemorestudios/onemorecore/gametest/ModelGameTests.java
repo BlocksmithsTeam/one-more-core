@@ -46,7 +46,7 @@ public final class ModelGameTests {
         var tray = GameTestSupport.place(helper, POS, OneMoreCore.IRON_TRAY.get(), TrayBlockEntity.class);
         var dish = new ItemStack(Items.APPLE);
         tray.items.setItem(2, dish);
-        tray.label = 7;
+        tray.label = "7";
 
         var drops = Block.getDrops(tray.getBlockState(), helper.getLevel(), tray.getBlockPos(), tray);
         helper.assertValueEqual(drops.size(), 1, "iron tray drop count");
@@ -55,7 +55,7 @@ public final class ModelGameTests {
         var contents = drop.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY);
         var droppedDish = contents.stream().skip(2).findFirst().orElse(ItemStack.EMPTY);
         helper.assertTrue(ItemStack.matches(droppedDish, dish), "the dropped tray retained the dish in its original slot");
-        helper.assertValueEqual(drop.getOrDefault(OneMoreCore.TABLE.get(), 0), 7, "label on the dropped tray");
+        helper.assertValueEqual(drop.getOrDefault(OneMoreCore.LABEL.get(), ""), "7", "label on the dropped tray");
         helper.succeed();
     }
 

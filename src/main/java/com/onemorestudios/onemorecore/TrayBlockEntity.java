@@ -22,14 +22,14 @@ import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
-/** A tray on a counter: up to three dishes and the table number of its label (0: no label). */
+/** A tray on a counter: up to three dishes and the table text of its label ("": no label). */
 public class TrayBlockEntity extends BlockEntity {
     public static final int SIZE = 3;
     public final SimpleContainer items = new SimpleContainer(SIZE) {
         @Override
         public int getMaxStackSize() { return 1; }
     };
-    public int label;
+    public String label = "";
     Player placingPlayer;
     private final List<ItemStack> overflow = new ArrayList<>();
 
@@ -47,7 +47,7 @@ public class TrayBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         ContainerHelper.saveAllItems(tag, savedDishes(), true, registries);
-        tag.putInt("label", label);
+        tag.putString("label", label);
     }
 
     @Override
@@ -56,14 +56,15 @@ public class TrayBlockEntity extends BlockEntity {
         NonNullList<ItemStack> list = NonNullList.withSize(256, ItemStack.EMPTY); // ContainerHelper stores the slot as an unsigned byte.
         ContainerHelper.loadAllItems(tag, list, registries);
         loadDishes(list);
-        label = Math.max(0, tag.getInt("label"));
+        // Old trays kept a table number.
+        label = tag.contains("label", net.minecraft.nbt.Tag.TAG_INT) ? (tag.getInt("label") > 0 ? String.valueOf(tag.getInt("label")) : "") : TableCards.clean(tag.getString("label"));
     }
 
     @Override
     protected void applyImplicitComponents(DataComponentInput input) {
         super.applyImplicitComponents(input);
         loadDishes(input.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).stream().toList());
-        label = Math.max(0, input.getOrDefault(OneMoreCore.TABLE.get(), 0));
+        label = TableCards.clean(input.getOrDefault(OneMoreCore.LABEL.get(), ""));
     }
 
     private void loadDishes(List<ItemStack> dishes) {
@@ -119,7 +120,7 @@ public class TrayBlockEntity extends BlockEntity {
     protected void collectImplicitComponents(DataComponentMap.Builder builder) {
         super.collectImplicitComponents(builder);
         builder.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(savedDishes()));
-        if (label > 0) builder.set(OneMoreCore.TABLE.get(), label);
+        if (!label.isEmpty()) builder.set(OneMoreCore.LABEL.get(), label);
     }
 
     @Override
