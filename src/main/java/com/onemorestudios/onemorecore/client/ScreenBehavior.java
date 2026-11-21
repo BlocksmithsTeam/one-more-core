@@ -23,9 +23,11 @@ final class ScreenBehavior implements StationBehavior {
         float[] p = ScreenRenderer.pointer(view.pos(), view.level().getBlockState(view.pos()), ScreenRect.OWN);
         if (Float.isNaN(p[0])) return;
         int i = ScreenRect.orderAt(ScreenRect.OWN.width(), ScreenRect.OWN.height(), board.tickets.size(), view.level().getGameTime(), p[0], p[1]);
-        if (i < 0) return;
+        if (i < 0 || board.tickets.get(i).orderId() == null) return;
         CompoundTag data = new CompoundTag();
-        data.putInt("index", i);
+        data.putUUID("order", board.tickets.get(i).orderId());
+        data.putFloat("x", p[0]);
+        data.putFloat("y", p[1]);
         view.sendAction("ticket", data);
     }
 }

@@ -1,6 +1,8 @@
 package com.onemorestudios.onemorecore.client;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
@@ -8,7 +10,9 @@ import org.joml.Vector4f;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.onemorestudios.onemorecore.MenuBoardBlockEntity;
 import com.onemorestudios.onemorecore.OrderBoardBlockEntity;
+import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.Restaurant;
+import com.onemorestudios.onemorecore.ScreenClick;
 import com.onemorestudios.onemorecore.ScreenData;
 import com.onemorestudios.onemorecore.ScreenRect;
 
@@ -17,8 +21,10 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -32,13 +38,16 @@ public class ScreenRenderer<T extends net.minecraft.world.level.block.entity.Blo
     /** The item under the pointer on any television in this frame. */
     static ItemStack stack = ItemStack.EMPTY;
     private static double best = Double.MAX_VALUE;
-    /** The order card under the crosshair in this frame (its screen and index), for a click; index -1: none. */
-    private static BlockPos cardPos = BlockPos.ZERO;
-    private static int cardIndex = -1;
+    /** The order card under the crosshair in this frame. */
+    private static ScreenClick card;
     private static double cardBest = Double.MAX_VALUE;
     /** The view of the last frame, camera-relative, for the mouse ray. */
     private static final Matrix4f INVERSE = new Matrix4f();
     private static boolean haveMatrix;
+    private static final Map<BlockPos, Display> DISPLAYS = new HashMap<>();
+
+    private record Display(ScreenData data, int[] modes, long[] positions, List<MenuBoardBlockEntity.Line> lines,
+            List<OrderBoardBlockEntity.Ticket> tickets) {}
 
     public ScreenRenderer(BlockEntityRendererProvider.Context context) {}
 
@@ -76,10 +85,9 @@ public class ScreenRenderer<T extends net.minecraft.world.level.block.entity.Blo
         }
         if (mode == Restaurant.SCREEN_ORDERS && !Float.isNaN(hover[0]) && hover[2] < cardBest && Minecraft.getInstance().level != null) {
             int i = ScreenRect.orderAt(r.width(), r.height(), tickets.size(), Minecraft.getInstance().level.getGameTime(), hover[0], hover[1]);
-            if (i >= 0) {
+            if (i >= 0 && tickets.get(i).orderId() != null) {
                 cardBest = hover[2];
-                cardPos = pos.immutable();
-                cardIndex = i;
+                card = new ScreenClick(pos.immutable(), tickets.get(i).orderId(), hover[0], hover[1]);
             }
         }
     }
@@ -92,7 +100,7 @@ public class ScreenRenderer<T extends net.minecraft.world.level.block.entity.Blo
         float[] none = {Float.NaN, Float.NaN, Float.MAX_VALUE};
         Minecraft mc = Minecraft.getInstance();
         boolean close = DiegesisHook.focusedAt(pos);
-        if (mc.screen != null && !close || ComputerCamera.active() || !haveMatrix) return none;
+        if (mc.level == null || mc.player == null || mc.screen != null && !close || ComputerCamera.active() || !haveMatrix) return none;
         Vec3 cam = mc.gameRenderer.getMainCamera().getPosition();
         double nx = 0, ny = 0;
         if (close) {
@@ -107,12 +115,13 @@ public class ScreenRenderer<T extends net.minecraft.world.level.block.entity.Blo
                 vy = r.world(pos, state, r.x0(), r.y0(), r.z()).subtract(o);
         Vec3 n = ux.cross(vy);
         double denom = dir.dot(n);
-        if (Math.abs(denom) < 1e-6) return none;
+        if (denom < 1e-6) return none;
         double t = o.subtract(from).dot(n) / denom;
         if (t <= 0 || t > (close ? 32 : 8)) return none;
-        Vec3 p = from.add(dir.scale(t)).subtract(o);
+        Vec3 point = from.add(dir.scale(t));
+        Vec3 p = point.subtract(o);
         double u = p.dot(ux) / ux.lengthSqr(), v = p.dot(vy) / vy.lengthSqr();
-        if (u < 0 || u > 1 || v < 0 || v > 1) return none;
+        if (u < 0 || u > 1 || v < 0 || v > 1 || !ScreenRect.visible(mc.level, mc.player, pos, cam, point)) return none;
         return new float[] {(float) (u * r.width()), (float) (v * r.height()), (float) t};
     }
 
@@ -121,13 +130,18 @@ public class ScreenRenderer<T extends net.minecraft.world.level.block.entity.Blo
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderFrameEvent.Pre e) -> {
             stack = ItemStack.EMPTY;
             best = Double.MAX_VALUE;
-            cardIndex = -1;
+            card = null;
             cardBest = Double.MAX_VALUE;
         });
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut e) -> DISPLAYS.clear());
         // A use click on an order card gives its ticket, also where the television is wider than its block.
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.InputEvent.InteractionKeyMappingTriggered e) -> {
-            if (!e.isUseItem() || cardIndex < 0 || Minecraft.getInstance().screen != null || Minecraft.getInstance().player.isShiftKeyDown()) return;
-            net.neoforged.neoforge.network.PacketDistributor.sendToServer(new com.onemorestudios.onemorecore.ScreenClick(cardPos, cardIndex));
+            Minecraft mc = Minecraft.getInstance();
+            if (!e.isUseItem() || e.getHand() != InteractionHand.MAIN_HAND || card == null || mc.screen != null || mc.level == null
+                    || mc.player == null || mc.player.isSpectator() || mc.player.isShiftKeyDown()) return;
+            if (DiegesisHook.LOADED && mc.player.getMainHandItem().isEmpty() && mc.hitResult instanceof BlockHitResult hit
+                    && mc.level.getBlockState(hit.getBlockPos()).is(OneMoreCore.ORDER_BOARD.get())) return;
+            net.neoforged.neoforge.network.PacketDistributor.sendToServer(card);
             e.setSwingHand(false);
             e.setCanceled(true);
         });
@@ -141,15 +155,23 @@ public class ScreenRenderer<T extends net.minecraft.world.level.block.entity.Blo
             return;
         }
         Minecraft mc = Minecraft.getInstance();
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES || mc.level == null || ScreenData.CLIENT.isEmpty()) return;
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES || mc.level == null) return;
+        DISPLAYS.keySet().retainAll(ScreenData.CLIENT.keySet());
+        if (ScreenData.CLIENT.isEmpty()) return;
         PoseStack pose = event.getPoseStack();
         Vec3 cam = event.getCamera().getPosition();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
         for (ScreenData d : ScreenData.CLIENT.values()) {
-            long[] at = d.data().getLongArray("pos");
-            int[] modes = d.data().getIntArray("mode");
-            List<MenuBoardBlockEntity.Line> lines = MenuBoardBlockEntity.parse(d.data().getCompound("menu"));
-            List<OrderBoardBlockEntity.Ticket> tickets = OrderBoardBlockEntity.decode(d.data().getCompound("tickets"), mc.level.registryAccess());
+            Display display = DISPLAYS.get(d.sign());
+            if (display == null || display.data() != d) {
+                var registries = mc.level.registryAccess();
+                display = new Display(d, d.data().getIntArray("mode"), d.data().getLongArray("pos"),
+                        MenuBoardBlockEntity.parse(d.data().getCompound("menu"), registries),
+                        OrderBoardBlockEntity.decode(d.data().getCompound("tickets"), registries));
+                DISPLAYS.put(d.sign(), display);
+            }
+            long[] at = display.positions();
+            int[] modes = display.modes();
             for (int i = 0; i < at.length && i < modes.length; i++) {
                 BlockPos pos = BlockPos.of(at[i]);
                 if (pos.distToCenterSqr(cam) > 48 * 48) continue;
@@ -158,7 +180,7 @@ public class ScreenRenderer<T extends net.minecraft.world.level.block.entity.Blo
                 if (r == null) continue;
                 pose.pushPose();
                 pose.translate(pos.getX() - cam.x, pos.getY() - cam.y, pos.getZ() - cam.z);
-                draw(pose, buffers, pos, state, r, modes[i], lines, tickets);
+                draw(pose, buffers, pos, state, r, modes[i], display.lines(), display.tickets());
                 pose.popPose();
             }
         }

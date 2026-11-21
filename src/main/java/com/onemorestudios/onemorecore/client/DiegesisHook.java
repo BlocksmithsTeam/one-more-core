@@ -6,7 +6,7 @@ import net.minecraft.core.BlockPos;
 final class DiegesisHook {
     private DiegesisHook() {}
 
-    private static final boolean LOADED = net.neoforged.fml.ModList.get().isLoaded("diegesis");
+    static final boolean LOADED = net.neoforged.fml.ModList.get().isLoaded("diegesis");
 
     /** Whether the player works at the Diegesis station of this block now. */
     static boolean focusedAt(BlockPos pos) {

@@ -120,10 +120,13 @@ public class OpenSignBlock extends Block implements EntityBlock {
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (level instanceof ServerLevel sl && !newState.is(this)) {
-            Restaurant r = Restaurants.get(sl).remove(pos);
+            Restaurants restaurants = Restaurants.get(sl);
+            Restaurant r = restaurants.at(pos);
             if (r != null) {
                 r.open = false; // the customers remove themselves
+                r.settleOnRemoval(sl);
                 for (BlockPos surface : List.copyOf(r.dirt.keySet())) r.setDirt(sl, surface, 0);
+                restaurants.remove(pos);
                 // Like a filled shulker box: the sign item keeps the money, the day, the unlocks and the paid orders.
                 popResource(level, pos, signItem(r));
             }

@@ -8,8 +8,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.LongConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,6 +40,11 @@ public class YouTubeChat {
     private String key, version, continuation;
     private int backoff = 1;
 
+    @FunctionalInterface
+    interface RequestSender {
+        String send(HttpRequest request) throws Exception;
+    }
+
     public YouTubeChat(String channel, Consumer<TwitchChat.Message> onMessage) {
         if (!channel.matches("@?[A-Za-z0-9_.-]{1,64}")) throw new IllegalArgumentException("bad YouTube channel or video: " + channel);
         this.channel = channel;
@@ -47,7 +52,7 @@ public class YouTubeChat {
     }
 
     public void start() {
-        CompletableFuture.runAsync(this::run);
+        CompletableFuture.runAsync(() -> run(this::send, this::sleep));
     }
 
     public void stop() {
@@ -55,11 +60,16 @@ public class YouTubeChat {
         client.shutdownNow();
     }
 
-    private String get(String url) throws Exception {
+    private static String get(String url, RequestSender request) throws Exception {
         HttpRequest r = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(20)).header("User-Agent", UA)
                 .header("Accept-Language", "en").build();
+        return request.send(r);
+    }
+
+    private String send(HttpRequest r) throws Exception {
         HttpResponse<String> response = client.send(r, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) throw new IllegalStateException("HTTP " + response.statusCode() + " for " + url);
+        if (response.statusCode() != 200) throw new IllegalStateException("HTTP " + response.statusCode()
+                + (r.method().equals("GET") ? " for " + r.uri() : ""));
         return response.body();
     }
 
@@ -69,30 +79,29 @@ public class YouTubeChat {
     }
 
     /** Finds the stream and the first continuation, then polls until stopped; restarts with a growing pause on errors. */
-    private void run() {
+    void run(RequestSender request, LongConsumer sleep) {
         while (!stopped) {
             try {
                 String video = channel.length() == 11 && !channel.startsWith("@") ? channel
-                        : find(VIDEO, get("https://www.youtube.com/" + (channel.startsWith("@") ? channel : "@" + channel) + "/live"));
+                        : find(VIDEO, get("https://www.youtube.com/" + (channel.startsWith("@") ? channel : "@" + channel) + "/live", request));
                 if (video == null) throw new IllegalStateException("no live stream found");
-                String page = get("https://www.youtube.com/live_chat?is_popout=1&v=" + video);
+                String page = get("https://www.youtube.com/live_chat?is_popout=1&v=" + video, request);
                 key = find(KEY, page);
                 version = find(VERSION, page);
                 continuation = find(CONTINUATION, page);
                 if (key == null || version == null || continuation == null) throw new IllegalStateException("the chat page has no continuation");
                 OneMoreCore.LOGGER.info("YouTube chat {}: connected to {}.", channel, video);
-                backoff = 1;
-                poll();
+                poll(request, sleep);
             } catch (Exception e) {
                 if (stopped) return;
                 OneMoreCore.LOGGER.warn("YouTube chat {}: {}. Next try in {} s.", channel, e.getMessage(), backoff);
-                sleep(backoff * 1000L);
+                sleep.accept(backoff * 1000L);
                 backoff = Math.min(MAX_BACKOFF, backoff * 2);
             }
         }
     }
 
-    private void poll() throws Exception {
+    private void poll(RequestSender request, LongConsumer sleep) throws Exception {
         while (!stopped) {
             JsonObject body = new JsonObject();
             JsonObject context = new JsonObject(), web = new JsonObject();
@@ -104,9 +113,7 @@ public class YouTubeChat {
             HttpRequest r = HttpRequest.newBuilder(URI.create("https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key=" + key))
                     .timeout(Duration.ofSeconds(20)).header("Content-Type", "application/json").header("User-Agent", UA)
                     .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
-            HttpResponse<String> response = client.send(r, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) throw new IllegalStateException("HTTP " + response.statusCode());
-            JsonObject chat = JsonParser.parseString(response.body()).getAsJsonObject().getAsJsonObject("continuationContents");
+            JsonObject chat = JsonParser.parseString(request.send(r)).getAsJsonObject().getAsJsonObject("continuationContents");
             if (chat == null || !chat.has("liveChatContinuation")) throw new IllegalStateException("the stream ended");
             JsonObject live = chat.getAsJsonObject("liveChatContinuation");
             for (TwitchChat.Message m : messages(live)) onMessage.accept(m);
@@ -122,7 +129,8 @@ public class YouTubeChat {
             }
             if (next == null) throw new IllegalStateException("no next continuation");
             continuation = next;
-            sleep(Math.max(1000, Math.min(10000, wait)));
+            backoff = 1;
+            sleep.accept(Math.max(1000, Math.min(10000, wait)));
         }
     }
 

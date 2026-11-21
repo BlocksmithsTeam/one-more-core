@@ -34,6 +34,12 @@ base {
     archivesName = mod_id
 }
 
+tasks.named('jar', Jar).configure {
+    into('META-INF') {
+        from 'LICENSE', 'THIRD_PARTY_NOTICES.md'
+    }
+}
+
 // Mojang ships Java 21 to end users in 1.21.1, so mods should target Java 21.
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -116,7 +122,11 @@ configurations {
 }
 
 dependencies {
-    compileOnly "curse.maven:diegesis-1790227:9643620" // NeoForge 1.21.1, 1.0.0-beta.11
+    def diegesis = "curse.maven:diegesis-1790227:9709606" // NeoForge 1.21.1, 1.0.0-beta.14
+    compileOnly diegesis
+    if (!providers.gradleProperty('noDiegesis').isPresent()) {
+        localRuntime diegesis
+    }
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

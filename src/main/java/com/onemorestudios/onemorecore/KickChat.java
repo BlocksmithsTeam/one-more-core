@@ -13,7 +13,9 @@ import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
 /**
@@ -25,7 +27,6 @@ import com.google.gson.JsonParser;
 public class KickChat implements WebSocket.Listener {
     /** The web client asks this for its realtime key; the answer names the Pusher app key and cluster. */
     private static final String REALTIME = "https://web.kick.com/api/v1/realtime/connection";
-    private static final Pattern APP_KEY = Pattern.compile("\"app_key\"\s*:\s*\"([a-z0-9]+)\""), CLUSTER = Pattern.compile("\"cluster\"\s*:\s*\"([a-z0-9-]+)\"");
     private static final Pattern CHATROOM = Pattern.compile("\"chatroom\"\\s*:\\s*\\{[^{}]*?\"id\"\\s*:\\s*(\\d+)");
     private static final int MAX_BACKOFF = 60;
     /** A full browser name: the pages answer an unknown or short one with "update your browser". */
@@ -56,11 +57,10 @@ public class KickChat implements WebSocket.Listener {
             HttpRequest request = HttpRequest.newBuilder(URI.create(REALTIME)).timeout(Duration.ofSeconds(15)).header("Content-Type", "application/json")
                     .header("Accept", "application/json").header("User-Agent", UA).POST(HttpRequest.BodyPublishers.ofString(body)).build();
             client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).whenComplete((response, error) -> {
-                Matcher k = error == null && response.statusCode() == 200 ? APP_KEY.matcher(response.body()) : null;
-                Matcher c = k != null ? CLUSTER.matcher(response.body()) : null;
-                if (k != null && k.find() && c.find()) {
-                    appKey = k.group(1);
-                    cluster = c.group(1);
+                Connection connection = error == null && response.statusCode() == 200 ? parseConnection(response.body()) : null;
+                if (connection != null) {
+                    appKey = connection.appKey();
+                    cluster = connection.cluster();
                     start();
                 } else retry("no realtime key from kick.com (" + (error != null ? error : "HTTP " + response.statusCode()) + ")");
             });
@@ -82,6 +82,45 @@ public class KickChat implements WebSocket.Listener {
         client.newWebSocketBuilder().buildAsync(URI.create("wss://ws-" + cluster + ".pusher.com/app/" + appKey + "?protocol=7&client=js&version=8.4.0&flash=false"), this).whenComplete((ws, error) -> {
             if (error != null) retry("connect failed: " + error);
         });
+    }
+
+    record Connection(String appKey, String cluster) {}
+
+    static Connection parseConnection(String body) {
+        try {
+            JsonElement root = JsonParser.parseString(body);
+            if (!root.isJsonObject()) return null;
+            JsonObject object = root.getAsJsonObject();
+            Connection direct = readConnection(object);
+            if (direct != null) return direct;
+            JsonElement data = object.get("data");
+            if (data == null || !data.isJsonObject()) return null;
+            JsonElement connections = data.getAsJsonObject().get("connections");
+            if (connections == null || !connections.isJsonArray()) return null;
+            for (JsonElement element : connections.getAsJsonArray()) {
+                if (!element.isJsonObject()) continue;
+                JsonObject connection = element.getAsJsonObject();
+                if (!"pusher".equals(stringField(connection, "provider"))) continue;
+                JsonElement credentials = connection.get("credentials");
+                if (credentials == null || !credentials.isJsonObject()) continue;
+                Connection parsed = readConnection(credentials.getAsJsonObject());
+                if (parsed != null) return parsed;
+            }
+        } catch (JsonParseException ignored) {
+            // A malformed bootstrap response uses the same retry path as a missing key.
+        }
+        return null;
+    }
+
+    private static Connection readConnection(JsonObject object) {
+        String key = stringField(object, "app_key"), cluster = stringField(object, "cluster");
+        return key != null && key.matches("[a-z0-9]+") && cluster != null && cluster.matches("[a-z0-9-]+")
+                ? new Connection(key, cluster) : null;
+    }
+
+    private static String stringField(JsonObject object, String field) {
+        JsonElement value = object.get(field);
+        return value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isString() ? value.getAsString() : null;
     }
 
     public void stop() {

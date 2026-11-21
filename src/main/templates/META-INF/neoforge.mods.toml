@@ -95,6 +95,6 @@ Restaurant customers: daily service, orders, patience, delivery and payment.
 [[dependencies.${mod_id}]]
     modId="diegesis"
     type="optional"
-    versionRange="[1.0.0-beta.11,)"
+    versionRange="[1.0.0-beta.14,)"
     ordering="AFTER"
     side="BOTH"

@@ -49,7 +49,10 @@ public final class MenuBook {
     // ---- Book screen (without Diegesis) ----
 
     static void register() {
-        MenuBookBlockEntity.Open.handler = o -> Minecraft.getInstance().setScreen(new BookScreen(MenuBoardBlockEntity.parse(o.menu())));
+        MenuBookBlockEntity.Open.handler = o -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.level != null) mc.setScreen(new BookScreen(MenuBoardBlockEntity.parse(o.menu(), mc.level.registryAccess())));
+        };
         if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) BookHook.register();
     }
 

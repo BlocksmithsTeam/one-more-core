@@ -247,7 +247,8 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
             if (hovered >= 0) {
                 // A darker square behind the item that the player looks at.
                 float sx = (hovered - (order.size() - 1) / 2f) * SLOT, r = SLOT / 2 - 0.02f;
-                quad(vc, m, sx - r, itemsY - r, sx + r, itemsY + r, z + 0.012f, 28, 28, 32, 32, 0xB0000000);
+                quad(buffers.getBuffer(RenderType.text(BUBBLE)), m, sx - r, itemsY - r, sx + r, itemsY + r, z + 0.012f,
+                        28, 28, 32, 32, 0xB0000000);
             }
             pose.mulPose(Axis.YP.rotationDegrees(180));
             pose.translate(0, itemsY, 0);

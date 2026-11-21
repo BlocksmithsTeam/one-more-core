@@ -6,10 +6,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.RandomSource;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /**
  * The identities that customers can get: a Minecraft account name for the skin and a visible name.
@@ -20,11 +24,13 @@ public class SkinPool {
 
     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_]{3,16}");
     private static final int MAX_NICK = 25;
+    private static final int CHAT_PER_TICK = 8;
 
     /** Chat entries by chat user, oldest first. */
     private static final Map<String, Entry> chat = new LinkedHashMap<>();
     /** The running chat reader: its stop method. */
     private static Runnable reader;
+    private static Consumer<ServerTickEvent.Post> chatTick;
 
     static boolean isMinecraftName(String s) {
         return NAME.matcher(s).matches();
@@ -43,23 +49,48 @@ public class SkinPool {
     }
 
     /** One entry per chat user: a new command replaces the old one. The oldest entries drop out above the cap. */
-    static void addChat(String user, String displayName, String minecraftName, int cap) {
-        if (!isMinecraftName(minecraftName)) return;
-        String nick = cleanNick(displayName);
-        chat.remove(user);
-        chat.put(user, new Entry(nick.isEmpty() ? minecraftName : nick, minecraftName));
-        var oldest = chat.keySet().iterator();
-        while (chat.size() > Math.max(1, cap)) { oldest.next(); oldest.remove(); }
+    private static void putChat(Map<String, Entry> entries, String user, Entry entry, int cap) {
+        entries.remove(user);
+        entries.put(user, entry);
+        var oldest = entries.keySet().iterator();
+        while (entries.size() > cap) { oldest.next(); oldest.remove(); }
+    }
+
+    /** Commands from the chat thread waiting for the server tick. Each reader has its own queue. */
+    static final class PendingChat {
+        private final Map<String, Entry> entries = new LinkedHashMap<>();
+        private final int cap;
+
+        PendingChat(int skinPoolSize) {
+            cap = skinPoolSize * 2;
+        }
+
+        void accept(String platform, String command, TwitchChat.Message message) {
+            String name = commandName(message.text(), command);
+            if (name == null) return;
+            String nick = cleanNick(message.displayName());
+            synchronized (this) {
+                putChat(entries, platform + ":" + message.user(), new Entry(nick.isEmpty() ? name : nick, name), cap);
+            }
+        }
+
+        synchronized void drain(BiConsumer<String, Entry> apply) {
+            var oldest = entries.entrySet().iterator();
+            for (int i = 0; i < CHAT_PER_TICK && oldest.hasNext(); i++) {
+                var entry = oldest.next();
+                apply.accept(entry.getKey(), entry.getValue());
+                oldest.remove();
+            }
+        }
     }
 
     /** Starts the chat reader if the config names a channel. The server owner configures it; it runs on the server. */
     static void start(MinecraftServer server) {
         String platform = Config.CHAT_PLATFORM.get(), channel = Config.CHAT_CHANNEL.get().strip();
         if (platform.equals("none") || channel.isEmpty()) return;
-        java.util.function.Consumer<TwitchChat.Message> handler = m -> {
-            String name = commandName(m.text(), Config.CHAT_COMMAND.get());
-            if (name != null) server.execute(() -> addChat(platform + ":" + m.user(), m.displayName(), name, Config.SKIN_POOL_SIZE.get()));
-        };
+        int cap = Config.SKIN_POOL_SIZE.get();
+        PendingChat pending = new PendingChat(cap);
+        Consumer<TwitchChat.Message> handler = m -> pending.accept(platform, Config.CHAT_COMMAND.get(), m);
         try {
             switch (platform) {
                 case "twitch" -> { TwitchChat t = new TwitchChat(channel.toLowerCase(Locale.ROOT), handler); t.start(); reader = t::stop; }
@@ -70,9 +101,17 @@ public class SkinPool {
         } catch (IllegalArgumentException e) {
             OneMoreCore.LOGGER.error("Stream chat is off: {}", e.getMessage());
         }
+        if (reader != null) {
+            chatTick = e -> {
+                if (e.getServer() == server) pending.drain((user, entry) -> putChat(chat, user, entry, cap));
+            };
+            NeoForge.EVENT_BUS.addListener(ServerTickEvent.Post.class, chatTick);
+        }
     }
 
     static void stop() {
+        if (chatTick != null) NeoForge.EVENT_BUS.unregister(chatTick);
+        chatTick = null;
         if (reader != null) reader.run();
         reader = null;
         chat.clear();

@@ -181,9 +181,20 @@ public class Config {
         return null;
     }
 
+    private static String rejectedCurrency;
+
     public static Item currency() {
         ResourceLocation id = ResourceLocation.tryParse(CURRENCY.get());
         Item item = id == null ? Items.AIR : BuiltInRegistries.ITEM.get(id);
+        if (item == OneMoreCore.TRAY_ITEM.get() || item == OneMoreCore.TICKET.get()) {
+            String name = id.toString();
+            if (!name.equals(rejectedCurrency)) {
+                OneMoreCore.LOGGER.error("Invalid currencyItem {}: trays and tickets are issued for free. Using onemorecore:coin.", name);
+                rejectedCurrency = name;
+            }
+            return OneMoreCore.COIN.get();
+        }
+        rejectedCurrency = null;
         return item == Items.AIR ? Items.EMERALD : item;
     }
 

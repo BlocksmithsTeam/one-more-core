@@ -1,7 +1,10 @@
 package com.onemorestudios.onemorecore;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import net.minecraft.core.BlockPos;
@@ -28,6 +31,10 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
@@ -35,6 +42,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
  * The Restaurant Computer. It belongs to the restaurant whose area contains it.
  * The screen only sends a {@link Request}. The server checks it, changes the restaurant and sends the new {@link State}.
  */
+@EventBusSubscriber(modid = OneMoreCore.MODID)
 public class Computer extends Block {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
     /** The monitor, its back and the keyboard. */
@@ -42,13 +50,17 @@ public class Computer extends Block {
             new double[] {2, 0, 0.5, 14, 1.5, 3.5});
     public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
             TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9, SET_KIND = 10, ADD_COMBO = 11, REMOVE_COMBO = 12,
-            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17;
+            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17, REFRESH_MANAGER = 18, CLOSE = 19;
+    public static final int MAX_REQUEST_LENGTH = 1024, MAX_CART_LINES = 32, MAX_CART_COUNT = 64;
     /** How far from the computer the manager app may set a point, in blocks per axis. */
     public static final int PLACE_RANGE = 48;
     /** Bits of {@link State#apps}. */
     public static final int APP_MENU = 1, APP_SHOP = 2, APP_MANAGER = 4, APP_UPGRADES = 8;
     /** The upgrades of the upgrades app, in order. */
     public static final List<String> UPGRADES = List.of("decor", "delivery", "bell");
+
+    private record Session(ServerLevel level, BlockPos pos, Restaurant restaurant) {}
+    private static final Map<ServerPlayer, Session> SESSIONS = new HashMap<>();
 
     /** An upgrade: its level, its last level and the price of the next level (0 at the last level). */
     public record UpgradeLine(String id, int level, int max, int nextCost) {
@@ -140,14 +152,30 @@ public class Computer extends Block {
         public Type<State> type() { return TYPE; }
     }
 
-    /** Client to server. It holds no price and no item: the server reads them from its own config. */
-    public record Request(BlockPos pos, int action, String id) implements CustomPacketPayload {
+    /** Client to server. The checkout total is a quote; the server still uses its own catalog to charge the register. */
+    public record Request(BlockPos pos, int action, String id, long expectedTotal, long checkoutId) implements CustomPacketPayload {
+        public Request(BlockPos pos, int action, String id) { this(pos, action, id, -1, 0); }
+
         public static final Type<Request> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "computer_request"));
         static final StreamCodec<RegistryFriendlyByteBuf, Request> CODEC = StreamCodec.composite(
-                BlockPos.STREAM_CODEC, Request::pos, ByteBufCodecs.VAR_INT, Request::action, ByteBufCodecs.stringUtf8(1024), Request::id, Request::new);
+                BlockPos.STREAM_CODEC, Request::pos, ByteBufCodecs.VAR_INT, Request::action, ByteBufCodecs.STRING_UTF8, Request::id,
+                ByteBufCodecs.VAR_LONG, Request::expectedTotal, ByteBufCodecs.VAR_LONG, Request::checkoutId, Request::new);
 
         @Override
         public Type<Request> type() { return TYPE; }
+    }
+
+    /** Replies to a checkout, with a fresh catalog and balance when the session permits it. */
+    public record CheckoutResult(BlockPos pos, long checkoutId, boolean success, Component message, Optional<State> state)
+            implements CustomPacketPayload {
+        public static final Type<CheckoutResult> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "computer_checkout"));
+        static final StreamCodec<RegistryFriendlyByteBuf, CheckoutResult> CODEC = StreamCodec.composite(
+                BlockPos.STREAM_CODEC, CheckoutResult::pos, ByteBufCodecs.VAR_LONG, CheckoutResult::checkoutId,
+                ByteBufCodecs.BOOL, CheckoutResult::success, ComponentSerialization.STREAM_CODEC, CheckoutResult::message,
+                ByteBufCodecs.optional(State.CODEC), CheckoutResult::state, CheckoutResult::new);
+
+        @Override
+        public Type<CheckoutResult> type() { return TYPE; }
     }
 
     public Computer(Properties properties) {
@@ -182,30 +210,70 @@ public class Computer extends Block {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (player instanceof ServerPlayer sp) PacketDistributor.sendToPlayer(sp, state(sp.serverLevel(), pos, true, Component.empty()));
+        if (player instanceof ServerPlayer sp) {
+            ServerLevel serverLevel = sp.serverLevel();
+            if (!canUse(sp, serverLevel, pos)) return InteractionResult.PASS;
+            Restaurant restaurant = Restaurants.get(serverLevel).forComputer(pos);
+            SESSIONS.put(sp, new Session(serverLevel, pos.immutable(), restaurant));
+            PacketDistributor.sendToPlayer(sp, state(serverLevel, pos, restaurant, true, false, Component.empty()));
+        }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
 
+    private static boolean canUse(ServerPlayer player, ServerLevel level, BlockPos pos) {
+        return !player.isSpectator() && player.canInteractWithBlock(pos, 0) && level.isLoaded(pos)
+                && level.mayInteract(player, pos) && level.getBlockState(pos).is(OneMoreCore.COMPUTER);
+    }
+
+    private static Session session(ServerPlayer player) {
+        Session session = SESSIONS.get(player);
+        if (session != null && (session.level != player.level() || !canUse(player, session.level, session.pos))) {
+            SESSIONS.remove(player);
+            return null;
+        }
+        return session;
+    }
+
+    @SubscribeEvent
+    static void checkSession(PlayerTickEvent.Post event) {
+        if (event.getEntity() instanceof ServerPlayer player) session(player);
+    }
+
+    @SubscribeEvent
+    static void playerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) { SESSIONS.remove(event.getEntity()); }
+
+    @SubscribeEvent
+    static void playerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) { SESSIONS.remove(event.getEntity()); }
+
     static void registerPayloads(RegisterPayloadHandlersEvent event) {
-        event.registrar("1")
+        event.registrar("2")
                 // The handler runs on the client only, so the client class is not loaded on a dedicated server.
                 .playToClient(State.TYPE, State.CODEC, (state, context) -> com.onemorestudios.onemorecore.client.ComputerCamera.receive(state))
+                .playToClient(CheckoutResult.TYPE, CheckoutResult.CODEC, (result, context) -> com.onemorestudios.onemorecore.client.ComputerCamera.receive(result))
                 .playToServer(Request.TYPE, Request.CODEC, (request, context) -> {
-                    State state = handle(context.player(), request);
-                    if (state != null) context.reply(state);
+                    CustomPacketPayload reply = handle(context.player(), request);
+                    if (reply != null) context.reply(reply);
                 });
     }
 
-    /**
-     * Checks and runs one request. Returns the new state, or null when the request is rejected:
-     * the player is not near the computer, the block is not a computer, the computer is outside every restaurant area,
-     * the app is disabled or the id does not exist.
-     */
-    public static State handle(Player player, Request request) {
-        if (!(player.level() instanceof ServerLevel level) || !level.isLoaded(request.pos)) return null;
-        if (!player.canInteractWithBlock(request.pos, 4) || !level.getBlockState(request.pos).is(OneMoreCore.COMPUTER)) return null;
+    /** Checks and runs one request. Checkouts always return a result. */
+    public static CustomPacketPayload handle(Player player, Request request) {
+        Session session = player instanceof ServerPlayer sp ? session(sp) : null;
+        boolean checkout = request.action == BUY_CART;
+        if (session == null || !session.pos.equals(request.pos)) return checkout ? sessionEnded(request) : null;
+        if (request.action == CLOSE) {
+            SESSIONS.remove(player);
+            return null;
+        }
+        ServerLevel level = session.level;
         Restaurants all = Restaurants.get(level);
         Restaurant r = all.forComputer(request.pos);
+        if (r != session.restaurant) {
+            SESSIONS.remove(player);
+            return checkout ? sessionEnded(request) : null;
+        }
+        if (checkout) return checkout(session, request);
+        if (request.id.length() > MAX_REQUEST_LENGTH) return null;
         Component message = Component.empty();
         if (request.action == SET_AREA || request.action == SET_SPAWN || request.action == SET_DELIVERY) {
             if (r == null || !Config.APP_MANAGER.get()) return null;
@@ -316,31 +384,69 @@ public class Computer extends Block {
                 case COST -> Component.translatable("onemorecore.cmd.cost", e.id(), e.price(), r.register());
                 case NO_DELIVERY -> Component.translatable("onemorecore.computer.no_delivery");
             };
-        } else if (request.action == BUY_CART) {
-            // "id:count;id:count", at most 32 lines.
-            if (r == null || !Config.APP_SHOP.get()) return null;
-            java.util.Map<Shop.Entry, Integer> cart = new java.util.LinkedHashMap<>();
-            String[] parts = request.id.split(";");
-            if (parts.length > 32) return null;
-            for (String part : parts) {
-                int colon = part.lastIndexOf(':');
-                if (colon < 0) return null;
-                Shop.Entry e = Shop.byId(part.substring(0, colon));
-                int count;
-                try { count = Integer.parseInt(part.substring(colon + 1)); } catch (NumberFormatException ex) { return null; }
-                if (e == null || count < 1 || count > 64) return null;
-                cart.merge(e, count, (a, b) -> Math.min(64, a + b));
-            }
-            long total = cart.entrySet().stream().mapToLong(x -> (long) x.getKey().price() * x.getValue()).sum();
-            message = switch (r.buyAll(cart)) {
-                case OK -> Component.translatable("onemorecore.computer.cart_ordered", cart.values().stream().mapToInt(Integer::intValue).sum(), r.deliveryTicks() / 20);
-                case COST -> Component.translatable("onemorecore.computer.cart_cost", total - r.register());
-                case NO_DELIVERY -> Component.translatable("onemorecore.computer.no_delivery");
-            };
-        } else if (request.action != REFRESH) {
+        } else if (request.action != REFRESH && request.action != REFRESH_MANAGER) {
             return null;
         }
-        return state(level, request.pos, false, message);
+        boolean manager = Config.APP_MANAGER.get() && switch (request.action) {
+            case REFRESH_MANAGER, SET_AREA, SET_SPAWN, SET_DELIVERY, TOGGLE_TABLE, SET_SCREEN -> true;
+            default -> false;
+        };
+        return state(level, request.pos, r, false, manager, message);
+    }
+
+    private static CheckoutResult sessionEnded(Request request) {
+        return new CheckoutResult(request.pos, request.checkoutId, false, Component.translatableWithFallback(
+                "onemorecore.computer.cart_session", "Computer session ended. Use the computer again."), Optional.empty());
+    }
+
+    private static CheckoutResult checkout(Session session, Request request) {
+        Restaurant r = session.restaurant;
+        Component message;
+        boolean success = false;
+        if (r == null) {
+            message = Component.translatable("onemorecore.computer.outside");
+        } else if (!Config.APP_SHOP.get()) {
+            message = Component.translatableWithFallback("onemorecore.computer.cart_disabled", "The Shop is disabled.");
+        } else {
+            Map<Shop.Entry, Integer> cart = readCart(request.id);
+            if (cart == null) {
+                message = Component.translatableWithFallback("onemorecore.computer.cart_invalid", "The cart contains an invalid or unavailable listing.");
+            } else {
+                long total = cart.entrySet().stream().mapToLong(e -> (long) e.getKey().price() * e.getValue()).sum();
+                if (total != request.expectedTotal) {
+                    message = Component.translatableWithFallback("onemorecore.computer.cart_repriced",
+                            "Shop prices changed. Review the updated total and check out again.");
+                } else {
+                    Restaurant.Buy result = r.buyAll(cart);
+                    success = result == Restaurant.Buy.OK;
+                    message = switch (result) {
+                        case OK -> Component.translatable("onemorecore.computer.cart_ordered",
+                                cart.values().stream().mapToInt(Integer::intValue).sum(), r.deliveryTicks() / 20);
+                        case COST -> Component.translatable("onemorecore.computer.cart_cost", total - r.register());
+                        case NO_DELIVERY -> Component.translatable("onemorecore.computer.no_delivery");
+                    };
+                }
+            }
+        }
+        return new CheckoutResult(request.pos, request.checkoutId, success, message,
+                Optional.of(state(session.level, request.pos, r, false, false, Component.empty())));
+    }
+
+    /** Reads "id:count;id:count" using the same limits as the Shop screen. */
+    private static Map<Shop.Entry, Integer> readCart(String id) {
+        if (id.isEmpty() || id.length() > MAX_REQUEST_LENGTH) return null;
+        String[] parts = id.split(";", -1);
+        if (parts.length > MAX_CART_LINES) return null;
+        Map<Shop.Entry, Integer> cart = new LinkedHashMap<>();
+        for (String part : parts) {
+            int colon = part.lastIndexOf(':');
+            if (colon < 0) return null;
+            Shop.Entry e = Shop.byId(part.substring(0, colon));
+            int count;
+            try { count = Integer.parseInt(part.substring(colon + 1)); } catch (NumberFormatException ex) { return null; }
+            if (e == null || count < 1 || count > MAX_CART_COUNT || cart.putIfAbsent(e, count) != null) return null;
+        }
+        return cart;
     }
 
     /** True if the point is at most PLACE_RANGE blocks from the computer in each axis. */
@@ -363,8 +469,7 @@ public class Computer extends Block {
     }
 
     /** Everything the screen shows. The menu and shop files exist on the server only. */
-    static State state(ServerLevel level, BlockPos pos, boolean open, Component message) {
-        Restaurant r = Restaurants.get(level).forComputer(pos);
+    private static State state(ServerLevel level, BlockPos pos, Restaurant r, boolean open, boolean manager, Component message) {
         int apps = (Config.APP_MENU.get() ? APP_MENU : 0) | (Config.APP_SHOP.get() ? APP_SHOP : 0) | (Config.APP_MANAGER.get() ? APP_MANAGER : 0)
                 | (Config.APP_UPGRADES.get() ? APP_UPGRADES : 0);
         ItemStack currency = new ItemStack(Config.currency());
@@ -380,10 +485,9 @@ public class Computer extends Block {
         List<ShopLine> shop = new ArrayList<>();
         for (Shop.Entry e : Shop.entries) shop.add(new ShopLine(e.id(), e.stack(), e.icon(), e.price()));
         BoundingBox a = r.area();
-        // ponytail: scans the whole area on every sync of a closed restaurant; cache the seats if large areas make this slow.
-        int seats = a == null ? 0 : r.isOpen() ? r.seats.size() : r.scanSeats(level).size();
+        List<Restaurant.Seat> seats = !manager || a == null ? List.of() : r.isOpen() ? r.seats : r.scanSeats(level);
         Component none = Component.translatable("onemorecore.computer.info.not_set");
-        List<Component> info = List.of(
+        List<Component> info = !manager ? List.of() : List.of(
                 Component.translatable("onemorecore.computer.info.day", r.day()),
                 Component.translatable(r.isOpen() ? "onemorecore.computer.info.open" : "onemorecore.computer.info.closed"),
                 Component.translatable("onemorecore.computer.info.register", r.register()),
@@ -391,13 +495,13 @@ public class Computer extends Block {
                         : Component.translatable("onemorecore.computer.info.area", a.minX(), a.minY(), a.minZ(), a.maxX(), a.maxY(), a.maxZ()),
                 Component.translatable("onemorecore.computer.info.spawn", r.spawn() == null ? none : r.spawn().toShortString()),
                 Component.translatable("onemorecore.computer.info.delivery", r.delivery() == null ? none : r.delivery().toShortString()),
-                Component.translatable("onemorecore.computer.info.seats", seats),
+                Component.translatable("onemorecore.computer.info.seats", seats.size()),
                 Component.translatable("onemorecore.computer.info.orders", r.deliveries.size()));
         List<ComboLine> combos = r.combos.stream().map(c -> new ComboLine(c.id(), c.dishes(), c.price(), r.canOrder(c))).toList();
         // The serving surfaces next to seats, and the ones of tables that are off, for the free camera's table tool.
         List<BlockPos> surfaces = new ArrayList<>(), off = new ArrayList<>();
-        if (a != null) {
-            for (List<Restaurant.Seat> table : r.groupTables(level, r.isOpen() ? r.seats : r.scanSeats(level))) {
+        if (!seats.isEmpty()) {
+            for (List<Restaurant.Seat> table : r.groupTables(level, seats)) {
                 java.util.Set<BlockPos> all = r.tableAt(level, table.get(0).surface());
                 boolean on = r.isTableOn(all);
                 for (BlockPos p : all) { surfaces.add(p); if (!on) off.add(p); }

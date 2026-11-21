@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -122,16 +123,16 @@ public class Restaurant {
 
     /** The bill of a party lies on its table as coins. */
     void addCoins(BlockPos surface, int amount) {
+        if (amount <= 0) return;
         coins.merge(surface.immutable(), amount, (a, b) -> (int) Math.min(Integer.MAX_VALUE, (long) a + b));
         owner.setDirty();
-        sendTable(surface);
+        if (serverLevel != null) sendTable(serverLevel, surface);
     }
 
     private ServerLevel serverLevel;
 
-    private void sendTable(BlockPos pos) {
-        if (serverLevel == null) return;
-        PacketDistributor.sendToPlayersTrackingChunk(serverLevel, new ChunkPos(pos), new TableItems(pos, coins.getOrDefault(pos, 0)));
+    private void sendTable(ServerLevel level, BlockPos pos) {
+        PacketDistributor.sendToPlayersTrackingChunk(level, new ChunkPos(pos), new TableItems(pos, coins.getOrDefault(pos, 0)));
     }
 
     /**
@@ -143,28 +144,107 @@ public class Restaurant {
         Set<BlockPos> table = tableAt(level, pos);
         table.add(pos.immutable());
         for (BlockPos p : table) {
-            Integer c = coins.remove(p);
-            if (c == null) continue;
-            money = (int) Math.min(Integer.MAX_VALUE, (long) money + c);
-            sendTable(p);
+            int bill = coins.getOrDefault(p, 0);
+            if (bill <= 0) continue;
+            int credited = deposit(bill);
+            if (credited == 0) break;
+            if (credited == bill) coins.remove(p); else coins.put(p, bill - credited);
+            money += credited;
+            sendTable(level, p);
         }
         if (money > 0) {
-            addMoney(money);
             level.playSound(null, pos, SoundEvents.CHICKEN_EGG, SoundSource.PLAYERS, 0.8f, 1.6f);
             if (player instanceof ServerPlayer sp) PacketDistributor.sendToPlayer(sp, new TableItems.Collected(money));
         }
-        if (money > 0) owner.setDirty();
         return money;
     }
 
     boolean hasTableItems(BlockPos pos) {
-        return coins.containsKey(pos);
+        return coins.getOrDefault(pos, 0) > 0;
     }
 
     /** Sends the coins of a chunk to a player that starts to see it. */
     void sendTableItems(ServerPlayer player, ChunkPos chunk) {
         for (var e : coins.entrySet())
             if (chunk.equals(new ChunkPos(e.getKey()))) PacketDistributor.sendToPlayer(player, new TableItems(e.getKey(), e.getValue()));
+    }
+
+    void payRegister(ServerLevel level, long amount) {
+        if (amount <= 0) return;
+        long left = amount - deposit((int) Math.min(Integer.MAX_VALUE, amount));
+        if (left == 0) return;
+        ItemStack currency = new ItemStack(Config.currency());
+        while (left > 0) {
+            int count = (int) Math.min(currency.getMaxStackSize(), left);
+            ItemEntity drop = new ItemEntity(level, sign.getX() + 0.5, sign.getY() + 0.5, sign.getZ() + 0.5, currency.copyWithCount(count));
+            drop.setDefaultPickUpDelay();
+            level.addFreshEntity(drop);
+            left -= count;
+        }
+    }
+
+    /** Moves bills into the sign's balance and clears their displays. */
+    void settleOnRemoval(ServerLevel level) {
+        for (BlockPos surface : List.copyOf(coins.keySet())) {
+            payRegister(level, coins.remove(surface));
+            sendTable(level, surface);
+        }
+        for (ServedBill bill : servedBills.values()) payRegister(level, bill.amount());
+        for (ServedBill bill : interruptedBills) payRegister(level, bill.amount());
+        servedBills.clear();
+        interruptedBills.clear();
+    }
+
+    /** Dish prices already handed over, while the party is still waiting or eating. */
+    private record ServedBill(List<BlockPos> surfaces, long amount) {}
+    private final Map<Customer.Party, ServedBill> servedBills = new HashMap<>();
+    private final List<ServedBill> interruptedBills = new ArrayList<>();
+
+    void recordServed(ServerLevel level, Customer.Party party, BlockPos surface, int price) {
+        if (price <= 0) return;
+        ServedBill previous = servedBills.get(party);
+        if (previous == null) {
+            Set<BlockPos> table = tableAt(level, surface);
+            table.remove(surface);
+            List<BlockPos> surfaces = new ArrayList<>(List.of(surface));
+            surfaces.addAll(table);
+            servedBills.put(party, new ServedBill(surfaces, price));
+        } else {
+            servedBills.put(party, new ServedBill(previous.surfaces(), previous.amount() + price));
+        }
+        owner.setDirty();
+    }
+
+    void finishService(Customer.Party party) {
+        if (servedBills.remove(party) != null) owner.setDirty();
+    }
+
+    /** Customers are transient. Settle their saved dishes once the table's chunk can be checked. */
+    private void recoverInterruptedBills(ServerLevel level) {
+        for (Iterator<ServedBill> it = interruptedBills.iterator(); it.hasNext();) {
+            ServedBill bill = it.next();
+            BlockPos surface = null;
+            boolean unloaded = false;
+            if (area != null) for (BlockPos pos : bill.surfaces()) {
+                if (!area.isInside(pos)) continue;
+                if (!level.isLoaded(pos)) {
+                    unloaded = true;
+                } else if (level.getBlockState(pos).is(OneMoreCore.SURFACES)) {
+                    surface = pos;
+                    break;
+                }
+            }
+            if (surface == null && unloaded) continue;
+            long amount = bill.amount();
+            if (surface != null) {
+                int onTable = (int) Math.min(amount, Integer.MAX_VALUE - coins.getOrDefault(surface, 0));
+                addCoins(surface, onTable);
+                amount -= onTable;
+            }
+            payRegister(level, amount);
+            it.remove();
+            owner.setDirty();
+        }
     }
 
     /** A combo: dish ids and the price of all of them together. */
@@ -435,11 +515,13 @@ public class Restaurant {
     /** A paid shop order that is on its way. */
     static final class Delivery {
         final ItemStack stack;
+        final BlockPos destination;
         int ticks;
 
-        Delivery(ItemStack stack, int ticks) {
+        Delivery(ItemStack stack, int ticks, BlockPos destination) {
             this.stack = stack;
             this.ticks = ticks;
+            this.destination = destination;
         }
     }
 
@@ -461,7 +543,7 @@ public class Restaurant {
         if (delivery == null) return Buy.NO_DELIVERY;
         if (register < e.price()) return Buy.COST;
         register -= e.price();
-        deliveries.add(new Delivery(e.stack().copy(), deliveryTicks()));
+        deliveries.add(new Delivery(e.stack().copy(), deliveryTicks(), delivery.immutable()));
         owner.setDirty();
         return Buy.OK;
     }
@@ -474,25 +556,32 @@ public class Restaurant {
 
     /** Waits while the delivery point is not loaded, so no order is lost. */
     private void tickDeliveries(ServerLevel level) {
-        if (deliveries.isEmpty() || delivery == null || !level.isLoaded(delivery)) return;
-        owner.setDirty();
-        for (Delivery d : List.copyOf(deliveries)) {
-            if (--d.ticks > 0) continue;
-            deliveries.remove(d);
-            deliver(level, d.stack);
+        int budget = 16;
+        for (Iterator<Delivery> it = deliveries.iterator(); it.hasNext();) {
+            Delivery d = it.next();
+            BlockPos destination = d.destination == null ? delivery : d.destination;
+            if (destination == null || !level.isLoaded(destination)) continue;
+            if (d.ticks > 0) {
+                d.ticks--;
+                owner.setDirty();
+            }
+            if (d.ticks > 0 || budget == 0) continue;
+            IItemHandler handler = container(level, destination);
+            BlockPos at = handler == null ? destination : destination.above();
+            while (budget > 0 && !d.stack.isEmpty()) {
+                ItemStack part = d.stack.split(d.stack.getMaxStackSize());
+                deliver(level, handler, at, part);
+                budget--;
+            }
+            if (d.stack.isEmpty()) it.remove();
+            owner.setDirty();
         }
     }
 
     /** Puts the stack into the container at the delivery point. Without a container, or when it is full, the items drop. */
-    void deliver(ServerLevel level, ItemStack stack) {
-        IItemHandler handler = container(level, delivery);
-        BlockPos at = handler == null ? delivery : delivery.above();
-        int max = stack.getMaxStackSize();
-        for (int left = stack.getCount(); left > 0; left -= max) {
-            ItemStack part = stack.copyWithCount(Math.min(max, left));
-            if (handler != null) part = ItemHandlerHelper.insertItemStacked(handler, part, false);
-            if (!part.isEmpty()) level.addFreshEntity(new ItemEntity(level, at.getX() + 0.5, at.getY() + 0.25, at.getZ() + 0.5, part, 0, 0, 0));
-        }
+    private static void deliver(ServerLevel level, IItemHandler handler, BlockPos at, ItemStack part) {
+        if (handler != null) part = ItemHandlerHelper.insertItemStacked(handler, part, false);
+        if (!part.isEmpty()) level.addFreshEntity(new ItemEntity(level, at.getX() + 0.5, at.getY() + 0.25, at.getZ() + 0.5, part, 0, 0, 0));
     }
 
     /** Takes up to max money from the register, like one click on a storage drawer. */
@@ -506,20 +595,23 @@ public class Restaurant {
     /** Puts money into the register. Returns how much fitted; the register never wraps past Integer.MAX_VALUE. */
     int deposit(int amount) {
         int n = (int) Math.min(amount, (long) Integer.MAX_VALUE - register);
-        register += n;
-        owner.setDirty();
+        if (n != 0) {
+            register += n;
+            owner.setDirty();
+        }
         return n;
     }
 
-    /** Day, register, unlocks and paid orders: what the sign item keeps when the sign is broken. Positions are not kept. */
+    /** Day, register, unlocks and paid orders keep their progress when the sign is broken. */
     CompoundTag progress() {
         CompoundTag tag = save();
-        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "tables_off", "table_items", "screens", "screen_modes")) tag.remove(key);
+        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "dirt_start", "tables_off", "table_items", "served_bills", "screens", "screen_modes")) tag.remove(key);
         return tag;
     }
 
     boolean hasProgress() {
-        return day > 1 || register > 0 || !unlocked.isEmpty() || !deliveries.isEmpty() || !off.isEmpty() || !custom.isEmpty() || !kinds.isEmpty() || !combos.isEmpty() || !upgrades.isEmpty();
+        return day > 1 || register > 0 || !unlocked.isEmpty() || !deliveries.isEmpty() || !off.isEmpty() || !custom.isEmpty() || !kinds.isEmpty() || !combos.isEmpty() || !upgrades.isEmpty()
+                || !coins.isEmpty() || !servedBills.isEmpty() || !interruptedBills.isEmpty();
     }
 
     void restore(CompoundTag progress) {
@@ -641,6 +733,7 @@ public class Restaurant {
         if (!level.isLoaded(sign)) return;
         BlockState state = level.getBlockState(sign);
         if (!state.is(OneMoreCore.OPEN_SIGN)) return;
+        recoverInterruptedBills(level);
         tickDeliveries(level);
         if (state.getValue(OpenSignBlock.OPEN) != open) level.setBlockAndUpdate(sign, state.setValue(OpenSignBlock.OPEN, open));
         if (!open && countdown > 0 && area != null) tickCountdown(level);
@@ -846,8 +939,9 @@ public class Restaurant {
         long now = level.getGameTime();
         for (List<Seat> table : tables) {
             if (table.stream().anyMatch(s -> customers.stream().anyMatch(c -> s.seat().equals(c.seat)))) continue;
-            if (tableDirty(level, table.get(0).surface())) continue;
-            if (table.stream().anyMatch(s -> offTables.contains(s.surface()) || hasTableItems(s.surface())
+            if ((!dirt.isEmpty() || !coins.isEmpty()) && tableAt(level, table.get(0).surface()).stream()
+                    .anyMatch(p -> dirt.containsKey(p) || hasTableItems(p))) continue;
+            if (table.stream().anyMatch(s -> offTables.contains(s.surface())
                     || now - freedAt.getOrDefault(s.surface(), Long.MIN_VALUE / 2) < Config.TABLE_PAUSE.get())) continue;
             List<Seat> seated = new ArrayList<>(table.stream().filter(s -> isSeat(level, s)).toList());
             if (seated.isEmpty() || !isTableOn(tableSurfaces(table))) continue;
@@ -970,7 +1064,7 @@ public class Restaurant {
         screens.keySet().removeIf(p -> level.isLoaded(p) && ScreenRect.of(level.getBlockState(p)) == null);
         CompoundTag now = new CompoundTag();
         if (!screens.isEmpty()) {
-            now.put("menu", MenuBoardBlockEntity.build(this));
+            now.put("menu", MenuBoardBlockEntity.build(this, level.registryAccess()));
             now.put("tickets", OrderBoardBlockEntity.encode(tickets(), level.registryAccess()));
             now.putLongArray("pos", screens.keySet().stream().mapToLong(BlockPos::asLong).toArray());
             now.putIntArray("mode", screens.values().stream().mapToInt(Integer::intValue).toArray());
@@ -1023,19 +1117,7 @@ public class Restaurant {
 
     /** The taken orders, oldest first: one ticket per party that waits for its food. */
     List<OrderBoardBlockEntity.Ticket> tickets() {
-        List<OrderBoardBlockEntity.Ticket> out = new ArrayList<>();
-        Set<Customer.Party> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-        for (Customer c : customers) {
-            if (c.getState() != Customer.State.WAITING_FOOD || !seen.add(c.party())) continue;
-            List<ItemStack> items = new ArrayList<>();
-            int price = 0;
-            for (Customer m : c.party().members) {
-                items.addAll(m.getOrder());
-                for (Customer.Line l : m.wantedLines()) price += l.price();
-            }
-            out.add(new OrderBoardBlockEntity.Ticket(tableNumber(c.getSurface()), items, c.party().patience / (float) Math.max(1, c.party().patienceMax), price));
-        }
-        return out;
+        return OrderBoardBlockEntity.tickets(this);
     }
 
     /** Whether any block of the table at pos is dirty. */
@@ -1194,6 +1276,10 @@ public class Restaurant {
             table.add(t);
         }
         tag.put("table_items", table);
+        ListTag served = new ListTag();
+        for (ServedBill bill : servedBills.values()) saveServedBill(served, bill);
+        for (ServedBill bill : interruptedBills) saveServedBill(served, bill);
+        tag.put("served_bills", served);
         long[] tablesOff = offTables.stream().mapToLong(BlockPos::asLong).toArray();
         tag.putLongArray("tables_off", tablesOff);
         tag.putLongArray("screens", screens.keySet().stream().mapToLong(BlockPos::asLong).toArray());
@@ -1206,6 +1292,7 @@ public class Restaurant {
             t.put("stack", d.stack.copyWithCount(1).save(owner.registries));
             t.putInt("count", d.stack.getCount());
             t.putInt("ticks", d.ticks);
+            if (d.destination != null) t.putLong("destination", d.destination.asLong());
             pending.add(t);
         }
         tag.put("deliveries", pending);
@@ -1216,7 +1303,21 @@ public class Restaurant {
             d[i++] = e.getValue();
         }
         tag.putLongArray("dirt", d);
+        long[] start = new long[dirtStart.size() * 2];
+        i = 0;
+        for (var e : dirtStart.entrySet()) {
+            start[i++] = e.getKey().asLong();
+            start[i++] = e.getValue();
+        }
+        tag.putLongArray("dirt_start", start);
         return tag;
+    }
+
+    private static void saveServedBill(ListTag list, ServedBill bill) {
+        CompoundTag tag = new CompoundTag();
+        tag.putLongArray("surfaces", bill.surfaces().stream().mapToLong(BlockPos::asLong).toArray());
+        tag.putLong("amount", bill.amount());
+        list.add(tag);
     }
 
     static Restaurant load(Restaurants owner, CompoundTag tag) {
@@ -1249,6 +1350,15 @@ public class Restaurant {
             BlockPos p = BlockPos.of(c.getLong("pos"));
             if (c.getInt("coins") > 0) r.coins.put(p, c.getInt("coins"));
         }
+        for (Tag t : tag.getList("served_bills", Tag.TAG_COMPOUND)) {
+            CompoundTag bill = (CompoundTag) t;
+            long amount = bill.getLong("amount");
+            if (amount > 0) {
+                List<BlockPos> surfaces = new ArrayList<>();
+                for (long pos : bill.getLongArray("surfaces")) surfaces.add(BlockPos.of(pos));
+                r.interruptedBills.add(new ServedBill(surfaces, amount));
+            }
+        }
         for (Tag t : tag.getList("custom", Tag.TAG_COMPOUND)) {
             CompoundTag c = (CompoundTag) t;
             // An item of a mod that was removed is skipped. A price out of range is clamped to the allowed range.
@@ -1262,11 +1372,22 @@ public class Restaurant {
         if (tag.contains("delivery")) r.delivery = BlockPos.of(tag.getLong("delivery"));
         for (Tag t : tag.getList("deliveries", Tag.TAG_COMPOUND)) {
             CompoundTag d = (CompoundTag) t;
+            BlockPos destination = d.contains("destination", Tag.TAG_LONG) ? BlockPos.of(d.getLong("destination")) : null;
             ItemStack.parse(owner.registries, d.getCompound("stack")).ifPresent(stack ->
-                    r.deliveries.add(new Delivery(stack.copyWithCount(Math.max(1, d.getInt("count"))), d.getInt("ticks"))));
+                    r.deliveries.add(new Delivery(stack.copyWithCount(Math.max(1, d.getInt("count"))), d.getInt("ticks"), destination)));
         }
         long[] d = tag.getLongArray("dirt");
-        for (int i = 0; i + 1 < d.length; i += 2) r.dirt.put(BlockPos.of(d[i]), d[i + 1]);
+        for (int i = 0; i + 1 < d.length; i += 2) {
+            if (d[i + 1] == 0) continue;
+            BlockPos pos = BlockPos.of(d[i]);
+            r.dirt.put(pos, d[i + 1]);
+            r.dirtStart.put(pos, Long.bitCount(d[i + 1]));
+        }
+        long[] start = tag.getLongArray("dirt_start");
+        for (int i = 0; i + 1 < start.length; i += 2) {
+            if (start[i + 1] > 0 && start[i + 1] <= Long.SIZE)
+                r.dirtStart.merge(BlockPos.of(start[i]), (int) start[i + 1], Math::max);
+        }
         return r;
     }
 }
