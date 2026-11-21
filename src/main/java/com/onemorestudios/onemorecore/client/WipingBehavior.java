@@ -24,8 +24,6 @@ final class WipingBehavior implements StationBehavior {
         height = (float) (Dirt.top(view.level(), view.pos()) * 16);
         float offset = height - 16;
         view.node("cloth").ifPresent(node -> node.moveTo(0, offset, 0, 0));
-        // Coins and dishes lie on the real table top too.
-        view.node("coins").ifPresent(node -> node.moveTo(0, offset, 0, 0));
         collected = false;
         // The camera sees the whole table: it moves over the middle of the table and back along its view (from the
         // target to the camera of wiping.json: 0, 21, -11 pixels) once per block that the table is wider than one.
@@ -70,7 +68,11 @@ final class WipingBehavior implements StationBehavior {
     private void show(StationView view, String id, boolean on) {
         view.node(id).ifPresent(n -> {
             if (n.isVisible() == on || n.isMoving()) return;
-            if (on) n.moveTo((coinBlock.getX() - view.pos().getX()) * 16, height - 16, (coinBlock.getZ() - view.pos().getZ()) * 16, 0);
+            if (on) {
+                float coinHeight = (float) (Dirt.top(view.level(), coinBlock) * 16);
+                n.moveTo((coinBlock.getX() - view.pos().getX()) * 16, coinHeight - 16,
+                        (coinBlock.getZ() - view.pos().getZ()) * 16, 0);
+            }
             n.setVisible(on);
         });
     }

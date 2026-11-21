@@ -58,11 +58,11 @@ class DirtRenderer {
             pose.pushPose();
             pose.translate(pos.getX() - cam.x, pos.getY() + Dirt.top(mc.level, pos) + 0.004 - cam.y, pos.getZ() - cam.z);
             var renderer = mc.getBlockRenderer().getModelRenderer();
-            pose.pushPose();
-            pose.translate(0.18, 0, 0.15);
+            // Keep the pile in the table's southeast corner, inside the wiping scene's coins collider.
+            pose.translate(0.35, 0, 0.35);
+            pose.scale(0.65f, 0.65f, 0.65f);
             if (t.coins() > 0) renderer.renderModel(pose.last(), buffers.getBuffer(Sheets.cutoutBlockSheet()), null, mc.getModelManager().getModel(COINS),
                     1, 1, 1, light, OverlayTexture.NO_OVERLAY, ModelData.EMPTY, RenderType.cutout());
-            pose.popPose();
             pose.popPose();
         });
         buffers.endBatch(Sheets.cutoutBlockSheet());

@@ -126,9 +126,9 @@ public class ComputerScreen extends Screen {
     @Override
     protected void init() {
         hits.clear();
-        // The camera puts the monitor's 4:3 screen in the middle of the view, ComputerCamera.FILL of its height.
+        // Match the CRT glass centred in the camera view.
         dh = (int) Math.round(height * ComputerCamera.FILL);
-        dw = Math.min(width - 8, dh * 4 / 3);
+        dw = Math.min(width - 8, (int) Math.round(dh * ComputerCamera.SCREEN_ASPECT));
         dx = (width - dw) / 2;
         dy = (height - dh) / 2;
         // A window covers the desktop but the task bar, so that its lists have room; the task bar shows the open app.

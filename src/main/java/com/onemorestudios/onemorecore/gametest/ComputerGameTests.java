@@ -138,7 +138,7 @@ public final class ComputerGameTests {
         String previous = currency.get();
         try {
             currency.set("onemorecore:tray");
-            helper.assertTrue(GameTestSupport.click(helper, player, COMPUTER).consumesAction(), "rack gives a tray");
+            helper.assertTrue(GameTestSupport.click(helper, player, COMPUTER, 3 / 16.0).consumesAction(), "rack gives an oak tray");
             ItemStack tray = player.getInventory().items.stream().filter(s -> s.is(OneMoreCore.TRAY_ITEM.get())).findFirst().orElseThrow();
             GameTestSupport.give(player, tray.copy());
             GameTestSupport.click(helper, player, SIGN);

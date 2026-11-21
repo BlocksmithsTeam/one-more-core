@@ -154,6 +154,7 @@
   "onemorecore.upgrade.unknown": "Unknown upgrade.",
   "onemorecore.computer.buy_cost": "Buy %s",
   "block.onemorecore.tray": "Tray",
+  "block.onemorecore.iron_tray": "Iron Tray",
   "block.onemorecore.tray_rack": "Tray Rack",
   "item.onemorecore.ticket": "Order Ticket",
   "item.onemorecore.ticket.table": "Order Ticket: Table %s",

@@ -34,7 +34,14 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  */
 public class TrayBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {1, 0, 3, 15, 1.5, 13});
+    private static final VoxelShape[] SHAPES = BoxShapes.byFacing(
+            new double[] {1, 0, 2, 15, 1, 14},
+            new double[] {1, 1, 2, 15, 2, 3},
+            new double[] {1, 1, 13, 15, 2, 14},
+            new double[] {1, 1, 3, 2, 2, 13},
+            new double[] {14, 1, 3, 15, 2, 13},
+            new double[] {0, 1, 5, 1, 2, 11},
+            new double[] {15, 1, 5, 16, 2, 11});
 
     public TrayBlock(Properties properties) {
         super(properties);
@@ -53,7 +60,11 @@ public class TrayBlock extends Block implements EntityBlock {
 
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return SHAPES[state.getValue(FACING).get2DDataValue()];
+        return shapeFor(state.getValue(FACING));
+    }
+
+    static VoxelShape shapeFor(Direction facing) {
+        return SHAPES[facing.get2DDataValue()];
     }
 
     @Override
@@ -73,7 +84,7 @@ public class TrayBlock extends Block implements EntityBlock {
 
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!(level.getBlockEntity(pos) instanceof TrayBlockEntity tray) || stack.is(OneMoreCore.TRAY_ITEM.get()))
+        if (!(level.getBlockEntity(pos) instanceof TrayBlockEntity tray) || stack.getItem() instanceof TrayItem)
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         if (level.isClientSide) return ItemInteractionResult.SUCCESS;
         if (stack.is(OneMoreCore.TICKET.get())) {
@@ -111,7 +122,7 @@ public class TrayBlock extends Block implements EntityBlock {
         if (level.isClientSide) return InteractionResult.SUCCESS;
         if (player.isShiftKeyDown()) {
             // The whole tray goes into the hand, with its dishes and label.
-            ItemStack item = new ItemStack(OneMoreCore.TRAY_ITEM.get());
+            ItemStack item = new ItemStack(this);
             item.applyComponents(tray.collectComponents());
             level.removeBlock(pos, false);
             give(player, item);

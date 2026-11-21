@@ -37,9 +37,9 @@ SOFTWARE.
 
 ## Hands On Delight
 
-- Files: `src/main/java/com/onemorestudios/onemorecore/client/book/` (`RecipeBook`, `RecipeBookModel`, `BookTabs`, `BookMath`, `IconLight`), `src/main/resources/assets/onemorecore/textures/entity/recipe_book.png`, `recipe_book_paper.png`, `src/main/resources/assets/onemorecore/models/block/menu_book.json`, `src/main/resources/assets/onemorecore/textures/block/menu_book.png` (the Menu Book)
+- Files: `src/main/java/com/onemorestudios/onemorecore/client/book/` (`RecipeBook`, `RecipeBookModel`, `BookTabs`, `BookMath`, `IconLight`), `src/main/resources/assets/onemorecore/textures/entity/recipe_book.png`, `recipe_book_paper.png` (the animated Menu Book in the Diegesis close-up)
 - Source: https://github.com/Pocky-l/handson-delight, branch 1.21.1 (`common/src/main/java/com/pockyl/handson_delight/client/`, `art/models/recipe_book/recipe_book.bbmodel`, `textures/entity/recipe_book.png`, `textures/entity/recipe_book_paper.png`)
-- Changes: package and ids, the menu instead of recipes (no stars), the entity model also made into a closed block model
+- Changes: package and ids, the menu instead of recipes (no stars)
 - License: MIT
 
 ```

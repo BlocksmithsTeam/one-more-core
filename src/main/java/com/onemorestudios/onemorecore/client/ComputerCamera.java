@@ -52,8 +52,9 @@ public final class ComputerCamera {
     static final int FLIGHT = 12;
     /** The monitor's screen fills this share of the view height: the room stays visible round the monitor. */
     static final double FILL = 0.75;
-    /** The monitor's screen in pixels of the north-facing model: x 4..12, y 3..9, front face at z 3.9. */
-    static final double SCREEN_HEIGHT = 6 / 16.0;
+    /** Height of the visible CRT glass, from y=3 to y=8 in model pixels. */
+    static final double SCREEN_HEIGHT = 5 / 16.0;
+    static final double SCREEN_ASPECT = 8 / 5.0;
 
     static Mode mode = Mode.NONE;
     static Computer.State state;
@@ -128,8 +129,8 @@ public final class ComputerCamera {
         Minecraft mc = Minecraft.getInstance();
         BlockState block = mc.level.getBlockState(pos);
         Direction facing = block.hasProperty(BlockStateProperties.HORIZONTAL_FACING) ? block.getValue(BlockStateProperties.HORIZONTAL_FACING) : Direction.NORTH;
-        // The screen centre of the north model is (8, 6, 3.9) px; turn it with the block.
-        Vec3 local = new Vec3(0, 6 / 16.0, 3.9 / 16 - 0.5);
+        // The front of the recessed CRT glass is centred at (8, 5.5, 7) px in the north model.
+        Vec3 local = new Vec3(0, 5.5 / 16, 7 / 16.0 - 0.5);
         Vec3 turned = switch (facing) {
             case EAST -> new Vec3(-local.z, local.y, local.x);
             case SOUTH -> new Vec3(-local.x, local.y, -local.z);

@@ -7,7 +7,7 @@
     ],
     "target": [
       8,
-      1,
+      2,
       6
     ],
     "fov": 45,
@@ -15,7 +15,7 @@
       "enabled": false
     }
   },
-  "work_plane": 1.5,
+  "work_plane": 2,
   "idle_visible": false,
   "interface": {
     "hide_player": true
@@ -25,7 +25,7 @@
       "id": "dish0",
       "pos": [
         4,
-        1.5,
+        2,
         5.6
       ],
       "slot": {
@@ -39,7 +39,7 @@
       "id": "dish1",
       "pos": [
         8,
-        1.5,
+        2,
         5.6
       ],
       "slot": {
@@ -53,7 +53,7 @@
       "id": "dish2",
       "pos": [
         12,
-        1.5,
+        2,
         5.6
       ],
       "slot": {
@@ -67,7 +67,7 @@
       "id": "dish3",
       "pos": [
         4,
-        1.5,
+        2,
         10.4
       ],
       "slot": {
@@ -81,7 +81,7 @@
       "id": "dish4",
       "pos": [
         8,
-        1.5,
+        2,
         10.4
       ],
       "slot": {
@@ -95,7 +95,7 @@
       "id": "dish5",
       "pos": [
         12,
-        1.5,
+        2,
         10.4
       ],
       "slot": {

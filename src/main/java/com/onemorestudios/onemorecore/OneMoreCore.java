@@ -77,9 +77,16 @@ public class OneMoreCore {
     /** The table number of an order ticket and of a tray's label. */
     public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<Integer>> TABLE =
             COMPONENTS.registerComponentType("table", b -> b.persistent(com.mojang.serialization.Codec.INT).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.VAR_INT));
-    public static final DeferredBlock<TrayBlock> TRAY = BLOCKS.register("tray",
-            () -> new TrayBlock(BlockBehaviour.Properties.of().strength(0.5f).noOcclusion().sound(SoundType.WOOD).pushReaction(PushReaction.DESTROY)));
+    public static final DeferredBlock<TrayBlock> TRAY = BLOCKS.register("tray", () -> new TrayBlock(trayProperties()));
     public static final DeferredItem<TrayItem> TRAY_ITEM = ITEMS.register("tray", () -> new TrayItem(TRAY.get(), new Item.Properties().stacksTo(1)));
+    public static final DeferredBlock<TrayBlock> IRON_TRAY = BLOCKS.register("iron_tray", () -> new TrayBlock(trayProperties()));
+    public static final DeferredItem<TrayItem> IRON_TRAY_ITEM = ITEMS.register("iron_tray",
+            () -> new TrayItem(IRON_TRAY.get(), new Item.Properties().stacksTo(1)));
+
+    private static BlockBehaviour.Properties trayProperties() {
+        return BlockBehaviour.Properties.of().strength(0.5f).noOcclusion().sound(SoundType.WOOD).pushReaction(PushReaction.DESTROY);
+    }
+
     public static final DeferredBlock<TrayRackBlock> TRAY_RACK = BLOCKS.register("tray_rack",
             () -> new TrayRackBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().sound(SoundType.WOOD)));
     public static final DeferredItem<BlockItem> TRAY_RACK_ITEM = ITEMS.registerSimpleBlockItem(TRAY_RACK);
@@ -96,7 +103,7 @@ public class OneMoreCore {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBoardBlockEntity>> MENU_BOARD_ENTITY = BLOCK_ENTITIES.register("menu_board",
             () -> BlockEntityType.Builder.of(MenuBoardBlockEntity::new, MENU_BOARD.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TrayBlockEntity>> TRAY_ENTITY = BLOCK_ENTITIES.register("tray",
-            () -> BlockEntityType.Builder.of(TrayBlockEntity::new, TRAY.get()).build(null));
+            () -> BlockEntityType.Builder.of(TrayBlockEntity::new, TRAY.get(), IRON_TRAY.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OrderBoardBlockEntity>> ORDER_BOARD_ENTITY = BLOCK_ENTITIES.register("order_board",
             () -> BlockEntityType.Builder.of(OrderBoardBlockEntity::new, ORDER_BOARD.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBookBlockEntity>> MENU_BOOK_ENTITY = BLOCK_ENTITIES.register("menu_book",
@@ -123,6 +130,7 @@ public class OneMoreCore {
                 if (!yuushya) output.accept(ORDER_BOARD_ITEM);
                 output.accept(TRAY_RACK_ITEM);
                 output.accept(TRAY_ITEM);
+                output.accept(IRON_TRAY_ITEM);
                 output.accept(COIN);
             }).build());
 

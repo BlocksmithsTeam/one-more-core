@@ -23,12 +23,34 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /** A stack of trays: a click with an empty hand takes a tray; a click with an empty tray puts it back. */
 public class TrayRackBlock extends Block {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {1, 0, 3, 15, 10, 13});
+    private static final int LOWER_SHELF = 2;
+    private static final int MIDDLE_SHELF = 7;
+    private static final int UPPER_SHELF = 12;
+    private static final VoxelShape[] SHAPES = makeShapes();
+
+    private static VoxelShape[] makeShapes() {
+        VoxelShape[] shapes = BoxShapes.byFacing(
+                new double[] {0, 0, 1, 1, 16, 2}, new double[] {15, 0, 1, 16, 16, 2},
+                new double[] {0, 0, 14, 1, 16, 15}, new double[] {15, 0, 14, 16, 16, 15},
+                new double[] {1, 15, 1, 15, 16, 2}, new double[] {1, 15, 14, 15, 16, 15},
+                new double[] {1, 0, 1, 15, 1, 2}, new double[] {1, 0, 14, 15, 1, 15},
+                new double[] {0, 1, 2, 2, 2, 14}, new double[] {14, 1, 2, 16, 2, 14},
+                new double[] {0, 6, 2, 2, 7, 14}, new double[] {14, 6, 2, 16, 7, 14},
+                new double[] {0, 11, 2, 2, 12, 14}, new double[] {14, 11, 2, 16, 12, 14});
+        for (Direction facing : Direction.Plane.HORIZONTAL) {
+            int index = facing.get2DDataValue();
+            VoxelShape tray = TrayBlock.shapeFor(facing);
+            shapes[index] = Shapes.or(shapes[index], tray.move(0, LOWER_SHELF / 16.0, 0),
+                    tray.move(0, MIDDLE_SHELF / 16.0, 0), tray.move(0, UPPER_SHELF / 16.0, 0)).optimize();
+        }
+        return shapes;
+    }
 
     public TrayRackBlock(Properties properties) {
         super(properties);
@@ -63,7 +85,10 @@ public class TrayRackBlock extends Block {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (!level.isClientSide) {
-            TrayBlock.give(player, new ItemStack(OneMoreCore.TRAY_ITEM.get()));
+            double y = (hit.getLocation().y - pos.getY()) * 16;
+            // Boundaries halfway between the centres of the three trays (3, 8 and 13 pixels).
+            boolean middle = y >= 5.5 && y < 10.5;
+            TrayBlock.give(player, new ItemStack(middle ? OneMoreCore.IRON_TRAY_ITEM.get() : OneMoreCore.TRAY_ITEM.get()));
             level.playSound(null, pos, SoundEvents.ITEM_PICKUP, SoundSource.BLOCKS, 0.6f, 0.9f);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
@@ -71,7 +96,7 @@ public class TrayRackBlock extends Block {
 
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!stack.is(OneMoreCore.TRAY_ITEM.get()) || stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).nonEmptyItems().iterator().hasNext())
+        if (!(stack.getItem() instanceof TrayItem) || stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).nonEmptyItems().iterator().hasNext())
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         if (!level.isClientSide) {
             stack.shrink(1);

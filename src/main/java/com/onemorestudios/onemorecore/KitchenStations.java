@@ -28,7 +28,7 @@ public final class KitchenStations {
     private KitchenStations() {}
 
     public static final StationType TRAY = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "tray"))
-            .block(OneMoreCore.TRAY)
+            .block(OneMoreCore.TRAY).block(OneMoreCore.IRON_TRAY)
             .schema(StationSchema.builder().slots("dishes", TrayBlockEntity.SIZE, SlotRules.DEFAULT.maxStack(1).kept()).build())
             // An empty hand opens it; with an item the tray takes the dish or the ticket as without Diegesis; sneaking picks it up.
             .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown()

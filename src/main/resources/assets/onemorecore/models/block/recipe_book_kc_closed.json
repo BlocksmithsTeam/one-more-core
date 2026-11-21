@@ -1,0 +1,431 @@
+{
+  "format_version": "26.3",
+  "credit": "Made with Blockbench",
+  "parent": "minecraft:block/block",
+  "texture_size": [
+    64,
+    64
+  ],
+  "textures": {
+    "0": "onemorecore:block/recipe_book_kc_closed",
+    "particle": "onemorecore:block/recipe_book_kc_closed"
+  },
+  "elements": [
+    {
+      "name": "cover_back",
+      "from": [
+        3,
+        0,
+        2
+      ],
+      "to": [
+        13,
+        0.25,
+        14
+      ],
+      "rotation": {
+        "angle": 0,
+        "axis": "y",
+        "origin": [
+          8,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            6,
+            5,
+            6.25
+          ],
+          "texture": "#0"
+        },
+        "east": {
+          "uv": [
+            0,
+            6.25,
+            6,
+            6.5
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            0,
+            6,
+            5,
+            6.25
+          ],
+          "texture": "#0"
+        },
+        "west": {
+          "uv": [
+            0,
+            6.25,
+            6,
+            6.5
+          ],
+          "texture": "#0"
+        },
+        "up": {
+          "uv": [
+            5,
+            0,
+            10,
+            6
+          ],
+          "texture": "#0"
+        },
+        "down": {
+          "uv": [
+            5,
+            0,
+            10,
+            6
+          ],
+          "texture": "#0"
+        }
+      }
+    },
+    {
+      "name": "pages",
+      "from": [
+        3.5,
+        0.25,
+        2.5
+      ],
+      "to": [
+        13,
+        3,
+        13.5
+      ],
+      "rotation": {
+        "angle": 0,
+        "axis": "y",
+        "origin": [
+          8,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            6.5,
+            4.75,
+            7.75
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            0,
+            6.5,
+            4.75,
+            7.75
+          ],
+          "texture": "#0"
+        },
+        "west": {
+          "uv": [
+            0,
+            7.75,
+            5.5,
+            9
+          ],
+          "texture": "#0"
+        }
+      }
+    },
+    {
+      "name": "cover_front",
+      "from": [
+        3,
+        3,
+        2
+      ],
+      "to": [
+        13,
+        3.25,
+        14
+      ],
+      "rotation": {
+        "angle": 0,
+        "axis": "y",
+        "origin": [
+          8,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            6,
+            5,
+            6.25
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            0,
+            6,
+            5,
+            6.25
+          ],
+          "texture": "#0"
+        },
+        "west": {
+          "uv": [
+            0,
+            6.25,
+            6,
+            6.5
+          ],
+          "texture": "#0"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            5,
+            6
+          ],
+          "texture": "#0"
+        },
+        "down": {
+          "uv": [
+            5,
+            0,
+            10,
+            6
+          ],
+          "texture": "#0"
+        }
+      }
+    },
+    {
+      "name": "spine",
+      "from": [
+        13,
+        0,
+        2
+      ],
+      "to": [
+        13.25,
+        3.25,
+        14
+      ],
+      "rotation": {
+        "angle": 0,
+        "axis": "y",
+        "origin": [
+          8,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            6,
+            9,
+            6.25,
+            10.75
+          ],
+          "texture": "#0"
+        },
+        "east": {
+          "uv": [
+            0,
+            9,
+            6,
+            10.75
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            6,
+            9,
+            6.25,
+            10.75
+          ],
+          "texture": "#0"
+        },
+        "up": {
+          "uv": [
+            5,
+            0,
+            5.25,
+            6
+          ],
+          "texture": "#0"
+        },
+        "down": {
+          "uv": [
+            5,
+            0,
+            5.25,
+            6
+          ],
+          "texture": "#0"
+        }
+      }
+    },
+    {
+      "name": "ribbon_tuck",
+      "from": [
+        7,
+        2.75,
+        1.95
+      ],
+      "to": [
+        8,
+        2.75,
+        2.5
+      ],
+      "rotation": {
+        "angle": 0,
+        "axis": "y",
+        "origin": [
+          8,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "up": {
+          "uv": [
+            11,
+            2,
+            11.5,
+            2.25
+          ],
+          "texture": "#0"
+        },
+        "down": {
+          "uv": [
+            11,
+            2,
+            11.5,
+            2.25
+          ],
+          "texture": "#0"
+        }
+      }
+    },
+    {
+      "name": "ribbon_hanging",
+      "from": [
+        7,
+        0.05,
+        1.95
+      ],
+      "to": [
+        8,
+        2.75,
+        1.95
+      ],
+      "rotation": {
+        "angle": 0,
+        "axis": "y",
+        "origin": [
+          8,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            11,
+            0,
+            11.5,
+            1.5
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            11,
+            0,
+            11.5,
+            1.5
+          ],
+          "texture": "#0"
+        }
+      }
+    },
+    {
+      "name": "ribbon_on_table",
+      "from": [
+        7,
+        0.05,
+        0
+      ],
+      "to": [
+        8,
+        0.05,
+        1.95
+      ],
+      "rotation": {
+        "angle": 0,
+        "axis": "y",
+        "origin": [
+          8,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "up": {
+          "uv": [
+            11,
+            2.5,
+            11.5,
+            3.5
+          ],
+          "rotation": 180,
+          "texture": "#0"
+        },
+        "down": {
+          "uv": [
+            11,
+            2.5,
+            11.5,
+            3.5
+          ],
+          "texture": "#0"
+        }
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "recipe_book_kc_closed",
+      "origin": [
+        8,
+        0,
+        8
+      ],
+      "scope": 0,
+      "color": 0,
+      "children": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    }
+  ],
+  "render_type": "minecraft:cutout"
+}

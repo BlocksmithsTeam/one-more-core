@@ -1,0 +1,29 @@
+{
+ "type": "minecraft:block",
+ "pools": [
+  {
+   "rolls": 1,
+   "entries": [
+    {
+     "type": "minecraft:item",
+     "name": "onemorecore:iron_tray",
+     "functions": [
+      {
+       "function": "minecraft:copy_components",
+       "source": "block_entity",
+       "include": [
+        "minecraft:container",
+        "onemorecore:table"
+       ]
+      }
+     ]
+    }
+   ],
+   "conditions": [
+    {
+     "condition": "minecraft:survives_explosion"
+    }
+   ]
+  }
+ ]
+}

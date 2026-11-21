@@ -9,6 +9,7 @@ import com.onemorestudios.onemorecore.Config;
 import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.TrayBlock;
 import com.onemorestudios.onemorecore.TrayBlockEntity;
+import com.onemorestudios.onemorecore.TrayItem;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -55,15 +56,15 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
             ItemStack dish = dishes.get(i);
             if (dish.isEmpty()) continue;
             pose.pushPose();
-            pose.translate(SPOTS[i][0] / 16, 0.5 / 16, SPOTS[i][1] / 16);
+            pose.translate(SPOTS[i][0] / 16, 2 / 16.0, SPOTS[i][1] / 16);
             pose.mulPose(Axis.YP.rotationDegrees(180));
             CustomerRenderer.renderFood(dish, level, pose, buffers, light, scale, i);
             pose.popPose();
         }
         if (label <= 0) return;
-        // The ticket is stuck to the front rim (z 3), a small tag that leans out.
+        // The ticket is stuck to the front rim (z 2), a small tag that leans out.
         pose.pushPose();
-        pose.translate(0.5, 1.8 / 16, 2.9 / 16);
+        pose.translate(0.5, 2.2 / 16, 1.9 / 16);
         pose.mulPose(Axis.YP.rotationDegrees(180));
         pose.mulPose(Axis.XP.rotationDegrees(-25));
         float w = 3.6f / 16, h = 2 / 16f;
@@ -98,7 +99,8 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
 
         @Override
         public void renderByItem(ItemStack stack, ItemDisplayContext context, PoseStack pose, MultiBufferSource buffers, int light, int overlay) {
-            Minecraft.getInstance().getBlockRenderer().renderSingleBlock(OneMoreCore.TRAY.get().defaultBlockState(), pose, buffers, light, overlay);
+            if (!(stack.getItem() instanceof TrayItem tray)) return;
+            Minecraft.getInstance().getBlockRenderer().renderSingleBlock(tray.getBlock().defaultBlockState(), pose, buffers, light, overlay);
             if (context == ItemDisplayContext.GUI) return;
             draw(stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).stream().toList(),
                     stack.getOrDefault(OneMoreCore.TABLE.get(), 0), pose, buffers, light);

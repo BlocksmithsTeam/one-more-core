@@ -44,7 +44,8 @@ public class ClientSetup {
                 if (renderer == null) renderer = new TrayRenderer.Item(mc.getBlockEntityRenderDispatcher(), mc.getEntityModels());
                 return renderer;
             }
-        }, OneMoreCore.TRAY_ITEM.get()));
+        }, OneMoreCore.TRAY_ITEM.get(), OneMoreCore.IRON_TRAY_ITEM.get()));
+        bus.addListener(TableMarkRenderer::registerModels);
         TableMarkRenderer.register();
         ScreenRenderer.register();
         MenuBook.register();

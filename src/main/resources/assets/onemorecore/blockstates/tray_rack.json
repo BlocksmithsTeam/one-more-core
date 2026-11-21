@@ -1,19 +1,19 @@
 {
- "variants": {
-  "facing=north": {
-   "model": "onemorecore:block/tray_rack"
-  },
-  "facing=east": {
-   "model": "onemorecore:block/tray_rack",
-   "y": 90
-  },
-  "facing=south": {
-   "model": "onemorecore:block/tray_rack",
-   "y": 180
-  },
-  "facing=west": {
-   "model": "onemorecore:block/tray_rack",
-   "y": 270
+  "variants": {
+    "facing=north": {
+      "model": "onemorecore:block/modern_tray_rack"
+    },
+    "facing=east": {
+      "model": "onemorecore:block/modern_tray_rack",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "onemorecore:block/modern_tray_rack",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "onemorecore:block/modern_tray_rack",
+      "y": 270
+    }
   }
- }
 }

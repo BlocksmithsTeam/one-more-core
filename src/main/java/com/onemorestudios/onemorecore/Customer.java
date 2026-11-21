@@ -400,7 +400,7 @@ public class Customer extends PathfinderMob {
 
     /** The dishes on a tray (empty for any other item). */
     static List<ItemStack> trayDishes(ItemStack tray) {
-        if (!tray.is(OneMoreCore.TRAY_ITEM.get())) return List.of();
+        if (!(tray.getItem() instanceof TrayItem)) return List.of();
         List<ItemStack> out = new ArrayList<>();
         tray.getOrDefault(net.minecraft.core.component.DataComponents.CONTAINER, net.minecraft.world.item.component.ItemContainerContents.EMPTY)
                 .nonEmptyItems().forEach(s -> out.add(s.copy()));
@@ -410,7 +410,7 @@ public class Customer extends PathfinderMob {
     /** True if the customer still waits for this item (on a tray: for one of its dishes). Works on both sides; the client only compares the item type. */
     public boolean wants(ItemStack held) {
         if (getState() != State.WAITING_FOOD || held.isEmpty()) return false;
-        if (held.is(OneMoreCore.TRAY_ITEM.get())) return trayDishes(held).stream().anyMatch(this::wants);
+        if (held.getItem() instanceof TrayItem) return trayDishes(held).stream().anyMatch(this::wants);
         if (level().isClientSide) return getOrder().stream().anyMatch(s -> ItemStack.isSameItem(s, held));
         return wanted.stream().anyMatch(l -> l.matches(held));
     }
@@ -420,7 +420,7 @@ public class Customer extends PathfinderMob {
      * matching item of the stack. With requireTray, food must come on a tray. Server only.
      */
     public boolean deliver(Player player, ItemStack held) {
-        if (held.is(OneMoreCore.TRAY_ITEM.get())) {
+        if (held.getItem() instanceof TrayItem) {
             if (!wants(held)) return false;
             List<ItemStack> dishes = trayDishes(held), left = new ArrayList<>();
             for (ItemStack dish : dishes) {

@@ -33,12 +33,14 @@ public final class SmokeGameTests {
         var menu = GameTestSupport.place(helper, POS.north(), OneMoreCore.MENU_BOARD.get(), MenuBoardBlockEntity.class);
         var orders = GameTestSupport.place(helper, POS.south(), OneMoreCore.ORDER_BOARD.get(), OrderBoardBlockEntity.class);
         var tray = GameTestSupport.place(helper, POS.west(), OneMoreCore.TRAY.get(), TrayBlockEntity.class);
+        var ironTray = GameTestSupport.place(helper, POS.above(), OneMoreCore.IRON_TRAY.get(), TrayBlockEntity.class);
         var book = GameTestSupport.place(helper, POS.east(), OneMoreCore.MENU_BOOK.get(), MenuBookBlockEntity.class);
 
         helper.assertValueEqual(sign.getType(), OneMoreCore.OPEN_SIGN_ENTITY.get(), "open sign block entity type");
         helper.assertValueEqual(menu.getType(), OneMoreCore.MENU_BOARD_ENTITY.get(), "menu board block entity type");
         helper.assertValueEqual(orders.getType(), OneMoreCore.ORDER_BOARD_ENTITY.get(), "order board block entity type");
         helper.assertValueEqual(tray.getType(), OneMoreCore.TRAY_ENTITY.get(), "tray block entity type");
+        helper.assertValueEqual(ironTray.getType(), OneMoreCore.TRAY_ENTITY.get(), "iron tray block entity type");
         helper.assertValueEqual(book.getType(), OneMoreCore.MENU_BOOK_ENTITY.get(), "menu book block entity type");
         helper.succeed();
     }
