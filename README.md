@@ -26,7 +26,7 @@ The mod does not add food. It works with the items of any mod.
     Players approaching the televisions see the current menu or orders. Switching off the last configured television clears its picture for players who saw it, even if they have moved away.
 
 Optional [Diegesis](https://github.com/Pocky-l/diegesis) adds a camera above the table and a folded 3D cloth.
-Use NeoForge 1.21.1 with Diegesis 1.0.0-beta.14 or newer on the client and server.
+Use NeoForge 1.21.1 with Diegesis 1.0.0-beta.15 or newer on the client and server.
 Use a dirty table with an empty main hand. Pick up the cloth and drag it over the stain. The view closes by itself when the table is clean.
 Without Diegesis, hold use and move the crosshair over the stain. The server checks each wipe.
 

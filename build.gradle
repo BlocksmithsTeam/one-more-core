@@ -122,7 +122,7 @@ configurations {
 }
 
 dependencies {
-    def diegesis = "curse.maven:diegesis-1790227:9709606" // NeoForge 1.21.1, 1.0.0-beta.14
+    def diegesis = "curse.maven:diegesis-1790227:9728661" // NeoForge 1.21.1, 1.0.0-beta.15
     compileOnly diegesis
     if (!providers.gradleProperty('noDiegesis').isPresent()) {
         localRuntime diegesis
