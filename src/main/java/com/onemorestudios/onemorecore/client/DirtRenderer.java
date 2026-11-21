@@ -71,7 +71,10 @@ class DirtRenderer {
     static void register() {
         NeoForge.EVENT_BUS.addListener(DirtRenderer::render);
         NeoForge.EVENT_BUS.addListener((ChunkEvent.Unload e) -> {
-            if (e.getLevel().isClientSide()) Dirt.CLIENT.keySet().removeIf(pos -> e.getChunk().getPos().equals(new ChunkPos(pos)));
+            if (!e.getLevel().isClientSide()) return;
+            ChunkPos chunk = e.getChunk().getPos();
+            Dirt.CLIENT.keySet().removeIf(pos -> chunk.equals(new ChunkPos(pos)));
+            com.onemorestudios.onemorecore.TableItems.CLIENT.keySet().removeIf(pos -> chunk.equals(new ChunkPos(pos)));
         });
         NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut e) -> { Dirt.CLIENT.clear(); com.onemorestudios.onemorecore.TableItems.CLIENT.clear(); });
     }

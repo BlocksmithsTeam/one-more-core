@@ -49,14 +49,17 @@ public class ComputerScreen extends Screen {
     private int comboPrice = -1;
     /** The shop's cart: entry id and count, in the order added. */
     private final java.util.LinkedHashMap<String, Integer> cart = new java.util.LinkedHashMap<>();
+    private static long nextCheckoutId;
+    private long pendingCheckout;
     /** The shop shows the cart instead of the catalog. */
     private boolean cartOpen;
-    private static final int SIDEBAR = 62, ROW = 22;
+    private static final int SIDEBAR = 62, ROW = 22, COMBO_PLACES = 4;
     private static final String[] FILTERS = {"all", "main", "drink", "starter", "dessert", "combos"};
     private static final int CHIPS = 13;
     private double scroll;
     private int dx, dy, dw, dh, wx, wy, ww, wh, cx, cy, cw, ch;
     private final List<Hit> hits = new ArrayList<>();
+    private Component message = Component.empty();
     private long messageTime;
     private EditBox search;
     /** Every food and drink item of the game, for the picker. */
@@ -74,7 +77,27 @@ public class ComputerScreen extends Screen {
 
     void update(Computer.State s) {
         state = s;
-        if (!s.message().getString().isEmpty()) messageTime = System.currentTimeMillis();
+        hits.clear();
+        if (!s.message().getString().isEmpty()) showMessage(s.message());
+    }
+
+    boolean checkoutResult(Computer.CheckoutResult result) {
+        if (pendingCheckout == 0 || result.checkoutId() != pendingCheckout) return false;
+        pendingCheckout = 0;
+        result.state().ifPresent(this::update);
+        showMessage(result.message());
+        hits.clear();
+        if (result.success()) {
+            cart.clear();
+            cartOpen = false;
+            scroll = 0;
+        }
+        return true;
+    }
+
+    private void showMessage(Component message) {
+        this.message = message;
+        messageTime = System.currentTimeMillis();
     }
 
     private static Component text(String key, Object... args) {
@@ -97,11 +120,12 @@ public class ComputerScreen extends Screen {
         filter = "all";
         scroll = 0;
         if (search != null) search.setValue("");
-        send(Computer.REFRESH, "");
+        send(which == Computer.APP_MANAGER ? Computer.REFRESH_MANAGER : Computer.REFRESH, "");
     }
 
     @Override
     protected void init() {
+        hits.clear();
         // The camera puts the monitor's 4:3 screen in the middle of the view, ComputerCamera.FILL of its height.
         dh = (int) Math.round(height * ComputerCamera.FILL);
         dw = Math.min(width - 8, dh * 4 / 3);
@@ -118,7 +142,7 @@ public class ComputerScreen extends Screen {
         search.setMaxLength(40);
         search.setValue(old);
         search.setHint(Component.translatable("onemorecore.computer.search").withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
-        search.setResponder(s -> scroll = 0);
+        search.setResponder(s -> { scroll = 0; hits.clear(); });
         addWidget(search);
     }
 
@@ -270,8 +294,8 @@ public class ComputerScreen extends Screen {
             default -> { drawManager(g, mouseX, mouseY); yield ItemStack.EMPTY; }
         };
         g.disableScissor();
-        if (System.currentTimeMillis() - messageTime < 3500 && !state.message().getString().isEmpty()) {
-            var lines = font.split(state.message(), ww - 28);
+        if (System.currentTimeMillis() - messageTime < 3500 && !message.getString().isEmpty()) {
+            var lines = font.split(message, ww - 28);
             int h = 8 + lines.size() * 10, y = wy + wh - h - 6;
             rounded(g, wx + 8, y, ww - 16, h, 0xF00E1115);
             for (int l = 0; l < lines.size(); l++) g.drawString(font, lines.get(l), wx + 14, y + 5 + l * 10, YELLOW, false);
@@ -412,6 +436,7 @@ public class ComputerScreen extends Screen {
 
     /** Closes the picker or the combo maker first, then the window. */
     private void back() {
+        hits.clear();
         if (adding) adding = false;
         else if (building != null) building = null;
         else app = 0;
@@ -503,6 +528,7 @@ public class ComputerScreen extends Screen {
      * with - and +, and Create. Right: what the next place can be: a whole kind, or one dish of the menu.
      */
     private ItemStack drawBuilder(GuiGraphics g, int mouseX, int mouseY) {
+        List<String> builder = building;
         int lw = Math.max(110, cw * 2 / 5), rx = cx + lw + 6, rw = cw - lw - 6;
         ItemStack hovered = ItemStack.EMPTY;
         // Left pane.
@@ -516,12 +542,14 @@ public class ComputerScreen extends Screen {
             if (inside(mouseX, mouseY, cx + 6, y + 2, 16, 16)) hovered = slotIcon(slot);
             g.drawString(font, font.plainSubstrByWidth(slotName(slot).getString(), lw - 46), cx + 26, y + 6, WHITE, false);
             int index = k;
-            button(g, cx + lw - 16, y + 5, 10, 10, Component.literal("\u00d7"), 0xAA000000, RED, true, mouseX, mouseY, () -> building.remove(index));
+            button(g, cx + lw - 16, y + 5, 10, 10, Component.literal("\u00d7"), 0xAA000000, RED, true, mouseX, mouseY, () -> {
+                if (building == builder && index < builder.size() && slot.equals(builder.get(index))) builder.remove(index);
+            });
             y += 22;
             if (k < building.size() - 1) { g.drawCenteredString(font, "+", cx + lw / 2, y - 1, GREY); y += 8; }
         }
         // The hint, when it fits above the price row.
-        if (building.size() < 4 && y + 16 <= cy + ch - 38) {
+        if (building.size() < COMBO_PLACES && y + 16 <= cy + ch - 38) {
             g.drawString(font, text(building.isEmpty() ? "combo_first" : "combo_next"), cx + 6, y + 4, GREY, false);
             y += 16;
         }
@@ -533,17 +561,22 @@ public class ComputerScreen extends Screen {
         if (building.size() >= 2) {
             g.drawString(font, text("combo_price"), cx + 6, by + 3, GREY, false);
             int pw = font.width(String.valueOf(p)) + 12;
-            button(g, cx + lw - 17, by, 11, 12, Component.literal("+"), OFF, CARD_HOVER, true, mouseX, mouseY, () -> comboPrice = p + step());
+            button(g, cx + lw - 17, by, 11, 12, Component.literal("+"), OFF, CARD_HOVER, true, mouseX, mouseY, () -> {
+                if (building == builder && builder.size() >= 2) comboPrice = p + step();
+            });
             price(g, cx + lw - 19 - pw, by + 2, p);
-            button(g, cx + lw - 33 - pw, by, 11, 12, Component.literal("-"), OFF, CARD_HOVER, p > 1, mouseX, mouseY, () -> comboPrice = Math.max(1, p - step()));
+            button(g, cx + lw - 33 - pw, by, 11, 12, Component.literal("-"), OFF, CARD_HOVER, p > 1, mouseX, mouseY, () -> {
+                if (building == builder && builder.size() >= 2) comboPrice = Math.max(1, p - step());
+            });
         }
         button(g, cx + 3, cy + ch - 20, lw - 6, 16, text("combo_create"), GREEN, GREEN_HOVER, building.size() >= 2, mouseX, mouseY, () -> {
-            send(Computer.ADD_COMBO, String.join(";", building) + "," + p);
+            if (building != builder || builder.size() < 2) return;
+            send(Computer.ADD_COMBO, String.join(";", builder) + "," + p);
             building = null;
             filter = "combos";
         });
         // Right pane: kinds, then dishes.
-        boolean full = building.size() >= 4;
+        boolean full = building.size() >= COMBO_PLACES;
         int kx = rx, ky = cy;
         g.drawString(font, text("combo_kinds"), rx, ky, GREY, false);
         ky += 11;
@@ -552,7 +585,9 @@ public class ComputerScreen extends Screen {
             int w = font.width(label) + 10;
             if (kx + w > rx + rw) { kx = rx; ky += 16; }
             String slot = "kind:" + kind;
-            button(g, kx, ky, w, 14, label, CARD, CARD_HOVER, !full && state.menu().stream().anyMatch(l -> l.kind().equals(kind)), mouseX, mouseY, () -> building.add(slot));
+            button(g, kx, ky, w, 14, label, CARD, CARD_HOVER, !full && state.menu().stream().anyMatch(l -> l.kind().equals(kind)), mouseX, mouseY, () -> {
+                if (building == builder && builder.size() < COMBO_PLACES) builder.add(slot);
+            });
             kx += w + 3;
         }
         ky += 20;
@@ -570,7 +605,9 @@ public class ComputerScreen extends Screen {
             rounded(g, x, yy, size, size, picked ? 0xFF1F3A27 : over ? CARD_HOVER : CARD);
             g.renderItem(l.icon(), x + 3, yy + 3);
             if (over) hovered = l.icon();
-            if (!picked && !full) clipHit(x, Math.max(yy, ky), size, size, () -> building.add(l.id()));
+            if (!picked && !full) clipHit(x, Math.max(yy, ky), size, size, () -> {
+                if (building == builder && builder.size() < COMBO_PLACES && !builder.contains(l.id())) builder.add(l.id());
+            });
         }
         return hovered;
     }
@@ -631,7 +668,6 @@ public class ComputerScreen extends Screen {
      * with the count, the total and the button that opens the cart. A total over the register is red, with how much is missing.
      */
     private ItemStack drawShop(GuiGraphics g, int mouseX, int mouseY) {
-        cart.keySet().removeIf(id -> shopLine(id) == null);
         int bar = 22;
         int saved = ch;
         ch -= bar + 4;
@@ -654,13 +690,14 @@ public class ComputerScreen extends Screen {
         if (cartOpen) {
             Component checkout = text("checkout");
             int kw = font.width(checkout) + 12;
-            boolean can = n > 0 && enough && state.delivery().isPresent();
+            StringBuilder encoded = new StringBuilder();
+            cart.forEach((id, count) -> encoded.append(encoded.isEmpty() ? "" : ";").append(id).append(':').append(count));
+            boolean withinLimits = cart.size() <= Computer.MAX_CART_LINES && encoded.length() <= Computer.MAX_REQUEST_LENGTH;
+            boolean available = cart.keySet().stream().allMatch(id -> id.indexOf(';') < 0 && shopLine(id) != null);
+            boolean can = n > 0 && enough && state.delivery().isPresent() && withinLimits && available && pendingCheckout == 0;
             button(g, cx + cw - 4 - kw, y + 4, kw, 14, checkout, GREEN, GREEN_HOVER, can, mouseX, mouseY, () -> {
-                StringBuilder id = new StringBuilder();
-                cart.forEach((k, v) -> id.append(id.length() == 0 ? "" : ";").append(k).append(':').append(v));
-                send(Computer.BUY_CART, id.toString());
-                cart.clear();
-                cartOpen = false;
+                pendingCheckout = ++nextCheckoutId;
+                PacketDistributor.sendToServer(new Computer.Request(state.pos(), Computer.BUY_CART, encoded.toString(), total, pendingCheckout));
             });
             button(g, cx + cw - 8 - kw - aw, y + 4, aw, 14, action, OFF, CARD_HOVER, true, mouseX, mouseY, () -> { cartOpen = false; scroll = 0; });
         } else {
@@ -692,15 +729,16 @@ public class ComputerScreen extends Screen {
             int inCart = cart.getOrDefault(line.id(), 0);
             if (inCart > 0) {
                 // In the cart: - count +.
-                button(g, x + w - 15, by - 1, 11, 13, Component.literal("+"), BLUE, BLUE_HOVER, inCart < 64, mouseX, mouseY, () -> cart.merge(line.id(), 1, Integer::sum));
+                button(g, x + w - 15, by - 1, 11, 13, Component.literal("+"), BLUE, BLUE_HOVER,
+                        pendingCheckout == 0 && inCart < Computer.MAX_CART_COUNT, mouseX, mouseY, () -> cart.merge(line.id(), 1, Integer::sum));
                 String c = String.valueOf(inCart);
                 g.drawString(font, c, x + w - 18 - font.width(c), by + 2, WHITE, false);
-                button(g, x + w - 32 - font.width(c), by - 1, 11, 13, Component.literal("-"), OFF, CARD_HOVER, true, mouseX, mouseY,
+                button(g, x + w - 32 - font.width(c), by - 1, 11, 13, Component.literal("-"), OFF, CARD_HOVER, pendingCheckout == 0, mouseX, mouseY,
                         () -> { if (cart.merge(line.id(), -1, Integer::sum) <= 0) cart.remove(line.id()); });
             } else {
                 Component add = text("cart_add");
                 int bw = font.width(add) + 8;
-                button(g, x + w - 4 - bw, by - 1, bw, 13, add, BLUE, BLUE_HOVER, true, mouseX, mouseY, () -> cart.put(line.id(), 1));
+                button(g, x + w - 4 - bw, by - 1, bw, 13, add, BLUE, BLUE_HOVER, pendingCheckout == 0, mouseX, mouseY, () -> cart.put(line.id(), 1));
             }
         }
         g.disableScissor();
@@ -721,19 +759,28 @@ public class ComputerScreen extends Screen {
             if (y + ROW < cy || y > cy + ch) continue;
             boolean over = inside(mouseX, mouseY, x, y, cw, ROW);
             rounded(g, x, y, cw, ROW, over ? CARD_HOVER : CARD);
-            g.renderItem(l.icon(), x + 3, y + 3);
-            g.renderItemDecorations(font, l.stack(), x + 3, y + 3);
-            if (inside(mouseX, mouseY, x + 3, y + 3, 16, 16)) hovered = l.stack();
+            if (l != null) {
+                g.renderItem(l.icon(), x + 3, y + 3);
+                g.renderItemDecorations(font, l.stack(), x + 3, y + 3);
+                if (inside(mouseX, mouseY, x + 3, y + 3, 16, 16)) hovered = l.stack();
+            }
             int right = x + cw - 5;
-            button(g, right - 10, y + 6, 10, 10, Component.literal("\u00d7"), 0xAA000000, RED, true, mouseX, mouseY, () -> cart.remove(id));
+            button(g, right - 10, y + 6, 10, 10, Component.literal("\u00d7"), 0xAA000000, RED,
+                    pendingCheckout == 0, mouseX, mouseY, () -> cart.remove(id));
+            if (l == null) {
+                Component unavailable = Component.translatableWithFallback("onemorecore.computer.cart_unavailable", "%s (unavailable)", id);
+                g.drawString(font, font.plainSubstrByWidth(unavailable.getString(), right - 24 - x), x + 6, y + 7, RED, false);
+                continue;
+            }
             right -= 16;
             String lineTotal = String.valueOf((long) l.price() * count);
             price(g, right - font.width(lineTotal) - 12, y + 7, (int) Math.min(Integer.MAX_VALUE, (long) l.price() * count));
             right -= font.width(lineTotal) + 20;
-            button(g, right - 11, y + 5, 11, 12, Component.literal("+"), OFF, CARD_HOVER, count < 64, mouseX, mouseY, () -> cart.merge(id, 1, Integer::sum));
+            button(g, right - 11, y + 5, 11, 12, Component.literal("+"), OFF, CARD_HOVER,
+                    pendingCheckout == 0 && count < Computer.MAX_CART_COUNT, mouseX, mouseY, () -> cart.merge(id, 1, Integer::sum));
             String c = String.valueOf(count);
             g.drawString(font, c, right - 14 - font.width(c), y + 7, WHITE, false);
-            button(g, right - 28 - font.width(c), y + 5, 11, 12, Component.literal("-"), OFF, CARD_HOVER, true, mouseX, mouseY,
+            button(g, right - 28 - font.width(c), y + 5, 11, 12, Component.literal("-"), OFF, CARD_HOVER, pendingCheckout == 0, mouseX, mouseY,
                     () -> { if (cart.merge(id, -1, Integer::sum) <= 0) cart.remove(id); });
             int nameW = right - 32 - font.width(c) - (x + 24);
             g.drawString(font, font.plainSubstrByWidth(l.stack().getHoverName().getString(), nameW), x + 24, y + 7, WHITE, false);
@@ -787,14 +834,15 @@ public class ComputerScreen extends Screen {
         String count = (tables - off) + "/" + tables;
         g.drawString(font, count, cx + cw - 8 - font.width(count), y + 6, GREY, false);
         y += 27;
-        button(g, cx, y, cw, 20, text("edit_places"), BLUE, BLUE_HOVER, true, mouseX, mouseY, ComputerCamera::startFree);
+        button(g, cx, y, cw, 20, text("edit_places"), BLUE, BLUE_HOVER, pendingCheckout == 0, mouseX, mouseY, ComputerCamera::startFree);
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            for (Hit h : List.copyOf(hits)) {
+            for (Hit h : hits) {
                 if (h.contains(mouseX, mouseY)) {
+                    hits.clear();
                     h.action().run();
                     return true;
                 }
@@ -810,6 +858,7 @@ public class ComputerScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         scroll = Math.max(0, scroll - scrollY * 16);
+        hits.clear();
         return true;
     }
 

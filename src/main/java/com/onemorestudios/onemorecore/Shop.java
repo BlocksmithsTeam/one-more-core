@@ -1,5 +1,6 @@
 package com.onemorestudios.onemorecore;
 
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -16,6 +17,7 @@ import net.neoforged.fml.loading.FMLPaths;
 
 /** The items that the Restaurant Computer sells, read from config/onemorecore/shop.json. */
 public class Shop {
+    private static final int MAX_COUNT = 1728;
     /** The stack is delivered. The icon is shown in the list. */
     public record Entry(String id, ItemStack stack, ItemStack icon, int price) {}
 
@@ -63,9 +65,24 @@ public class Shop {
             try {
                 JsonObject o = el.getAsJsonObject();
                 String id = GsonHelper.getAsString(o, "id");
-                ItemStack stack = Menu.stack(o.get("item"), registries);
-                if (o.has("count")) stack.setCount(Menu.integer(o, "count", 1));
-                if (stack.isEmpty()) throw new IllegalArgumentException("empty item stack");
+                JsonElement item = o.get("item");
+                JsonElement quantity = o.get("count");
+                if (item != null && item.isJsonObject() && item.getAsJsonObject().has("count")) {
+                    JsonObject stackObject = item.getAsJsonObject().deepCopy();
+                    JsonElement stackCount = stackObject.remove("count");
+                    if (quantity == null) quantity = stackCount;
+                    item = stackObject;
+                }
+                ItemStack stack = Menu.stack(item, registries);
+                if (quantity != null) {
+                    BigDecimal count = quantity.getAsBigDecimal();
+                    if (count.stripTrailingZeros().scale() > 0) throw new IllegalArgumentException("count must be an integer");
+                    int clamped = count.max(BigDecimal.ONE).min(BigDecimal.valueOf(MAX_COUNT)).intValueExact();
+                    if (count.compareTo(BigDecimal.valueOf(clamped)) != 0) {
+                        OneMoreCore.LOGGER.warn("Clamped shop entry {} count from {} to {}", id, count, clamped);
+                    }
+                    stack.setCount(clamped);
+                }
                 ItemStack icon = o.has("icon") ? Menu.stack(o.get("icon"), registries) : stack;
                 if (out.stream().anyMatch(e -> e.id.equals(id))) throw new IllegalArgumentException("duplicate id");
                 out.add(new Entry(id, stack, icon, Menu.money(o.get("price"))));

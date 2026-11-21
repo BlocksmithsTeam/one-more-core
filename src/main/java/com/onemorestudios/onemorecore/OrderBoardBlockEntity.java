@@ -2,6 +2,9 @@ package com.onemorestudios.onemorecore;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.WeakHashMap;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -18,12 +21,21 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** The tickets of the order rail. The server builds them twice a second and sends them when they changed; not saved. */
 public class OrderBoardBlockEntity extends BlockEntity {
+    private static final int MAX_TICKET_BYTES = 256 * 1024;
+
     /** One taken order: the table number, the dishes still wanted, the patience left (0..1), the price of the dishes. */
-    public record Ticket(int table, List<ItemStack> items, float patience, int price) {
+    public record Ticket(UUID orderId, int table, List<ItemStack> items, float patience, int price) {
+        public Ticket(int table, List<ItemStack> items, float patience, int price) {
+            this(null, table, items, patience, price);
+        }
+
         public Ticket(int table, List<ItemStack> items, float patience) {
             this(table, items, patience, 0);
         }
     }
+
+    /** Order IDs live as long as their parties, including when part of an order has been served. */
+    private static final WeakHashMap<Customer.Party, UUID> ORDER_IDS = new WeakHashMap<>();
 
     private CompoundTag sent = new CompoundTag();
     /** Client: the tickets of the last update. */
@@ -34,8 +46,28 @@ public class OrderBoardBlockEntity extends BlockEntity {
     }
 
     List<Ticket> tickets(ServerLevel level) {
-        Restaurant r = Restaurants.get(level).forComputer(worldPosition);
-        return r == null ? List.of() : r.tickets();
+        return tickets(Restaurants.get(level).forComputer(worldPosition));
+    }
+
+    /** The taken orders, oldest first: one ticket per party that waits for its food. */
+    static List<Ticket> tickets(Restaurant restaurant) {
+        if (restaurant == null) return List.of();
+        List<Ticket> out = new ArrayList<>();
+        Set<Customer.Party> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (Customer customer : restaurant.customers) {
+            Customer.Party party = customer.party();
+            if (customer.getState() != Customer.State.WAITING_FOOD || !seen.add(party)) continue;
+            List<ItemStack> items = new ArrayList<>();
+            int price = 0;
+            for (Customer member : party.members) {
+                items.addAll(member.getOrder());
+                for (Customer.Line line : member.wantedLines()) price += line.price();
+            }
+            UUID id = ORDER_IDS.computeIfAbsent(party, ignored -> UUID.randomUUID());
+            out.add(new Ticket(id, restaurant.tableNumber(customer.getSurface()), items,
+                    party.patience / (float) Math.max(1, party.patienceMax), price));
+        }
+        return out;
     }
 
     void serverTick(ServerLevel level) {
@@ -50,9 +82,11 @@ public class OrderBoardBlockEntity extends BlockEntity {
     public static CompoundTag encode(List<Ticket> tickets, HolderLookup.Provider registries) {
         CompoundTag now = new CompoundTag();
         ListTag list = new ListTag();
+        int remaining = MAX_TICKET_BYTES;
         for (Ticket t : tickets) {
             if (list.size() >= OrderBoardBlock.TICKETS) break;
             CompoundTag c = new CompoundTag();
+            if (t.orderId() != null) c.putUUID("order", t.orderId());
             c.putInt("table", t.table());
             // Patience in steps of 5 percent, so that a waiting order does not send every half second.
             c.putInt("patience", Math.round(t.patience() * 20));
@@ -60,7 +94,10 @@ public class OrderBoardBlockEntity extends BlockEntity {
             ListTag items = new ListTag();
             for (ItemStack s : t.items()) if (!s.isEmpty()) items.add(s.copyWithCount(1).save(registries));
             c.put("items", items);
+            int size = ScreenData.wireSize(c);
+            if (size > remaining) continue;
             list.add(c);
+            remaining -= size;
         }
         now.put("tickets", list);
         return now;
@@ -74,7 +111,8 @@ public class OrderBoardBlockEntity extends BlockEntity {
             List<ItemStack> items = new ArrayList<>();
             for (Tag i : c.getList("items", Tag.TAG_COMPOUND)) if (items.size() < 16) ItemStack.parse(registries, i).ifPresent(items::add);
             if (out.size() < OrderBoardBlock.TICKETS)
-                out.add(new Ticket(c.getInt("table"), items, Math.max(0, Math.min(20, c.getInt("patience"))) / 20f, Math.max(0, c.getInt("price"))));
+                out.add(new Ticket(c.hasUUID("order") ? c.getUUID("order") : null, c.getInt("table"), items,
+                        Math.max(0, Math.min(20, c.getInt("patience"))) / 20f, Math.max(0, c.getInt("price"))));
         }
         return out;
     }

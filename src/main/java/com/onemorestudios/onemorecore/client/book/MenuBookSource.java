@@ -2,7 +2,6 @@ package com.onemorestudios.onemorecore.client.book;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import com.onemorestudios.onemorecore.MenuBoardBlockEntity;
 import com.onemorestudios.onemorecore.MenuBookBlockEntity;
@@ -37,8 +36,8 @@ final class MenuBookSource implements RecipeBook.Source {
         ItemStack currency = currency();
         for (MenuBoardBlockEntity.Line line : lines(view)) {
             if (line.items().isEmpty()) continue;
-            String key = line.kind() + ":" + line.items().stream().map(s -> BuiltInRegistries.ITEM.getKey(s.getItem()).toString()).collect(Collectors.joining("+"));
-            boolean combo = line.items().size() > 1;
+            boolean combo = line.kind().equals("combo");
+            String key = (combo ? "combo/" : "dish/") + line.id();
             ItemStack dish = line.items().get(0).copyWithCount(1);
             if (combo) dish.set(DataComponents.CUSTOM_NAME, Component.translatable("onemorecore.book.combo"));
             List<Ingredient> parts = combo ? line.items().stream().map(s -> Ingredient.of(s.copyWithCount(1))).toList() : List.of();

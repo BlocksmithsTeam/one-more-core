@@ -22,7 +22,7 @@ The mod does not add food. It works with the items of any mod.
 11. Televisions of other mods can show the menu or the orders too. In the Manager's free camera, tool 5 (Screens) clicks a television: off, menu, orders. The televisions of MrCrayfish's Refurbished Furniture and Yuushya Townscape work without a config line; `screenBlocks` adds others. With Yuushya Townscape installed, the mod's own screens (Yuushya's wall TV) are hidden from the creative tab and recipe viewers: use Yuushya's televisions.
 
 Optional [Diegesis](https://github.com/Pocky-l/diegesis) adds a camera above the table and a folded 3D cloth.
-Use NeoForge 1.21.1 with Diegesis beta.11 or newer on the client and server.
+Use NeoForge 1.21.1 with Diegesis 1.0.0-beta.14 or newer on the client and server.
 Use a dirty table with an empty main hand. Pick up the cloth and drag it over the stain. The view closes by itself when the table is clean.
 Without Diegesis, hold use and move the crosshair over the stain. The server checks each wipe.
 

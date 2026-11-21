@@ -84,7 +84,8 @@ public class MenuBookBlock extends Block implements EntityBlock {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (level instanceof ServerLevel sl && player instanceof ServerPlayer sp)
-            PacketDistributor.sendToPlayer(sp, new MenuBookBlockEntity.Open(MenuBoardBlockEntity.build(Restaurants.get(sl).forComputer(pos))));
+            PacketDistributor.sendToPlayer(sp, new MenuBookBlockEntity.Open(
+                    MenuBoardBlockEntity.build(Restaurants.get(sl).forComputer(pos), sl.registryAccess())));
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
 }

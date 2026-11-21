@@ -5,9 +5,16 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * Where the picture of a television is, in the pixels of its model when the screen faces south (+z): the rectangle
@@ -81,6 +88,27 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
         return new float[] {(float) (u * width()), (float) (v * height())};
     }
 
+    /** The world point of a card click in canvas units (x right, y down). */
+    Vec3 cardPoint(BlockPos pos, BlockState state, float x, float y) {
+        return world(pos, state, x0 + x / 10, y1 - y / 10, z);
+    }
+
+    boolean faces(BlockState state, Vec3 towardViewer) {
+        double angle = Math.toRadians(tilt(state));
+        return Vec3.atLowerCornerOf(normal(state).getNormal()).scale(Math.cos(angle))
+                .add(0, -Math.sin(angle), 0).dot(towardViewer) > 0;
+    }
+
+    /** The television itself can enclose the picture, but foreground blocks must leave it visible. */
+    public static boolean visible(Level level, Entity viewer, BlockPos screen, Vec3 from, Vec3 to) {
+        return level.clip(new ClipContext(from, to, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, viewer) {
+            @Override
+            public VoxelShape getBlockShape(BlockState state, BlockGetter getter, BlockPos pos) {
+                return pos.equals(screen) ? Shapes.empty() : super.getBlockShape(state, getter, pos);
+            }
+        }).getType() == HitResult.Type.MISS;
+    }
+
     /** Order cards on one page of a canvas, and the page shown at a game time (a page every 6 seconds). */
     public static int ordersPerPage(float w, float h) {
         float u = h / 200;
@@ -93,13 +121,24 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
 
     /** The order card under canvas point x (oldest first over all pages), or -1. */
     public static int orderAt(float w, float h, int count, long gameTime, float x, float y) {
-        float u = h / 200, gap = 6 * u;
-        if (y < 30 * u) return -1;
+        int i = cardSlot(w, h, x, y);
+        if (i < 0) return -1;
         int per = ordersPerPage(w, h), pages = (count + per - 1) / per;
-        float cardW = (w - gap * (per + 1)) / per;
-        int i = (int) Math.floor((x - gap / 2) / (cardW + gap));
         int index = page(pages, gameTime) * per + i;
-        return i >= 0 && i < per && index < count ? index : -1;
+        return index < count ? index : -1;
+    }
+
+    int cardSlot(float x, float y) {
+        return cardSlot(width(), height(), x, y);
+    }
+
+    private static int cardSlot(float w, float h, float x, float y) {
+        float u = h / 200, gap = 6 * u;
+        if (!Float.isFinite(x) || !Float.isFinite(y) || x < gap || x > w - gap || y < 30 * u || y > h - gap) return -1;
+        int per = ordersPerPage(w, h);
+        float cardW = (w - gap * (per + 1)) / per;
+        int i = (int) ((x - gap) / (cardW + gap));
+        return i < per && x <= gap + i * (cardW + gap) + cardW ? i : -1;
     }
 
     /** Canvas size in units (10 per model pixel). */

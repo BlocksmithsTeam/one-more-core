@@ -2,6 +2,7 @@ package com.onemorestudios.onemorecore.client;
 
 import java.util.List;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.onemorestudios.onemorecore.Computer;
 import com.onemorestudios.onemorecore.OneMoreCore;
@@ -83,6 +84,7 @@ public final class ComputerCamera {
         NeoForge.EVENT_BUS.addListener(ComputerCamera::movement);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::click);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::key);
+        NeoForge.EVENT_BUS.addListener(ComputerCamera::mouseButton);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::scroll);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::pause);
         NeoForge.EVENT_BUS.addListener(ComputerCamera::renderWorld);
@@ -112,6 +114,13 @@ public final class ComputerCamera {
         mc.options.hideGui = true;
         mc.setCameraEntity(camera);
         flyTo(Mode.TO_SCREEN, screenView(s.pos()));
+    }
+
+    public static void receive(Computer.CheckoutResult result) {
+        if (state != null && state.pos().equals(result.pos()) && Minecraft.getInstance().screen instanceof ComputerScreen screen
+                && screen.checkoutResult(result)) {
+            state = result.state().orElse(state);
+        }
     }
 
     /** Camera position and angles in front of the monitor, so that the screen fills FILL of the view height. */
@@ -159,9 +168,16 @@ public final class ComputerCamera {
     /** Leaves the desktop: the camera flies back to the eyes of the player. */
     static void leave() {
         Minecraft mc = Minecraft.getInstance();
+        closeSession();
         if (mc.player == null || camera == null) { finish(); return; }
         if (mc.screen instanceof ComputerScreen) mc.setScreen(null);
         flyTo(Mode.TO_PLAYER, new Object[] {mc.player.getEyePosition(), mc.player.getYRot(), mc.player.getXRot()});
+    }
+
+    private static void closeSession() {
+        if (mode != Mode.TO_PLAYER && state != null && Minecraft.getInstance().getConnection() != null) {
+            PacketDistributor.sendToServer(new Computer.Request(state.pos(), Computer.CLOSE, ""));
+        }
     }
 
     /** From the manager app: the free camera starts at the player's eyes. */
@@ -189,11 +205,21 @@ public final class ComputerCamera {
     private static void tick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         if (mode == Mode.NONE) return;
-        if (mc.player == null || mc.level == null || camera == null || camera.level() != mc.level) { finish(); return; }
-        // The player walked away (pushed, teleported): the computer closes.
-        if (!mc.player.canInteractWithBlock(state.pos(), 4) || !mc.level.getBlockState(state.pos()).is(OneMoreCore.COMPUTER)) {
+        if (mc.player == null || mc.level == null || camera == null || camera.level() != mc.level) {
             if (mc.screen instanceof ComputerScreen) mc.setScreen(null);
             finish();
+            return;
+        }
+        // The player walked away (pushed, teleported): the computer closes.
+        if (mc.player.isSpectator() || !mc.player.canInteractWithBlock(state.pos(), 0)
+                || !mc.level.getBlockState(state.pos()).is(OneMoreCore.COMPUTER)) {
+            closeSession();
+            if (mc.screen instanceof ComputerScreen) mc.setScreen(null);
+            finish();
+            return;
+        }
+        if ((mode == Mode.TO_SCREEN || mode == Mode.FREE) && mc.screen != null) {
+            leave();
             return;
         }
         camera.xo = camera.xOld = camera.getX();
@@ -291,14 +317,16 @@ public final class ComputerCamera {
         if (altDown()) reach = Mth.clamp(reach + Math.signum(event.getScrollDeltaY()), 1, Computer.PLACE_RANGE);
     }
 
-    /** In the free camera: use places a point with the tool, attack forgets the first corner. Nothing reaches the world. */
+    /** In the free camera attack forgets the first corner. Nothing reaches the world. */
     private static void click(InputEvent.InteractionKeyMappingTriggered event) {
         if (mode == Mode.NONE) return;
         event.setCanceled(true);
         event.setSwingHand(false);
-        if (mode != Mode.FREE) return;
-        if (event.isAttack()) { corner = null; return; }
-        if (!event.isUseItem()) return;
+        if (mode == Mode.FREE && event.isAttack()) corner = null;
+    }
+
+    /** Edits are driven by the mapping's press, since the interaction hook also fires while use is held. */
+    private static void useTool() {
         BlockPos pos = target();
         if (pos == null) return;
         switch (tool) {
@@ -323,11 +351,22 @@ public final class ComputerCamera {
     /** Keys 1, 2 and 3 choose the tool in the free camera. */
     private static void key(InputEvent.Key event) {
         if (mode != Mode.FREE || event.getAction() != org.lwjgl.glfw.GLFW.GLFW_PRESS || Minecraft.getInstance().screen != null) return;
+        if (Minecraft.getInstance().options.keyUse.isActiveAndMatches(InputConstants.getKey(event.getKey(), event.getScanCode()))) {
+            useTool();
+            return;
+        }
         int k = event.getKey();
         if (k >= org.lwjgl.glfw.GLFW.GLFW_KEY_1 && k <= org.lwjgl.glfw.GLFW.GLFW_KEY_5) {
             tool = Tool.values()[k - org.lwjgl.glfw.GLFW.GLFW_KEY_1];
             corner = null;
         }
+    }
+
+    private static void mouseButton(InputEvent.MouseButton.Pre event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mode == Mode.FREE && mc.screen == null && mc.mouseHandler.isMouseGrabbed()
+                && event.getAction() == org.lwjgl.glfw.GLFW.GLFW_PRESS
+                && mc.options.keyUse.isActiveAndMatches(InputConstants.Type.MOUSE.getOrCreate(event.getButton()))) useTool();
     }
 
     /** Escape in the free camera ends the editing: the camera flies back to the monitor and the manager app opens. */
