@@ -91,6 +91,16 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
         vc.addVertex(p, x0, y1, z).setColor(argb).setUv(0, 0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(p, 0, 0, 1);
     }
 
+    /** The full item model in north-facing block space, without item display transforms. */
+    static void drawItem(ItemStack stack, PoseStack pose, MultiBufferSource buffers, int light, int overlay, boolean showContents) {
+        if (!(stack.getItem() instanceof TrayItem tray)) return;
+        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(tray.getBlock().defaultBlockState(), pose, buffers, light, overlay);
+        if (showContents) {
+            draw(stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).stream().toList(),
+                    stack.getOrDefault(OneMoreCore.TABLE.get(), 0), pose, buffers, light);
+        }
+    }
+
     /** The tray item: the tray model with its dishes and label. */
     static class Item extends BlockEntityWithoutLevelRenderer {
         Item(BlockEntityRenderDispatcher dispatcher, EntityModelSet models) {
@@ -99,11 +109,9 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
 
         @Override
         public void renderByItem(ItemStack stack, ItemDisplayContext context, PoseStack pose, MultiBufferSource buffers, int light, int overlay) {
-            if (!(stack.getItem() instanceof TrayItem tray)) return;
-            Minecraft.getInstance().getBlockRenderer().renderSingleBlock(tray.getBlock().defaultBlockState(), pose, buffers, light, overlay);
-            if (context == ItemDisplayContext.GUI) return;
-            draw(stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).stream().toList(),
-                    stack.getOrDefault(OneMoreCore.TABLE.get(), 0), pose, buffers, light);
+            if ((context == ItemDisplayContext.THIRD_PERSON_RIGHT_HAND || context == ItemDisplayContext.THIRD_PERSON_LEFT_HAND)
+                    && TrayCarryRenderer.rendersBetweenPlayerHands(stack, pose)) return;
+            drawItem(stack, pose, buffers, light, overlay, context != ItemDisplayContext.GUI);
         }
     }
 }

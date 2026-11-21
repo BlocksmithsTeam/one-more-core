@@ -4,6 +4,9 @@ package com.onemorestudios.onemorecore.client;
 import com.onemorestudios.onemorecore.OneMoreCore;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -33,10 +36,21 @@ public class ClientSetup {
             }
         }, OneMoreCore.OPEN_SIGN_ITEM.get()));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.TRAY_ENTITY.get(), TrayRenderer::new));
+        bus.addListener(TrayCarryRenderer::addLayers);
+        var trayCarry = new TrayCarryRenderer();
+        NeoForge.EVENT_BUS.addListener(trayCarry::beginFrame);
+        NeoForge.EVENT_BUS.addListener(trayCarry::renderHand);
+        NeoForge.EVENT_BUS.addListener(TrayCarryRenderer::preparePlayer);
+        NeoForge.EVENT_BUS.addListener(TrayCarryRenderer::finishPlayer);
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.MENU_BOOK_ENTITY.get(), MenuBookRenderer::new));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.ORDER_BOARD_ENTITY.get(), ScreenRenderer::new));
         bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
             private TrayRenderer.Item renderer;
+
+            @Override
+            public HumanoidModel.ArmPose getArmPose(LivingEntity entity, InteractionHand hand, ItemStack stack) {
+                return TrayCarryRenderer.armPose(entity);
+            }
 
             @Override
             public BlockEntityWithoutLevelRenderer getCustomRenderer() {
