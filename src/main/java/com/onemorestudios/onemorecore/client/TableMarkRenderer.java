@@ -37,8 +37,11 @@ final class TableMarkRenderer {
     private TableMarkRenderer() {}
 
     static final ModelResourceLocation CARD = ModelResourceLocation.standalone(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "block/table_card"));
-    /** The upright card's faces (model pixels): z 7.7 and 8.45, x 5.45 to 10.55, the text's middle at y 3.6. */
-    private static final float FRONT = 7.7f, BACK = 8.45f, MIDDLE_Y = 3.6f, WIDTH = 4.2f;
+    /**
+     * The upright card (models/block/table_card, from art/table_card_v2.bbmodel): faces at z 7 and 8; inside its grey border
+     * a 6 x 4 pixel field whose middle is at y 5. The text keeps a little margin: at most 5.6 wide, digits at most 3.6 high.
+     */
+    private static final float FRONT = 7f, BACK = 8f, MIDDLE_Y = 5f, WIDTH = 5.6f, DIGIT_HEIGHT = 3.6f;
     private static final int GREY = 0xFF9EA1A6;
 
     static void register() {
@@ -74,7 +77,7 @@ final class TableMarkRenderer {
                         OverlayTexture.NO_OVERLAY, ModelData.EMPTY, RenderType.cutout());
                 String text = marks.texts().get(i);
                 if (!text.isEmpty()) {
-                    float s = Math.min(1 / 16f * 3.4f / 8, WIDTH / 16 / Math.max(1, font.width(text)));
+                    float s = Math.min(DIGIT_HEIGHT / 16 / 7, WIDTH / 16 / Math.max(1, font.width(text)));
                     for (int side = 0; side < 2; side++) {
                         pose.pushPose();
                         pose.translate(0.5, MIDDLE_Y / 16, side == 0 ? FRONT / 16 - 0.002 : BACK / 16 + 0.002);
