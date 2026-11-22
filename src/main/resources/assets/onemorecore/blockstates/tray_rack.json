@@ -1,19 +1,507 @@
 {
-  "variants": {
-    "facing=north": {
-      "model": "onemorecore:block/modern_tray_rack"
-    },
-    "facing=east": {
-      "model": "onemorecore:block/modern_tray_rack",
-      "y": 90
-    },
-    "facing=south": {
-      "model": "onemorecore:block/modern_tray_rack",
-      "y": 180
-    },
-    "facing=west": {
-      "model": "onemorecore:block/modern_tray_rack",
-      "y": 270
-    }
+ "multipart": [
+  {
+   "when": {
+    "facing": "north"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_frame"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot0": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_0"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot0": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_0"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot1": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_1"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot1": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_1"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot2": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_2"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot2": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_2"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot3": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_3"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot3": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_3"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot4": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_4"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot4": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_4"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot5": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_5"
+   }
+  },
+  {
+   "when": {
+    "facing": "north",
+    "slot5": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_5"
+   }
+  },
+  {
+   "when": {
+    "facing": "east"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_frame",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot0": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_0",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot0": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_0",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot1": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_1",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot1": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_1",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot2": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_2",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot2": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_2",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot3": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_3",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot3": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_3",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot4": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_4",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot4": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_4",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot5": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_5",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "east",
+    "slot5": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_5",
+    "y": 90
+   }
+  },
+  {
+   "when": {
+    "facing": "south"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_frame",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot0": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_0",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot0": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_0",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot1": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_1",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot1": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_1",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot2": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_2",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot2": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_2",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot3": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_3",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot3": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_3",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot4": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_4",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot4": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_4",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot5": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_5",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "south",
+    "slot5": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_5",
+    "y": 180
+   }
+  },
+  {
+   "when": {
+    "facing": "west"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_frame",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot0": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_0",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot0": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_0",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot1": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_1",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot1": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_1",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot2": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_2",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot2": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_2",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot3": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_3",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot3": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_3",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot4": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_4",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot4": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_4",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot5": "oak"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_oak_5",
+    "y": 270
+   }
+  },
+  {
+   "when": {
+    "facing": "west",
+    "slot5": "iron"
+   },
+   "apply": {
+    "model": "onemorecore:block/tray_rack_iron_5",
+    "y": 270
+   }
   }
+ ]
 }
