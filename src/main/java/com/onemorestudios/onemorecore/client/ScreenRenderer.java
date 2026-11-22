@@ -81,7 +81,11 @@ public final class ScreenRenderer {
         float[] hover = pointer(picture, g.members());
         boolean focused = g.members().stream().anyMatch(DiegesisHook::focusedAt);
         View view = view(pos, side);
-        if (focused && !Float.isNaN(hover[0])) scrollTarget = pos.asLong() * 2 + side;
+        // Up close, the side that faces the camera scrolls.
+        if (focused) {
+            Vec3 eye = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+            if (picture.faces(eye.subtract(picture.world(picture.width() / 2, picture.height() / 2)))) scrollTarget = pos.asLong() * 2 + side;
+        }
         boolean scrolling = focused && scrollTarget == pos.asLong() * 2 + side;
         if (!scrolling) view.scroll = 0;
         pose.pushPose();
@@ -170,12 +174,17 @@ public final class ScreenRenderer {
             e.setCanceled(true);
         });
         NeoForge.EVENT_BUS.addListener((ScreenEvent.MouseScrolled.Pre e) -> {
-            if (!DiegesisHook.focused() || scrollTarget == Long.MIN_VALUE) return;
-            View v = VIEWS.get(scrollTarget);
-            if (v == null) return;
-            v.scroll = Math.max(0, Math.min(v.maxScroll, v.scroll - (float) e.getScrollDeltaY() * 40));
-            e.setCanceled(true);
+            if (DiegesisHook.focused() && scrollBy(e.getScrollDeltaY())) e.setCanceled(true);
         });
+    }
+
+    /** Scrolls the side of a screen that the close-up looks at (a wheel step is 40 canvas units); false when none. */
+    static boolean scrollBy(double wheel) {
+        if (scrollTarget == Long.MIN_VALUE) return false;
+        View v = VIEWS.get(scrollTarget);
+        if (v == null) return false;
+        v.scroll = Math.max(0, Math.min(v.maxScroll, v.scroll - (float) wheel * 40));
+        return true;
     }
 
     /** The blocks of the Diegesis screen stations (KitchenStations). */

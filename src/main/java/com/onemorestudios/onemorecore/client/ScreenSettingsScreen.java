@@ -13,7 +13,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * down. Done sends the changes; Escape drops them.
  */
 final class ScreenSettingsScreen extends Screen {
-    private static final int W = 236, H = 214;
+    private static final int W = 330, H = 176;
     private final ScreenSettings.Open screen;
     private final int[] faces = new int[2];
     private final boolean[] changed = new boolean[2];
@@ -48,60 +48,64 @@ final class ScreenSettingsScreen extends Screen {
     public void render(GuiGraphics g, int mx, int my, float partialTick) {
         super.render(g, mx, my, partialTick);
         ui.clear();
-        int x = (width - W) / 2, y = (height - H) / 2, in = x + 12, iw = W - 24;
+        // Two columns: what the side shows (left), how it looks and stands (right).
+        int x = (width - W) / 2, y = (height - H) / 2, gap = 10, colW = (W - 24 - gap) / 2, left = x + 12, right = left + colW + gap;
         Ui.panel(g, font, x, y, W, H, title);
         int v = faces[side], cy = y + 28;
         if (screen.sides() > 1) {
-            ui.segments(g, font, in, cy, iw, 14, new Component[] {t("front"), t("back")}, side, mx, my, k -> side = k);
+            ui.segments(g, font, left, cy, W - 24, 14, new Component[] {t("front"), t("back")}, side, mx, my, k -> side = k);
             cy += 20;
         }
-        Ui.label(g, font, in, cy, t("shows"));
+        int top = cy;
+        Ui.label(g, font, left, cy, t("shows"));
         cy += 10;
-        ui.segments(g, font, in, cy, iw, 14, new Component[] {t("off"), t("menu"), t("orders")}, ScreenSettings.mode(v), mx, my,
+        ui.segments(g, font, left, cy, colW, 14, new Component[] {t("off"), t("menu"), t("orders")}, ScreenSettings.mode(v), mx, my,
                 k -> set(ScreenSettings.pack(k, ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]), ScreenSettings.autoPages(faces[side]))));
         cy += 20;
-        Ui.label(g, font, in, cy, t("kinds"));
+        Ui.label(g, font, left, cy, t("kinds"));
         cy += 10;
-        int chipW = (iw - 4 * 3) / 5;
+        int chipW = (colW - 3) / 2;
         for (int i = 0; i < ScreenSettings.KINDS.length; i++) {
             int bit = 1 << i;
             String kind = ScreenSettings.KINDS[i];
             boolean on = ScreenSettings.showsKind(v, kind);
-            ui.pill(g, font, in + i * (chipW + 3), cy, chipW, 14, Component.translatable("onemorecore.board." + kind), on, 0xFF2F80ED, mx, my, () -> {
+            int col = i % 2, row = i / 2;
+            ui.pill(g, font, left + col * (chipW + 3), cy + row * 17, chipW, 14, Component.translatable("onemorecore.board." + kind), on, 0xFF2F80ED, mx, my, () -> {
                 int kinds = ScreenSettings.kinds(faces[side]);
                 set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), (kinds == 0 ? 31 : kinds) ^ bit, ScreenSettings.size(faces[side]),
                         ScreenSettings.autoPages(faces[side])));
             });
         }
-        cy += 20;
-        int half = (iw - 6) / 2;
-        Ui.label(g, font, in, cy, t("size"));
-        Ui.label(g, font, in + half + 6, cy, t("pages"));
+        cy = top;
+        Ui.label(g, font, right, cy, t("size"));
         cy += 10;
         int size = ScreenSettings.size(v);
         // Small, normal, large in order (the packed values are normal 0, small 1, large 2).
         int[] order = {1, 0, 2};
         int shownSize = size == 1 ? 0 : size == 0 ? 1 : 2;
-        ui.segments(g, font, in, cy, half, 14, new Component[] {t("small"), t("normal"), t("large")}, shownSize, mx, my,
+        ui.segments(g, font, right, cy, colW, 14, new Component[] {t("small"), t("normal"), t("large")}, shownSize, mx, my,
                 k -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), order[k], ScreenSettings.autoPages(faces[side]))));
+        cy += 20;
+        Ui.label(g, font, right, cy, t("pages"));
+        cy += 10;
         boolean auto = ScreenSettings.autoPages(v);
-        ui.pill(g, font, in + half + 6, cy, half, 14, t(auto ? "pages_auto" : "pages_first"), auto, 0xFF2E9E4F, mx, my,
+        ui.pill(g, font, right, cy, colW, 14, t(auto ? "pages_auto" : "pages_first"), auto, 0xFF2E9E4F, mx, my,
                 () -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]), !auto)));
-        cy += 22;
+        cy += 20;
         if (landscape >= 0 || tilt >= 0) {
-            g.fill(in, cy - 4, in + iw, cy - 3, Ui.RULE);
-            Ui.label(g, font, in, cy, t("placement"));
+            Ui.label(g, font, right, cy, t("placement"));
             cy += 10;
-            if (landscape >= 0)
-                ui.segments(g, font, in, cy, half, 14, new Component[] {t("upright"), t("wide")}, landscape, mx, my, k -> landscape = k);
+            if (landscape >= 0) {
+                ui.segments(g, font, right, cy, colW, 14, new Component[] {t("upright"), t("wide")}, landscape, mx, my, k -> landscape = k);
+                cy += 17;
+            }
             if (tilt >= 0)
-                ui.segments(g, font, in + half + 6, cy, half, 14, new Component[] {Component.literal("0°"), Component.literal("22.5°"), Component.literal("45°")},
+                ui.segments(g, font, right, cy, colW, 14, new Component[] {Component.literal("0°"), Component.literal("22.5°"), Component.literal("45°")},
                         tilt, mx, my, k -> tilt = k);
-            cy += 20;
         }
         int by = y + H - 22;
-        ui.pill(g, font, in, by, half, 14, t("cancel"), false, 0, mx, my, this::onClose);
-        ui.pill(g, font, in + half + 6, by, half, 14, t("done"), true, Ui.ACCENT, mx, my, this::save);
+        ui.pill(g, font, left, by, colW, 14, t("cancel"), false, 0, mx, my, this::onClose);
+        ui.pill(g, font, right, by, colW, 14, t("done"), true, Ui.ACCENT, mx, my, this::save);
     }
 
     private void save() {

@@ -34,6 +34,12 @@ final class ScreenStationBehavior implements StationBehavior {
         place(view);
     }
 
+    /** The wheel scrolls the picture the camera looks at. */
+    @Override
+    public boolean onScroll(StationView view, String node, double amount) {
+        return ScreenRenderer.scrollBy(amount);
+    }
+
     private static void place(StationView view) {
         var level = view.level();
         BlockState state = level.getBlockState(view.pos());
