@@ -381,7 +381,7 @@ public final class ScreenGameTests {
                 "No ticket dropped");
     }
 
-    private static void enableDiegesisChannel(ServerPlayer player) {
+    static void enableDiegesisChannel(ServerPlayer player) {
         var id = ResourceLocation.fromNamespaceAndPath("diegesis", "to_client");
         ChannelAttributes.setPayloadSetup(player.connection.getConnection(),
                 new NetworkPayloadSetup(Map.of(ConnectionProtocol.PLAY, Map.of(id, new NetworkChannel(id, "1")))));

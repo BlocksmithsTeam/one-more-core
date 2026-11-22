@@ -1,15 +1,16 @@
 package com.onemorestudios.onemorecore.client;
 
 import java.util.List;
+import java.util.function.IntFunction;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
-import com.onemorestudios.onemorecore.Config;
 import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.TrayBlock;
 import com.onemorestudios.onemorecore.TrayBlockEntity;
 import com.onemorestudios.onemorecore.TrayItem;
+import com.onemorestudios.onemorecore.TrayPose;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -24,22 +25,29 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import org.joml.Matrix3f;
+import org.joml.Quaternionf;
+import org.joml.Quaternionfc;
+import org.joml.Vector3f;
+import org.joml.Vector3fc;
 
-/**
- * The dishes on a tray, in 3D as on a table, in one row of three, and the order ticket on its front rim with the table
- * number. The same drawing for a tray on a counter and a tray in the hand.
- */
+/** Draws the tray's dishes and the table label on its front rim. */
 public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     static final RenderType PAPER = RenderType.entityCutout(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/block/ticket_paper.png"));
-    /** Places of the dishes on the tray bed, in pixels of a tray that faces north. */
-    private static final float[][] SPOTS = {{3, 8}, {8, 8}, {13, 8}};
-    private static final float BED_HEIGHT = 1 / 16f;
-    private static final float SPOT_WIDTH = 5 / 16f;
-    /** Dishes are drawn this much larger than the fit to their square (the user asked for 30-40% bigger). */
-    private static final float DISH_DISPLAY_SCALE = 1.35f;
+
+    record Sway(float x, float z, float pitch, float roll) {
+        static final Sway NONE = new Sway(0, 0, 0, 0);
+
+        Quaternionfc turn(Quaternionfc rest) {
+            return this == NONE ? rest : new Quaternionf().rotationXYZ(pitch, 0, roll).mul(rest);
+        }
+    }
 
     public TrayRenderer(BlockEntityRendererProvider.Context context) {}
 
@@ -47,33 +55,99 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     public void render(TrayBlockEntity tray, float partialTick, PoseStack pose, MultiBufferSource buffers, int light, int overlay) {
         pose.pushPose();
         pose.translate(0.5, 0, 0.5);
-        pose.mulPose(Axis.YP.rotationDegrees(-((tray.getBlockState().getValue(TrayBlock.FACING).toYRot() + 180) % 360)));
+        pose.mulPose(Axis.YP.rotationDegrees(-TrayBlock.bedYaw(tray.getBlockState().getValue(TrayBlock.FACING))));
         pose.translate(-0.5, 0, -0.5);
-        draw(tray.items.getItems(), tray.label, pose, buffers, light);
+        if (!DiegesisHook.LOADED || !TrayDiegesis.drawsDishes(tray.getBlockPos())) {
+            drawDishes(tray.items.getItems(), tray::getPose, Sway.NONE, pose, buffers, light);
+        }
+        drawLabel(tray.label, pose, buffers, light);
         pose.popPose();
     }
 
-    /** Dishes and label on a north-facing tray in block space (0..1). */
-    static void draw(List<ItemStack> dishes, String label, PoseStack pose, MultiBufferSource buffers, int light) {
-        var level = Minecraft.getInstance().level;
-        float scale = 0.7f * Config.FOOD_SCALE.get().floatValue();
-        for (int i = 0; i < dishes.size() && i < SPOTS.length; i++) {
+    private static void drawDishes(List<ItemStack> dishes, IntFunction<TrayPose> positions, Sway sway,
+            PoseStack pose, MultiBufferSource buffers, int light) {
+        for (int i = 0; i < dishes.size() && i < TrayBlockEntity.SIZE; i++) {
             ItemStack dish = dishes.get(i);
-            if (dish.isEmpty()) continue;
-            // Measure in dish space after the model has applied its FIXED display transform and food offset.
-            DishBounds bounds = new DishBounds();
-            CustomerRenderer.renderFood(dish, level, new PoseStack(), type -> bounds.consumer(), light, scale, i);
-            pose.pushPose();
-            pose.translate(SPOTS[i][0] / 16, BED_HEIGHT, SPOTS[i][1] / 16);
-            pose.mulPose(Axis.YP.rotationDegrees(180));
-            if (Float.isFinite(bounds.minY)) {
-                float fit = DISH_DISPLAY_SCALE * Math.min(1, SPOT_WIDTH / Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ));
-                pose.scale(fit, fit, fit);
-                pose.translate(-(bounds.minX + bounds.maxX) / 2, -bounds.minY, -(bounds.minZ + bounds.maxZ) / 2);
-            }
-            CustomerRenderer.renderFood(dish, level, pose, buffers, light, scale, i);
-            pose.popPose();
+            if (dish.isEmpty() || dish.getItem() instanceof TrayItem) continue;
+            TrayPose at = positions.apply(i);
+            if (DiegesisHook.LOADED) TrayDiegesis.drawDish(dish, at, sway, pose, buffers, light, i);
+            else drawStandalone(dish, at, sway, pose, buffers, light, i);
         }
+    }
+
+    private static void drawStandalone(ItemStack dish, TrayPose at, Sway sway, PoseStack pose, MultiBufferSource buffers, int light, int seed) {
+        Minecraft mc = Minecraft.getInstance();
+        var items = mc.getItemRenderer();
+        var model = items.getModel(dish, mc.level, null, 0);
+        BlockState block = model.isGui3d() ? null : FoodModels.block(dish);
+        if (block != null && block.hasProperty(BlockStateProperties.LIT)) {
+            block = block.setValue(BlockStateProperties.LIT, true);
+        }
+        ItemDisplayContext context = model.isGui3d() && !model.isCustomRenderer() ? ItemDisplayContext.NONE : ItemDisplayContext.FIXED;
+        DishBounds bounds = new DishBounds();
+        drawModel(dish, block, context, new PoseStack(), type -> bounds.consumer(), light, seed);
+        Vector3f half = bounds.half();
+        float longest = Math.max(half.x, Math.max(half.y, half.z));
+        float shortest = Math.min(half.x, Math.min(half.y, half.z));
+        float size = TrayPose.ITEM_SIZE * at.scale();
+        float scale = size * (shortest > longest * 0.6f ? 0.8f : 1) / (2 * longest);
+        Quaternionf rest = new Quaternionf(at.rotation());
+        if (at.lift() == 0 && block == null && shortest < longest * 0.2f) rest.rotateX(Mth.HALF_PI);
+        Quaternionfc turn = sway.turn(rest);
+        Vector3f extents = rotatedHalf(half, turn).mul(scale);
+        if (sway != Sway.NONE) {
+            Vector3f still = rotatedHalf(half, rest).mul(scale);
+            if (!allowsTilt(at, still, extents)) {
+                turn = rest;
+                extents = still;
+            }
+        }
+
+        pose.pushPose();
+        moveDish(pose, at, sway, turn, extents, extents.y, scale);
+        Vector3f center = bounds.center();
+        pose.translate(-center.x, -center.y, -center.z);
+        drawModel(dish, block, context, pose, buffers, light, seed);
+        pose.popPose();
+    }
+
+    private static Vector3f rotatedHalf(Vector3fc half, Quaternionfc turn) {
+        Matrix3f m = new Matrix3f().rotation(turn);
+        return new Vector3f(
+                Math.abs(m.m00()) * half.x() + Math.abs(m.m10()) * half.y() + Math.abs(m.m20()) * half.z(),
+                Math.abs(m.m01()) * half.x() + Math.abs(m.m11()) * half.y() + Math.abs(m.m21()) * half.z(),
+                Math.abs(m.m02()) * half.x() + Math.abs(m.m12()) * half.y() + Math.abs(m.m22()) * half.z());
+    }
+
+    private static void drawModel(ItemStack dish, BlockState block, ItemDisplayContext context, PoseStack pose,
+            MultiBufferSource buffers, int light, int seed) {
+        Minecraft mc = Minecraft.getInstance();
+        if (block != null) {
+            mc.getBlockRenderer().renderSingleBlock(block, pose, buffers, light, OverlayTexture.NO_OVERLAY);
+        } else {
+            mc.getItemRenderer().renderStatic(dish, context, light, OverlayTexture.NO_OVERLAY, pose, buffers, mc.level, seed);
+        }
+    }
+
+    static void moveDish(PoseStack pose, TrayPose at, Sway sway, Quaternionfc turn, Vector3fc extents, float lift, float scale) {
+        float x = at.x() + slide(sway.x(), at.x(), extents.x(), TrayPose.MIN_X, TrayPose.MAX_X);
+        float z = at.z() + slide(sway.z(), at.z(), extents.z(), TrayPose.MIN_Z, TrayPose.MAX_Z);
+        pose.translate(x / 16, (at.y() + lift) / 16, z / 16);
+        pose.mulPose(new Quaternionf(turn));
+        pose.scale(scale / 16, scale / 16, scale / 16);
+    }
+
+    static boolean allowsTilt(TrayPose at, Vector3fc still, Vector3fc tilted) {
+        float roomX = Math.min(at.x() - TrayPose.MIN_X, TrayPose.MAX_X - at.x());
+        float roomZ = Math.min(at.z() - TrayPose.MIN_Z, TrayPose.MAX_Z - at.z());
+        return tilted.x() <= Math.max(still.x(), roomX) && tilted.z() <= Math.max(still.z(), roomZ);
+    }
+
+    private static float slide(float offset, float center, float half, float min, float max) {
+        return Mth.clamp(offset, Math.min(0, min + half - center), Math.max(0, max - half - center));
+    }
+
+    private static void drawLabel(String label, PoseStack pose, MultiBufferSource buffers, int light) {
         if (label.isEmpty()) return;
         // The ticket is stuck to the front rim (z 2), a small tag that leans out.
         pose.pushPose();
@@ -93,7 +167,17 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
 
     private static final class DishBounds {
         private float minX = Float.POSITIVE_INFINITY, minY = Float.POSITIVE_INFINITY, minZ = Float.POSITIVE_INFINITY;
-        private float maxX = Float.NEGATIVE_INFINITY, maxZ = Float.NEGATIVE_INFINITY;
+        private float maxX = Float.NEGATIVE_INFINITY, maxY = Float.NEGATIVE_INFINITY, maxZ = Float.NEGATIVE_INFINITY;
+
+        Vector3f half() {
+            return Float.isFinite(minY)
+                    ? new Vector3f(maxX - minX, maxY - minY, maxZ - minZ).mul(0.5f).max(new Vector3f(0.012f))
+                    : new Vector3f(0.5f);
+        }
+
+        Vector3f center() {
+            return Float.isFinite(minY) ? new Vector3f(maxX + minX, maxY + minY, maxZ + minZ).mul(0.5f) : new Vector3f();
+        }
 
         VertexConsumer consumer() {
             // The base model and the glint require distinct consumers.
@@ -104,6 +188,7 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
                     minY = Math.min(minY, y);
                     minZ = Math.min(minZ, z);
                     maxX = Math.max(maxX, x);
+                    maxY = Math.max(maxY, y);
                     maxZ = Math.max(maxZ, z);
                     return this;
                 }
@@ -141,12 +226,14 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     }
 
     /** The full item model in north-facing block space, without item display transforms. */
-    static void drawItem(ItemStack stack, PoseStack pose, MultiBufferSource buffers, int light, int overlay, boolean showContents) {
+    static void drawItem(ItemStack stack, PoseStack pose, MultiBufferSource buffers, int light, int overlay, boolean showContents, Sway sway) {
         if (!(stack.getItem() instanceof TrayItem tray)) return;
         Minecraft.getInstance().getBlockRenderer().renderSingleBlock(tray.getBlock().defaultBlockState(), pose, buffers, light, overlay);
         if (showContents) {
-            draw(stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).stream().toList(),
-                    stack.getOrDefault(OneMoreCore.LABEL.get(), ""), pose, buffers, light);
+            List<TrayPose> positions = stack.getOrDefault(OneMoreCore.TRAY_POSES.get(), List.of());
+            drawDishes(stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).stream().toList(),
+                    slot -> TrayPose.inSlot(positions, slot), sway, pose, buffers, light);
+            drawLabel(stack.getOrDefault(OneMoreCore.LABEL.get(), ""), pose, buffers, light);
         }
     }
 
@@ -160,7 +247,7 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
         public void renderByItem(ItemStack stack, ItemDisplayContext context, PoseStack pose, MultiBufferSource buffers, int light, int overlay) {
             if ((context == ItemDisplayContext.THIRD_PERSON_RIGHT_HAND || context == ItemDisplayContext.THIRD_PERSON_LEFT_HAND)
                     && TrayCarryRenderer.rendersBetweenPlayerHands(stack, pose)) return;
-            drawItem(stack, pose, buffers, light, overlay, context != ItemDisplayContext.GUI);
+            drawItem(stack, pose, buffers, light, overlay, context != ItemDisplayContext.GUI, Sway.NONE);
         }
     }
 }

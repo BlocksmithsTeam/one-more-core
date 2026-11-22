@@ -7,6 +7,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
@@ -26,8 +27,10 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import org.joml.Quaternionf;
 
 /**
  * A fast food tray on a counter. Click it with a dish to put the dish on it, with an order ticket to stick the ticket
@@ -37,6 +40,8 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  */
 public class TrayBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
+    private static final float DISH_SPACING = 4;
+    private static final float SEARCH_STEP = 0.25f;
     private static final VoxelShape[] SHAPES = BoxShapes.byFacing(
             new double[] {0, 0, 2, 16, 1, 14},
             new double[] {0, 1, 2, 16, 2, 3},
@@ -107,7 +112,8 @@ public class TrayBlock extends Block implements EntityBlock {
 
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!(level.getBlockEntity(pos) instanceof TrayBlockEntity tray) || stack.getItem() instanceof TrayItem)
+        if (stack.isEmpty() || stack.getItem() instanceof TrayItem
+                || !(level.getBlockEntity(pos) instanceof TrayBlockEntity tray))
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         if (level.isClientSide) return ItemInteractionResult.SUCCESS;
         if (stack.is(OneMoreCore.TICKET.get())) {
@@ -117,7 +123,7 @@ public class TrayBlock extends Block implements EntityBlock {
             level.playSound(null, pos, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8f, 1.3f);
             return ItemInteractionResult.SUCCESS;
         }
-        if (!put(tray, stack.copyWithCount(1))) {
+        if (!put(tray, stack.copyWithCount(1), hit, player)) {
             player.displayClientMessage(Component.translatable("onemorecore.tray.full"), true);
             return ItemInteractionResult.SUCCESS;
         }
@@ -132,11 +138,49 @@ public class TrayBlock extends Block implements EntityBlock {
         else if (!player.getInventory().add(stack)) player.drop(stack, false);
     }
 
-    /** Puts one dish in the first free place; false when the tray is full. */
-    static boolean put(TrayBlockEntity tray, ItemStack one) {
-        for (int i = 0; i < TrayBlockEntity.SIZE; i++)
-            if (tray.items.getItem(i).isEmpty()) { tray.items.setItem(i, one); return true; }
+    /** The blockstate model's clockwise turn from north, in degrees. */
+    public static float bedYaw(Direction facing) {
+        return (facing.toYRot() + 180) % 360;
+    }
+
+    private static boolean put(TrayBlockEntity tray, ItemStack dish, BlockHitResult hit, Player player) {
+        for (int slot = 0; slot < TrayBlockEntity.SIZE; slot++) {
+            if (!tray.items.getItem(slot).isEmpty()) continue;
+            float yaw = bedYaw(tray.getBlockState().getValue(FACING));
+            Vec3 local = hit.getLocation().subtract(Vec3.atCenterOf(tray.getBlockPos())).yRot(yaw * Mth.DEG_TO_RAD);
+            float x = Mth.clamp((float) (8 + local.x * 16), TrayPose.MIN_X, TrayPose.MAX_X);
+            float z = Mth.clamp((float) (8 + local.z * 16), TrayPose.MIN_Z, TrayPose.MAX_Z);
+            Quaternionf turn = new Quaternionf().rotateY((yaw - player.getYRot()) * Mth.DEG_TO_RAD);
+            if (!roomAt(tray, x, z)) {
+                // Find the nearest clear point on the bed, including when the click is against a rim or between two dishes.
+                float nearest = Float.POSITIVE_INFINITY;
+                float targetX = x, targetZ = z;
+                for (float bx = TrayPose.MIN_X; bx <= TrayPose.MAX_X; bx += SEARCH_STEP) {
+                    for (float bz = TrayPose.MIN_Z; bz <= TrayPose.MAX_Z; bz += SEARCH_STEP) {
+                        float distance = Mth.square(bx - x) + Mth.square(bz - z);
+                        if (distance < nearest && roomAt(tray, bx, bz)) {
+                            nearest = distance;
+                            targetX = bx;
+                            targetZ = bz;
+                        }
+                    }
+                }
+                x = targetX;
+                z = targetZ;
+            }
+            tray.putDish(slot, dish, TrayPose.atRest(x, z, turn));
+            return true;
+        }
         return false;
+    }
+
+    private static boolean roomAt(TrayBlockEntity tray, float x, float z) {
+        for (int slot = 0; slot < TrayBlockEntity.SIZE; slot++) {
+            if (tray.items.getItem(slot).isEmpty()) continue;
+            TrayPose pose = tray.getPose(slot);
+            if (Mth.square(x - pose.x()) + Mth.square(z - pose.z()) < DISH_SPACING * DISH_SPACING) return false;
+        }
+        return true;
     }
 
     @Override

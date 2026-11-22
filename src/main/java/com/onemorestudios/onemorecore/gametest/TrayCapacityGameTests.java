@@ -57,6 +57,14 @@ public final class TrayCapacityGameTests {
         helper.assertValueEqual(tray.items.getContainerSize(), 3, "tray capacity");
         helper.assertValueEqual(tray.items.countItem(Items.BREAD), 3, "bread on the tray");
         helper.assertValueEqual(player.getMainHandItem().getCount(), 1, "fourth dish stays in hand");
+        for (int i = 0; i < TrayBlockEntity.SIZE; i++) {
+            var pose = tray.getPose(i);
+            for (int j = 0; j < i; j++) {
+                var other = tray.getPose(j);
+                helper.assertTrue(Math.hypot(pose.x() - other.x(), pose.z() - other.z()) >= 4,
+                        "Repeated clicks give each of the first three dishes its own space");
+            }
+        }
         helper.succeed();
     }
 

@@ -13,7 +13,8 @@
        "source": "block_entity",
        "include": [
         "minecraft:container",
-        "onemorecore:table_label"
+        "onemorecore:table_label",
+        "onemorecore:tray_poses"
        ]
       }
      ]

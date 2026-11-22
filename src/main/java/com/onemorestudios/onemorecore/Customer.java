@@ -414,12 +414,7 @@ public class Customer extends PathfinderMob {
         if (held.getItem() instanceof TrayItem) {
             TrayItem.returnOverflow(player, held);
             if (!wants(held)) return false;
-            List<ItemStack> dishes = TrayItem.dishes(held), left = new ArrayList<>();
-            for (ItemStack dish : dishes) {
-                if (wants(dish)) serve(player, dish); else left.add(dish);
-            }
-            held.set(net.minecraft.core.component.DataComponents.CONTAINER, net.minecraft.world.item.component.ItemContainerContents.fromItems(left));
-            if (left.isEmpty()) held.remove(OneMoreCore.LABEL.get());
+            TrayItem.serveDishes(held, this::wants, dish -> serve(player, dish));
             checkServed();
             return true;
         }
