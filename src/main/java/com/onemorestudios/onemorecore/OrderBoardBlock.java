@@ -47,11 +47,17 @@ public class OrderBoardBlock extends MenuBoardBlock {
 
     /** The orders that the screen at a position shows (an Order Screen, or a television in orders mode), or null. */
     static List<OrderBoardBlockEntity.Ticket> ticketsAt(ServerLevel level, BlockPos pos) {
+        return ticketsAt(level, pos, 0);
+    }
+
+    /** The orders that one side of the screen at a position shows, or null. */
+    static List<OrderBoardBlockEntity.Ticket> ticketsAt(ServerLevel level, BlockPos pos, int side) {
         BlockState state = level.getBlockState(pos);
         if (ScreenRect.of(state) == null) return null;
         Restaurant r = ScreenSettings.owner(level, pos);
         if (r != null && state.getBlock() instanceof MenuBoardBlock board) r.ensureScreen(pos, board.defaultMode());
-        return r != null && ScreenSettings.mode(r.screens.getOrDefault(pos, Restaurant.SCREEN_OFF)) == Restaurant.SCREEN_ORDERS ? r.tickets() : null;
+        int v = r == null ? Restaurant.SCREEN_OFF : r.screens.getOrDefault(pos, Restaurant.SCREEN_OFF);
+        return r != null && ScreenSettings.mode(ScreenSettings.face(v, side)) == Restaurant.SCREEN_ORDERS ? r.tickets() : null;
     }
 
     /** Gives the current ticket for a displayed order if it is still active. */

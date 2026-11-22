@@ -1,0 +1,79 @@
+{
+ "textures": {
+  "0": "onemorecore:block/billboard_frame",
+  "1": "onemorecore:block/billboard_screen",
+  "2": "onemorecore:block/billboard_post",
+  "particle": "onemorecore:block/billboard_frame"
+ },
+ "elements": [
+  {
+   "name": "mount",
+   "from": [
+    5,
+    0,
+    7
+   ],
+   "to": [
+    11,
+    6,
+    9
+   ],
+   "faces": {
+    "north": {
+     "uv": [
+      0,
+      0,
+      3.0,
+      3.0
+     ],
+     "texture": "#2"
+    },
+    "south": {
+     "uv": [
+      0,
+      0,
+      3.0,
+      3.0
+     ],
+     "texture": "#2"
+    },
+    "east": {
+     "uv": [
+      0,
+      0,
+      1.0,
+      3.0
+     ],
+     "texture": "#2"
+    },
+    "west": {
+     "uv": [
+      0,
+      0,
+      1.0,
+      3.0
+     ],
+     "texture": "#2"
+    },
+    "up": {
+     "uv": [
+      0,
+      0,
+      3.0,
+      1.0
+     ],
+     "texture": "#2"
+    },
+    "down": {
+     "uv": [
+      0,
+      0,
+      3.0,
+      1.0
+     ],
+     "texture": "#2"
+    }
+   }
+  }
+ ]
+}

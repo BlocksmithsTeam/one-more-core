@@ -1196,7 +1196,7 @@ public class Restaurant {
     private void sendScreens(ServerLevel level) {
         if (screens.keySet().removeIf(p -> level.isLoaded(p) && ScreenRect.of(level.getBlockState(p)) == null)) owner.setDirty();
         // A screen turned off keeps its settings; when every screen is off, the viewers get a clear.
-        if (screens.values().stream().allMatch(v -> ScreenSettings.mode(v) == SCREEN_OFF)) { clearScreens(level); return; }
+        if (screens.values().stream().allMatch(ScreenSettings::allOff)) { clearScreens(level); return; }
         List<ServerPlayer> players = level.players();
         sentScreens.keySet().retainAll(players);
         BoundingBox near = area == null ? null : area.inflatedBy(32);

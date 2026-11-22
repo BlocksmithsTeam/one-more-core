@@ -47,11 +47,15 @@ public class ScreenPartBlock extends Block {
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         BlockState main = level.getBlockState(main(pos, state));
+        BlockPos mainPos = main(pos, state);
+        if (main.getBlock() instanceof ScreenBlock) return ScreenBlock.shapeIn(main, pos.subtract(mainPos));
         return main.getBlock() instanceof MenuBoardBlock board ? board.getShape(main, level, pos, context) : Shapes.empty();
     }
 
     @Override
     protected VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        BlockState main = level.getBlockState(main(pos, state));
+        if (main.getBlock() instanceof ScreenBlock) return ScreenBlock.shapeIn(main, pos.subtract(main(pos, state)));
         return Shapes.empty();
     }
 

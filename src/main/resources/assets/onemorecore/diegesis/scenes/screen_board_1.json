@@ -1,0 +1,46 @@
+{
+  "camera": {
+    "position": [
+      8,
+      4.519,
+      -19.716
+    ],
+    "target": [
+      8,
+      16,
+      8
+    ],
+    "fov": 42,
+    "neighbors": {
+      "enabled": false
+    }
+  },
+  "work_plane": 8,
+  "idle_visible": false,
+  "interface": {
+    "hide_player": true,
+    "inventory_panel": false
+  },
+  "nodes": [
+    {
+      "id": "screen",
+      "pos": [
+        8,
+        0,
+        8
+      ],
+      "collider": {
+        "from": [
+          -8,
+          0,
+          -8
+        ],
+        "to": [
+          8,
+          16,
+          8
+        ]
+      }
+    }
+  ]
+}
