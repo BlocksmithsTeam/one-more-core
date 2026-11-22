@@ -145,10 +145,14 @@ public final class TrayCarryRenderer {
     }
 
     private static class DishSway {
+        /** Push on the dishes per degree/s² of the hands' turning: they lag when a turn starts, run on when it stops. */
+        private static final float TURN_PUSH = 0.018f;
+        /** Turning speeds are smoothed over about this many seconds, so mouse steps do not jolt the dishes. */
+        private static final float TURN_SMOOTH = 0.05f;
         private final Spring side = new Spring();
         private final Spring fore = new Spring();
         private long lastFrame;
-        private float lastYaw, lastPitch;
+        private float lastYaw, lastPitch, yawSpeed, pitchSpeed;
 
         TrayRenderer.Sway sample(AbstractClientPlayer player, float partialTick) {
             long now = Util.getNanos();
@@ -160,13 +164,20 @@ public final class TrayCarryRenderer {
                 if (dt > 0.25f) {
                     side.reset();
                     fore.reset();
+                    yawSpeed = pitchSpeed = 0;
                 } else {
                     float stride = player.walkAnimation.position(partialTick) * 0.6662f;
                     float walk = player.onGround() ? Mth.clamp(player.walkAnimation.speed(partialTick), 0, 1) : 0;
-                    float turn = Mth.clamp(Mth.wrapDegrees(yaw - lastYaw) / (240 * dt), -1, 1);
-                    float look = Mth.clamp((pitch - lastPitch) / (240 * dt), -1, 1);
-                    side.step(0.75f * walk * Mth.sin(stride) - 0.35f * turn, dt);
-                    fore.step(0.6f * walk * Mth.cos(2 * stride) - 0.35f * look, dt);
+                    // Inertia: the dishes feel the change of the turning speed, standing still or not.
+                    float blend = 1 - (float) Math.exp(-dt / TURN_SMOOTH);
+                    float newYawSpeed = Mth.lerp(blend, yawSpeed, Mth.wrapDegrees(yaw - lastYaw) / dt);
+                    float newPitchSpeed = Mth.lerp(blend, pitchSpeed, (pitch - lastPitch) / dt);
+                    float yawAccel = (newYawSpeed - yawSpeed) / dt;
+                    float pitchAccel = (newPitchSpeed - pitchSpeed) / dt;
+                    yawSpeed = newYawSpeed;
+                    pitchSpeed = newPitchSpeed;
+                    side.step(0.75f * walk * Mth.sin(stride), TURN_PUSH * yawAccel, dt);
+                    fore.step(0.6f * walk * Mth.cos(2 * stride), TURN_PUSH * pitchAccel, dt);
                 }
                 lastYaw = yaw;
                 lastPitch = pitch;
@@ -180,20 +191,25 @@ public final class TrayCarryRenderer {
     }
 
     private static class Spring {
-        private static final float RATE = 15;
+        /** About 2.2 wobbles a second, each about half as wide as the last: a light dish rocking on a tray. */
+        private static final float OMEGA = 14, DAMPING = 0.22f;
+        private static final float STEP = 1 / 240f;
         private float position, velocity;
 
         void reset() {
             position = velocity = 0;
         }
 
-        void step(float target, float dt) {
-            // Critically damped spring integrated over the frame, independent of frame rate.
-            float error = position - target;
-            float decay = (float) Math.exp(-RATE * dt);
-            float travel = (velocity + RATE * error) * dt;
-            position = target + (error + travel) * decay;
-            velocity = (velocity - RATE * travel) * decay;
+        /** Moves towards {@code target} as a lightly damped spring, pushed by {@code push} (units/s²). */
+        void step(float target, float push, float dt) {
+            // Fixed small sub-steps (semi-implicit Euler) keep it stable at any frame rate.
+            for (float left = dt; left > 0; left -= STEP) {
+                float h = Math.min(STEP, left);
+                float accel = -OMEGA * OMEGA * (position - target) - 2 * DAMPING * OMEGA * velocity - push;
+                velocity += accel * h;
+                position += velocity * h;
+            }
+            position = Mth.clamp(position, -1.5f, 1.5f);
         }
     }
 
