@@ -20,7 +20,9 @@ import net.neoforged.neoforge.common.NeoForge;
 
 @Mod(value = OneMoreCore.MODID, dist = Dist.CLIENT)
 public class ClientSetup {
-    public ClientSetup(IEventBus bus) {
+    public ClientSetup(IEventBus bus, net.neoforged.fml.ModContainer container) {
+        // Mods > One More Core > Config: every option in the game, the stream chat too.
+        container.registerExtensionPoint(net.neoforged.neoforge.client.gui.IConfigScreenFactory.class, net.neoforged.neoforge.client.gui.ConfigurationScreen::new);
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerEntityRenderer(OneMoreCore.CUSTOMER.get(), CustomerRenderer::new));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.OPEN_SIGN_ENTITY.get(), OpenSignRenderer::new));
         bus.addListener(OpenSignRenderer::registerModels);

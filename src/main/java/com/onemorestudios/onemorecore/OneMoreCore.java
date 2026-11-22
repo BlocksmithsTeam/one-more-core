@@ -73,7 +73,6 @@ public class OneMoreCore {
     public static final DeferredItem<BlockItem> MENU_BOARD_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOARD);
     public static final DeferredBlock<MonitorBlock> MONITOR = BLOCKS.register("monitor",
             () -> new MonitorBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.METAL)));
-    public static final DeferredItem<BlockItem> MONITOR_ITEM = ITEMS.registerSimpleBlockItem(MONITOR);
     /** The space of a TV besides its own block. */
     public static final DeferredBlock<ScreenPartBlock> SCREEN_PART = BLOCKS.register("screen_part",
             () -> new ScreenPartBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().noLootTable().sound(SoundType.METAL)));
@@ -112,7 +111,6 @@ public class OneMoreCore {
     public static final DeferredItem<TicketItem> TICKET = ITEMS.register("ticket", () -> new TicketItem(new Item.Properties().stacksTo(1)));
     public static final DeferredBlock<OrderBoardBlock> ORDER_BOARD = BLOCKS.register("order_board",
             () -> new OrderBoardBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.WOOD)));
-    public static final DeferredItem<BlockItem> ORDER_BOARD_ITEM = ITEMS.registerSimpleBlockItem(ORDER_BOARD);
     public static final DeferredBlock<MenuBookBlock> MENU_BOOK = BLOCKS.register("menu_book",
             () -> new MenuBookBlock(BlockBehaviour.Properties.of().strength(0.4f).noOcclusion().sound(SoundType.WOOL).pushReaction(PushReaction.DESTROY)));
     public static final DeferredItem<BlockItem> MENU_BOOK_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOOK);
@@ -146,8 +144,6 @@ public class OneMoreCore {
                 output.accept(COMPUTER_ITEM);
                 output.accept(MENU_BOARD_ITEM);
                 output.accept(MENU_BOOK_ITEM);
-                output.accept(ORDER_BOARD_ITEM);
-                output.accept(MONITOR_ITEM);
                 output.accept(TRAY_RACK_ITEM);
                 output.accept(TRAY_ITEM);
                 output.accept(IRON_TRAY_ITEM);
