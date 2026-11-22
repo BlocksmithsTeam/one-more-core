@@ -29,14 +29,13 @@ import net.neoforged.neoforge.client.event.ModelEvent;
 import net.neoforged.neoforge.client.model.data.ModelData;
 
 /**
- * Draws the open sign: a post, two rods out of a wall or two chains, and a board with OPEN or CLOSED on both faces. When
- * the restaurant opens or closes, the board turns half a turn and shows the new word from the moment it is edge-on to
- * the viewer. A floor or hanging board turns round its vertical axis; a wall board turns round the rods, so that it does
- * not hit the wall.
+ * Draws the open sign (models in art/open_sign_choice.bbmodel, made in Blockbench): on a floor a chalkboard that turns half
+ * round when the restaurant opens or closes and shows the new word from the moment it is edge-on; on a wall an Art Deco blade
+ * whose word lights up; under a ceiling a plaque on a rope that turns.
  */
 public class OpenSignRenderer implements BlockEntityRenderer<OpenSignBlockEntity> {
     static final ModelResourceLocation PLAQUE_OPEN = model("plaque_open"), PLAQUE_CLOSED = model("plaque_closed"), ROPE = model("rope"),
-            FRAME = model("frame"), HOOK = model("hook");
+            FRAME = model("frame"), HOOK = model("hook"), CHALKBOARD = model("chalkboard"), BLADE = model("blade");
     /** Ticks of one half turn. */
     static final float TURN_TICKS = 12;
     /** Plaque width that the longest word may use, in pixels. */
@@ -53,7 +52,13 @@ public class OpenSignRenderer implements BlockEntityRenderer<OpenSignBlockEntity
     }
 
     static void registerModels(ModelEvent.RegisterAdditional event) {
-        for (ModelResourceLocation m : new ModelResourceLocation[] {PLAQUE_OPEN, PLAQUE_CLOSED, ROPE, FRAME, HOOK}) event.register(m);
+        for (ModelResourceLocation m : new ModelResourceLocation[] {PLAQUE_OPEN, PLAQUE_CLOSED, ROPE, FRAME, HOOK, CHALKBOARD, BLADE}) event.register(m);
+    }
+
+    /** The wall blade reaches into the block above. */
+    @Override
+    public net.minecraft.world.phys.AABB getRenderBoundingBox(OpenSignBlockEntity sign) {
+        return new net.minecraft.world.phys.AABB(sign.getBlockPos()).expandTowards(0, 1, 0);
     }
 
     @Override
@@ -84,8 +89,19 @@ public class OpenSignRenderer implements BlockEntityRenderer<OpenSignBlockEntity
         pose.translate(0.5, 0, 0.5);
         pose.mulPose(Axis.YP.rotationDegrees(-RotationSegment.convertToDegrees(rotation)));
         pose.translate(-0.5, 0, -0.5);
-        // A plaque on a rope from a nail: in a wooden frame on the floor, from the ceiling, or from a hook in the wall. The plaque's
-        // centre in pixels, and the axis that it turns round (on a wall, round its long axis, so that it does not hit the wall).
+        // On the floor a chalkboard in a wooden frame, written on both sides in chalk: it turns about its middle. On a wall an Art Deco
+        // blade with the word down both its faces in lights: lit gold when open, dim red when closed. Under a ceiling a plaque on a
+        // rope.
+        if (face == AttachFace.FLOOR) {
+            chalkboard(font, pose, buffers, light, overlay, turn, showOpen);
+            pose.popPose();
+            return;
+        }
+        if (face == AttachFace.WALL) {
+            blade(font, pose, buffers, light, overlay, showOpen);
+            pose.popPose();
+            return;
+        }
         float y = 9.25f, z = 8;
         Axis axis = Axis.YP;
         boolean ropeTurns = true;
@@ -127,13 +143,59 @@ public class OpenSignRenderer implements BlockEntityRenderer<OpenSignBlockEntity
         pose.popPose();
     }
 
+    /** The chalkboard turns half round about its middle; each side has the word in chalk. */
+    private static void chalkboard(Font font, PoseStack pose, MultiBufferSource buffers, int light, int overlay, float turn, boolean showOpen) {
+        float eased = turn * turn * (3 - 2 * turn);
+        pose.translate(0.5, 0, 0.5);
+        pose.mulPose(Axis.YP.rotationDegrees(180 * eased));
+        pose.translate(-0.5, 0, -0.5);
+        part(pose, buffers, CHALKBOARD, light, overlay);
+        Component word = Component.translatable(showOpen ? "onemorecore.sign.open" : "onemorecore.sign.closed");
+        float scale = 12f / 16 / Math.max(font.width(Component.translatable("onemorecore.sign.open")), font.width(Component.translatable("onemorecore.sign.closed")));
+        for (int side = 0; side < 2; side++) {
+            pose.pushPose();
+            pose.translate(0.5, 7.5 / 16, 0.5);
+            if (side == 1) pose.mulPose(Axis.YP.rotationDegrees(180));
+            // The chalk faces are at z 9 (front) and 6 (back): 1.5 px out from the middle.
+            pose.translate(0, 0, 1.5 / 16 + 0.002f);
+            pose.scale(scale, -scale, scale);
+            font.drawInBatch(word, -font.width(word) / 2f, -4, showOpen ? 0xFFF2F2E6 : 0xFFF3B2A8, false, pose.last().pose(), buffers, Font.DisplayMode.POLYGON_OFFSET, 0, light);
+            pose.popPose();
+        }
+    }
+
+    /** The blade stands out of the wall; its word runs down both faces, a letter under the other. */
+    private static void blade(Font font, PoseStack pose, MultiBufferSource buffers, int light, int overlay, boolean showOpen) {
+        part(pose, buffers, BLADE, light, overlay);
+        String word = Component.translatable(showOpen ? "onemorecore.sign.open" : "onemorecore.sign.closed").getString();
+        int color = showOpen ? 0xFFFFD166 : 0xFF8A3A30;
+        int textLight = showOpen ? net.minecraft.client.renderer.LightTexture.FULL_BRIGHT : light;
+        // The blade's faces: x 7 and x 9; its letters fill y 4..28 and z 3..11.
+        int n = Math.max(1, word.length());
+        float room = 24f / 16, step = room / n, scale = Math.min(step / 8.5f, 7f / 16 / Math.max(1, font.width("W")));
+        for (int side = 0; side < 2; side++) {
+            pose.pushPose();
+            pose.translate(side == 0 ? 9 / 16f + 0.002f : 7 / 16f - 0.002f, 0, 7 / 16f);
+            pose.mulPose(Axis.YP.rotationDegrees(side == 0 ? 90 : -90));
+            for (int i = 0; i < n; i++) {
+                String letter = word.substring(i, i + 1);
+                pose.pushPose();
+                pose.translate(0, 28f / 16 - step * (i + 0.5f), 0);
+                pose.scale(scale, -scale, scale);
+                font.drawInBatch(letter, -font.width(letter) / 2f, -4, color, false, pose.last().pose(), buffers, Font.DisplayMode.POLYGON_OFFSET, 0, textLight);
+                pose.popPose();
+            }
+            pose.popPose();
+        }
+    }
+
     private static void part(PoseStack pose, MultiBufferSource buffers, ModelResourceLocation id, int light, int overlay) {
         var model = Minecraft.getInstance().getModelManager().getModel(id);
         Minecraft.getInstance().getBlockRenderer().getModelRenderer().renderModel(pose.last(), buffers.getBuffer(Sheets.cutoutBlockSheet()), null,
                 model, 1, 1, 1, light, overlay, ModelData.EMPTY, RenderType.cutout());
     }
 
-    /** The sign item: the plaque in its floor frame, OPEN. */
+    /** The sign item: the chalkboard, OPEN. */
     static class Item extends BlockEntityWithoutLevelRenderer {
         Item(BlockEntityRenderDispatcher dispatcher, EntityModelSet models) {
             super(dispatcher, models);

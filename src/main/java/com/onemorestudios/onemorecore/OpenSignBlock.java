@@ -42,13 +42,13 @@ import net.minecraft.world.phys.BlockHitResult;
  */
 public class OpenSignBlock extends Block implements EntityBlock {
     public static final BooleanProperty OPEN = BlockStateProperties.OPEN;
-    /** On the floor (a post), on a wall (two rods) or under a ceiling (two chains). */
+    /** On the floor (a chalkboard), on a wall (an Art Deco blade) or under a ceiling (a board on chains). */
     public static final EnumProperty<AttachFace> FACE = BlockStateProperties.ATTACH_FACE;
     /** Like a vanilla sign: 0 faces south, 4 west, 8 north, 12 east. A wall sign uses only 0, 4, 8 and 12. */
     public static final IntegerProperty ROTATION = BlockStateProperties.ROTATION_16;
-    private static final VoxelShape FLOOR = box(4, 0, 4, 12, 16, 12), CEILING = box(4, 2, 4, 12, 16, 12);
-    /** The wall sign that faces north: the wall is at z 16, the board (z 10..12) turns on two rods out of the wall. */
-    private static final VoxelShape[] WALL = BoxShapes.byFacing(new double[] {0, 4, 10, 16, 12, 16});
+    private static final VoxelShape FLOOR = box(2, 0, 2, 14, 14, 14), CEILING = box(4, 2, 4, 12, 16, 12);
+    /** The wall sign that faces north: the wall is at z 16, the blade (x 7..9) stands out of it up to z 4. */
+    private static final VoxelShape[] WALL = BoxShapes.byFacing(new double[] {7, 2, 4, 9, 16, 16});
 
     public OpenSignBlock(Properties properties) {
         super(properties);

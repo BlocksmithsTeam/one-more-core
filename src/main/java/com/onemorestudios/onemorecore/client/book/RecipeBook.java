@@ -106,10 +106,8 @@ final class RecipeBook implements NodePainter {
     private static final float BLOCK_DEPTH = 0.5F;
     private static final float COVER_LIFT = 1.9F;
     private static final int COLUMNS = 3;
-    private static final int ROWS = 4;
     private static final int PITCH = 18;
     private static final int WELL_SIZE = 17;
-    private static final int PER_PAGE = COLUMNS * ROWS;
     /**
      * Each page is laid out about the middle of its open part, clear of the shade in the fold: the left page's fold is on its right,
      * the right page's on its left. The list's grid sits in the middle of the left page, the arrows under its outer columns, and
@@ -599,7 +597,7 @@ final class RecipeBook implements NodePainter {
         Object current = source.current(view);
         boolean making = current != null && picked != null && picked.page().key().equals(current);
         Integer keptPage = PAGES.get(memoryKey());
-        int at = picked == null ? 0 : Math.max(0, entries.indexOf(picked)) / PER_PAGE;
+        int at = picked == null ? 0 : MenuRows.of(entries).pageOf(Math.max(0, entries.indexOf(picked)));
         page = Mth.clamp(keptPage != null && !making ? keptPage : at, 0, pages() - 1);
     }
 
@@ -948,7 +946,7 @@ final class RecipeBook implements NodePainter {
     }
 
     private int pages() {
-        return Math.max(1, (entries.size() + PER_PAGE - 1) / PER_PAGE);
+        return MenuRows.of(entries).pages();
     }
 
     /** Every frame: opens or closes, hangs in the air, follows the cursor. */
@@ -1697,10 +1695,10 @@ final class RecipeBook implements NodePainter {
     }
 
     private Entry entryAt(float x, float y) {
-        int column = Mth.floor((x - GRID_X) / PITCH);
-        int row = Mth.floor((y - GRID_Y) / PITCH);
-        int index = page * PER_PAGE + row * COLUMNS + column;
-        return column >= 0 && column < COLUMNS && row >= 0 && row < ROWS && index < entries.size() ? entries.get(index) : null;
+        if (x < GRID_X || x >= GRID_X + LIST_WIDE) return null;
+        for (MenuRows.Row r : MenuRows.of(entries).rows(page))
+            if (r.entry() >= 0 && y >= r.y() && y < r.y() + MenuRows.ENTRY) return entries.get(r.entry());
+        return null;
     }
 
     private Tab tabAt(float x) {
@@ -1927,7 +1925,7 @@ final class RecipeBook implements NodePainter {
         }
         if (listed.isPresent()) {
             picked = listed.get();
-            int at = entries.indexOf(picked) / PER_PAGE;
+            int at = MenuRows.of(entries).pageOf(entries.indexOf(picked));
             if (at != page) {
                 flipFrom = leafNow();
                 int way = at > page ? 1 : -1;
@@ -2129,25 +2127,43 @@ final class RecipeBook implements NodePainter {
         }
     }
 
-    /** The list's page of {@code leaf}; {@code live}: the resting page, which answers the cursor. */
+    /**
+     * The list's page of {@code leaf}, like a restaurant's menu: the kind of the dishes as a heading over them, then a line for each
+     * dish (a small picture, the name, dots to the price on the right). {@code live}: the resting page, which answers the cursor.
+     */
     private void drawList(Sheet canvas, Leaf leaf, boolean live) {
         List<Entry> list = leaf.list();
-        int first = leaf.page() * PER_PAGE;
+        Font font = Minecraft.getInstance().font;
+        MenuRows rows = MenuRows.of(list);
         Entry pointed = hovered != null ? hovered : previewed;
-        for (int i = first; i < Math.min(list.size(), first + PER_PAGE); i++) {
-            Entry entry = list.get(i);
-            int x = GRID_X + (i - first) % COLUMNS * PITCH;
-            int y = GRID_Y + (i - first) / COLUMNS * PITCH;
-            canvas.rect(x, y, WELL_SIZE, WELL_SIZE, WELL_LIFT, entry.isReady() ? WELL_READY : WELL);
-            canvas.item(entry.dish(), x + 0.5F, y + 0.5F, 16.0F, !entry.isReady());
-            if (entry == picked || entry == pointed) {
-                canvas.frame(x, y, WELL_SIZE);
+        float right = GRID_X + LIST_WIDE;
+        for (MenuRows.Row r : rows.rows(leaf.page())) {
+            if (r.entry() < 0) {
+                String head = Component.translatable("onemorecore.board." + r.kind()).getString().toUpperCase(java.util.Locale.ROOT);
+                float scale = Math.min(0.62F, (LIST_WIDE - 2.0F) / Math.max(1, font.width(head)));
+                canvas.text(head, GRID_X, r.y() + 1.0F, scale);
+                canvas.rect(GRID_X, r.y() + MenuRows.HEAD - 2.0F, LIST_WIDE, 0.6F, WELL_LIFT, RULE);
+                continue;
             }
+            Entry entry = list.get(r.entry());
+            if (entry == picked || entry == pointed) canvas.rect(GRID_X - 1.0F, r.y(), LIST_WIDE + 2.0F, MenuRows.ENTRY, WELL_LIFT, WELL_READY);
+            canvas.item(entry.dish(), GRID_X, r.y() + 0.5F, 10.0F, false);
+            String price = entry.page().note() == null ? "" : entry.page().note().getString();
+            float small = 0.55F;
+            float priceWide = font.width(price) * small;
+            String name = entry.dish().getHoverName().getString();
+            float room = LIST_WIDE - 12.0F - priceWide - 3.0F;
+            while (!name.isEmpty() && font.width(name) * small > room) name = name.substring(0, name.length() - 1);
+            float textY = r.y() + (MenuRows.ENTRY - 7.0F * small) / 2.0F;
+            canvas.text(name, GRID_X + 12.0F, textY, small);
+            canvas.text(price, right - priceWide, textY, small);
+            // Dots from the name to the price, as on a printed menu.
+            float from = GRID_X + 12.0F + font.width(name) * small + 1.5F, to = right - priceWide - 1.5F;
+            for (float d = from; d + 0.6F < to; d += 2.0F) canvas.rect(d, textY + 7.0F * small - 0.8F, 0.6F, 0.6F, WELL_LIFT, RULE);
         }
-        int leafPages = Math.max(1, (list.size() + PER_PAGE - 1) / PER_PAGE);
+        int leafPages = rows.pages();
         if (leafPages > 1) {
             // "7/52" between the arrows, smaller when it would not fit; the arrow of the half under the cursor is lit.
-            Font font = Minecraft.getInstance().font;
             String number = (leaf.page() + 1) + "/" + leafPages;
             float wide = font.width(number) - 1.0F;
             float scale = Math.min(1.0F, NUMBER_ROOM / wide);
@@ -2156,6 +2172,55 @@ final class RecipeBook implements NodePainter {
             int under = live ? footSide() : 0;
             canvas.arrow(GRID_X, ARROW_Y, false, under < 0);
             canvas.arrow(GRID_X + LIST_WIDE - ARROW_WIDTH, ARROW_Y, true, under > 0);
+        }
+    }
+
+    /** How the menu's list lies on its pages: headings and dish lines, a page holding as many as fit over the foot. */
+    private record MenuRows(List<List<Row>> pagesRows, int[] pageOfEntry) {
+        static final float HEAD = 9.0F, ENTRY = 11.0F;
+
+        /** A heading (entry -1, its kind) or a dish line (its index in the list), at y on its page. */
+        record Row(int entry, String kind, float y) {}
+
+        static MenuRows of(List<Entry> list) {
+            List<List<Row>> pages = new ArrayList<>();
+            int[] pageOf = new int[list.size()];
+            List<Row> page = new ArrayList<>();
+            float y = GRID_Y;
+            String kind = null;
+            for (int i = 0; i < list.size(); i++) {
+                String k = Objects.requireNonNullElse(list.get(i).page().kind(), "main");
+                boolean head = !k.equals(kind) || page.isEmpty();
+                float need = (head ? HEAD : 0.0F) + ENTRY;
+                if (y + need > FOOT_TOP && !page.isEmpty()) {
+                    pages.add(page);
+                    page = new ArrayList<>();
+                    y = GRID_Y;
+                    head = true;
+                }
+                if (head) {
+                    page.add(new Row(-1, k, y));
+                    y += HEAD;
+                }
+                page.add(new Row(i, k, y));
+                pageOf[i] = pages.size();
+                y += ENTRY;
+                kind = k;
+            }
+            pages.add(page);
+            return new MenuRows(pages, pageOf);
+        }
+
+        int pages() {
+            return pagesRows.size();
+        }
+
+        int pageOf(int entry) {
+            return entry >= 0 && entry < pageOfEntry.length ? pageOfEntry[entry] : 0;
+        }
+
+        List<Row> rows(int page) {
+            return page >= 0 && page < pagesRows.size() ? pagesRows.get(page) : List.of();
         }
     }
 
@@ -2174,6 +2239,10 @@ final class RecipeBook implements NodePainter {
             canvas.frame(middle - DISH_SIZE / 2.0F - 0.5F, DISH_Y - 0.5F, DISH_SIZE + 1.0F);
         }
         float line = 25.0F;
+        if (entry.page().kind() != null) {
+            String kind = Component.translatable("onemorecore.board." + entry.page().kind()).getString().toUpperCase(java.util.Locale.ROOT);
+            canvas.text(kind, middle - font.width(kind) * 0.5F / 2.0F, DISH_Y - 6.0F, 0.5F);
+        }
         // Two lines at most: a long modded name must leave room for what goes in.
         if (nameFor != entry) {
             nameFor = entry;
