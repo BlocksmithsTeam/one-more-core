@@ -1,7 +1,15 @@
 {
   "camera": {
-    "position": [8, 22, -6],
-    "target": [8, 1, 8],
+    "position": [
+      8,
+      22,
+      -6
+    ],
+    "target": [
+      8,
+      1,
+      8
+    ],
     "fov": 45,
     "neighbors": {
       "enabled": false
@@ -18,14 +26,21 @@
     "stacking": false,
     "surfaces": [
       {
-        "from": [0.5, 3],
-        "to": [15.5, 13],
+        "from": [
+          0.5,
+          3
+        ],
+        "to": [
+          15.5,
+          13
+        ],
         "height": 1,
         "clearance": 10,
         "flat_rest": "lie",
         "fill": "middle"
       }
     ],
-    "physics": {}
+    "physics": {},
+    "shadows": false
   }
 }
