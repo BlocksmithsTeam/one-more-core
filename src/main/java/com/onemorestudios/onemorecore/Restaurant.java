@@ -1367,6 +1367,7 @@ public class Restaurant {
 
     /** Shows a title and a subtitle to the players in and near the area. */
     void announce(ServerLevel level, Component title, Component subtitle) {
+        if (area == null) return;
         BoundingBox near = area.inflatedBy(16);
         for (ServerPlayer p : level.players()) {
             if (!near.isInside(p.blockPosition())) continue;
@@ -1377,6 +1378,7 @@ public class Restaurant {
     }
 
     void sendStatus(ServerLevel level) {
+        if (area == null) return;
         BoundingBox near = area.inflatedBy(8);
         List<ServerPlayer> viewers = level.players().stream().filter(p -> near.isInside(p.blockPosition())).toList();
         if (viewers.isEmpty()) return;

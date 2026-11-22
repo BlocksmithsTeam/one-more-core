@@ -93,7 +93,7 @@ for (attach, orient), v in V.items():
                 for e in els: e['rotation'] = {'angle': tilt * 22.5, 'axis': 'x', 'origin': [8, v['pivot'][0], v['pivot'][1]]}
             model = f'screen/{attach}_{orient}_{tilt}_{name}'
             json.dump({'textures': TEX, 'elements': els}, open(f'{OUT}/models/block/{model}.json', 'w'), indent=1)
-            base = {'attach': attach, 'landscape': 'true' if orient == 'l' else 'false', 'tilt': str(tilt)}
+            base = {'face': attach, 'landscape': 'true' if orient == 'l' else 'false', 'tilt': str(tilt)}
             side = name.split('_')[0]
             conds = []
             if name.endswith('_frame') and side in ('left', 'right', 'up', 'down'):

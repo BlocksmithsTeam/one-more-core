@@ -41,7 +41,10 @@ import net.neoforged.neoforge.network.PacketDistributor;
 public final class ScreenPainter {
     private ScreenPainter() {}
 
-    private static final RenderType WHITE = RenderType.entityCutout(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/block/white.png"));
+    private static final ResourceLocation WHITE_TEXTURE = ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/block/white.png");
+    private static final RenderType WHITE = RenderType.entityCutout(WHITE_TEXTURE);
+    /** See-through fills (shadows, highlights): a cutout would draw them solid. */
+    private static final RenderType SHEER = RenderType.entityTranslucent(WHITE_TEXTURE);
     private static final String[] KINDS = {"main", "starter", "drink", "dessert", "combo"};
     private static final int[] KIND_COLORS = {0xFFE8762D, 0xFF4CAF50, 0xFF2D8CE8, 0xFFE8508A, 0xFFD32F2F};
     private static final int LIGHT = LightTexture.FULL_BRIGHT;
@@ -77,7 +80,7 @@ public final class ScreenPainter {
         void rect(float x, float y, float rw, float rh, int argb) {
             if (rw <= 0 || rh <= 0) return;
             z += 0.02f;
-            TrayRenderer.quad(pose, buffers.getBuffer(WHITE), x, y, x + rw, y + rh, z, argb, LIGHT);
+            TrayRenderer.quad(pose, buffers.getBuffer(argb >>> 24 == 0xFF ? WHITE : SHEER), x, y, x + rw, y + rh, z, argb, LIGHT);
         }
 
         /** A rectangle with its corners cut by r (a pixel-art rounded box). */
