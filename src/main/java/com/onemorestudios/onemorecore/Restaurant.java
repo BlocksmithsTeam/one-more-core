@@ -468,10 +468,28 @@ public class Restaurant {
         if (area == null) return new HashSet<>();
         Set<BlockPos> cached = layoutDirty ? null : tableSurfaces.get(pos);
         if (cached != null && layoutChunksMatch(level)) return new HashSet<>(cached);
-        return connectedTable(level, area, pos);
+        return connectedTable(level, area, pos, cuts);
     }
 
-    static Set<BlockPos> connectedTable(Level level, BoundingBox area, BlockPos pos) {
+    /** The places where two touching serving surfaces are not joined: they belong to two tables. */
+    final TableCuts cuts = new TableCuts();
+
+    /**
+     * Splits two touching tables at the edge of a surface towards dir, or joins them again (like Create's mechanical
+     * crafters). False if no serving surface of the area lies there.
+     */
+    boolean toggleCut(ServerLevel level, BlockPos pos, Direction dir) {
+        BlockPos next = pos.relative(dir);
+        if (area == null || !area.isInside(pos) || !area.isInside(next) || !level.getBlockState(pos).is(OneMoreCore.SURFACES)
+                || !level.getBlockState(next).is(OneMoreCore.SURFACES)) return false;
+        cuts.toggle(pos, dir);
+        owner.setDirty();
+        invalidateLayout();
+        numberTables(level);
+        return true;
+    }
+
+    static Set<BlockPos> connectedTable(Level level, BoundingBox area, BlockPos pos, TableCuts cuts) {
         Set<BlockPos> table = new HashSet<>();
         if (!area.isInside(pos) || !level.isLoaded(pos) || !level.getBlockState(pos).is(OneMoreCore.SURFACES)) return table;
         ArrayDeque<BlockPos> todo = new ArrayDeque<>(List.of(pos.immutable()));
@@ -480,7 +498,7 @@ public class Restaurant {
             BlockPos p = todo.pop();
             for (Direction dir : Direction.Plane.HORIZONTAL) {
                 BlockPos next = p.relative(dir);
-                if (!table.contains(next) && area.isInside(next) && level.isLoaded(next)
+                if (!table.contains(next) && !cuts.cut(p, dir) && area.isInside(next) && level.isLoaded(next)
                         && level.getBlockState(next).is(OneMoreCore.SURFACES) && table.add(next)) todo.push(next);
             }
         }
@@ -635,7 +653,7 @@ public class Restaurant {
     /** Day, register, unlocks and paid orders keep their progress when the sign is broken. */
     CompoundTag progress() {
         CompoundTag tag = save();
-        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "dirt_start", "tables_off", "table_items", "served_bills", "screens", "screen_modes", "cards")) tag.remove(key);
+        for (String key : List.of("sign", "area", "spawn", "delivery", "dirt", "dirt_start", "tables_off", "table_items", "served_bills", "screens", "screen_modes", "cards", "table_cuts_east", "table_cuts_south")) tag.remove(key);
         return tag;
     }
 
@@ -1095,7 +1113,7 @@ public class Restaurant {
             List<Seat> table = tableOf.get(s.surface());
             if (table == null) {
                 found.add(table = new ArrayList<>());
-                Set<BlockPos> surfaces = connectedTable(level, area, s.surface());
+                Set<BlockPos> surfaces = connectedTable(level, area, s.surface(), cuts);
                 for (BlockPos pos : surfaces) {
                     tableOf.put(pos, table);
                     tableSurfaces.put(pos, surfaces);
@@ -1224,20 +1242,25 @@ public class Restaurant {
      * cards to the players near the area. Every 5 seconds and when a card changes.
      */
     void numberTables(ServerLevel level) {
-        cards.keySet().removeIf(p -> level.isLoaded(p) && !level.getBlockState(p).is(OneMoreCore.SURFACES));
+        // A card is a Table Number block on the surface; one that is gone (or an old loose card) is forgotten.
+        if (cards.keySet().removeIf(p -> level.isLoaded(p) && (!level.getBlockState(p).is(OneMoreCore.SURFACES)
+                || !level.getBlockState(p.above()).is(OneMoreCore.TABLE_NUMBER_BLOCK.get())))) owner.setDirty();
         tableLabels.clear();
         List<BlockPos> marks = new ArrayList<>();
         List<String> texts = new ArrayList<>();
         List<Float> places = new ArrayList<>();
-        for (var e : cards.entrySet()) {
+        // In a fixed order, so that a table with two cards always takes the same name (the first card with a text).
+        List<Map.Entry<BlockPos, TableCards.Card>> sorted = new ArrayList<>(cards.entrySet());
+        sorted.sort(java.util.Comparator.comparingLong(e -> e.getKey().asLong()));
+        for (var e : sorted) {
             if (marks.size() >= 256) break;
-            for (BlockPos p : tableAt(level, e.getKey())) tableLabels.put(p, e.getValue().text());
+            if (!e.getValue().text().isEmpty()) for (BlockPos p : tableAt(level, e.getKey())) tableLabels.putIfAbsent(p, e.getValue().text());
             marks.add(e.getKey());
             texts.add(e.getValue().text());
             places.addAll(List.of(e.getValue().x(), e.getValue().z(), e.getValue().yaw()));
         }
         BoundingBox near = area.inflatedBy(32);
-        TableMarks packet = new TableMarks(sign, marks, texts, places);
+        TableMarks packet = new TableMarks(sign, marks, texts, places, cuts.east(), cuts.south());
         for (ServerPlayer p : level.players()) if (near.isInside(p.blockPosition())) PacketDistributor.sendToPlayer(p, packet);
     }
 
@@ -1246,33 +1269,16 @@ public class Restaurant {
         return surface == null ? "" : tableLabels.getOrDefault(surface, "");
     }
 
-    /** Puts a card on a surface; a card elsewhere on the same table moves here with its text. True when a card moved. */
-    boolean placeCard(ServerLevel level, BlockPos surface, TableCards.Card card) {
-        String text = card.text();
-        boolean moved = false;
-        for (BlockPos p : tableAt(level, surface)) {
-            TableCards.Card old = cards.remove(p);
-            if (old != null) {
-                moved = true;
-                text = old.text();
-            }
-        }
-        cards.put(surface.immutable(), new TableCards.Card(text, card.x(), card.z(), card.yaw()));
+    /** A Table Number block was put on a surface. */
+    void placeCard(ServerLevel level, BlockPos surface, TableCards.Card card) {
+        if (cards.size() >= 256 && !cards.containsKey(surface)) return;
+        cards.put(surface.immutable(), card);
         owner.setDirty();
         numberTables(level);
-        return moved;
     }
 
     void removeCard(ServerLevel level, BlockPos surface) {
         if (cards.remove(surface) == null) return;
-        owner.setDirty();
-        numberTables(level);
-    }
-
-    void setCardText(ServerLevel level, BlockPos surface, String text) {
-        TableCards.Card c = cards.get(surface);
-        if (c == null) return;
-        cards.put(surface, new TableCards.Card(text, c.x(), c.z(), c.yaw()));
         owner.setDirty();
         numberTables(level);
     }
@@ -1437,6 +1443,7 @@ public class Restaurant {
         tag.put("served_bills", served);
         long[] tablesOff = offTables.stream().mapToLong(BlockPos::asLong).toArray();
         tag.putLongArray("tables_off", tablesOff);
+        cuts.save(tag);
         tag.putLongArray("screens", screens.keySet().stream().mapToLong(BlockPos::asLong).toArray());
         tag.putIntArray("screen_modes", screens.values().stream().mapToInt(Integer::intValue).toArray());
         ListTag cardList = new ListTag();
@@ -1501,6 +1508,7 @@ public class Restaurant {
                 r.combos.add(new Combo(c.getString("id"), List.copyOf(ids), Math.max(1, c.getInt("price"))));
         }
         for (long p : tag.getLongArray("tables_off")) r.offTables.add(BlockPos.of(p));
+        r.cuts.load(tag);
         long[] sp = tag.getLongArray("screens");
         int[] sm = tag.getIntArray("screen_modes");
         for (int i = 0; i < sp.length && i < sm.length && i < 256; i++) r.screens.put(BlockPos.of(sp[i]), ScreenSettings.valid(sm[i]));

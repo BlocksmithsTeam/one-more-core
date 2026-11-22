@@ -12,13 +12,13 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.AABB;
 
 /**
- * A selection box in the style of Create's Super Glue: see-through faces with a grid of one cell per block and a light
- * hatch, and thick bright edges, in one colour. Drawn from inside too, so the free camera can stand in it.
+ * A selection box in the style of Create's Super Glue: plain see-through faces and thick bright edges, in one colour. Drawn from inside too, so the free camera can stand in it.
  */
 final class SelectionBox {
     private SelectionBox() {}
 
-    private static final RenderType FACES = RenderType.entityTranslucent(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/misc/selection.png"));
+    /** Plain see-through faces: no grid or hatch inside the box, only its outer edges stand out. */
+    private static final RenderType FACES = RenderType.entityTranslucent(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/block/white.png"));
     private static final RenderType EDGES = RenderType.entityTranslucent(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/block/white.png"));
 
     /** rgb: 0xRRGGBB. The pose is in world coordinates (camera already subtracted). */

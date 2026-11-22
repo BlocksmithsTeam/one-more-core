@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": {"model": "onemorecore:block/table_card"},
+    "facing=east": {"model": "onemorecore:block/table_card", "y": 90},
+    "facing=south": {"model": "onemorecore:block/table_card", "y": 180},
+    "facing=west": {"model": "onemorecore:block/table_card", "y": 270}
+  }
+}
