@@ -34,7 +34,10 @@ final class MenuBookSource implements RecipeBook.Source {
     public List<RecipeBook.Page> pages(StationView view) {
         List<RecipeBook.Page> pages = new ArrayList<>();
         ItemStack currency = currency();
-        for (MenuBoardBlockEntity.Line line : lines(view)) {
+        // In menu order: the kinds one after another, as a printed menu has them.
+        List<MenuBoardBlockEntity.Line> sorted = new ArrayList<>(lines(view));
+        sorted.sort(java.util.Comparator.comparingInt(l -> { int i = java.util.Arrays.asList(KINDS).indexOf(l.kind()); return i < 0 ? KINDS.length : i; }));
+        for (MenuBoardBlockEntity.Line line : sorted) {
             if (line.items().isEmpty()) continue;
             boolean combo = line.kind().equals("combo");
             String key = (combo ? "combo/" : "dish/") + line.id();

@@ -77,6 +77,11 @@ public final class MenuBook {
         }
 
         @Override
+        public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+            Ui.backdrop(g, width, height);
+        }
+
+        @Override
         public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
             super.render(g, mouseX, mouseY, partialTick);
             // The paper is 3 by 4, as the pages of the book model.
