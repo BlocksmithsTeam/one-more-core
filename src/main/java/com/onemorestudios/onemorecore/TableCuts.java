@@ -57,26 +57,43 @@ public final class TableCuts {
         for (long p : tag.getLongArray("table_cuts_south")) if (east.size() + south.size() < MAX) south.add(BlockPos.of(p));
     }
 
-    /** A click this near an edge of a table top (blocks) is a click on that edge. */
-    static final double EDGE = 0.25;
-
     /**
-     * The edge of a table top that a click on its top face is near, towards another serving surface; null for a click
-     * elsewhere (the middle of the block, a side face) or an edge with no table behind it.
+     * The sides of a table block that a click on one of its faces can split or join, like Create's crafters
+     * (EdgeInteractionHandler, MIT): the horizontal sides across the face, towards another serving surface, unless a solid
+     * block covers that face of the neighbour.
      */
-    public static Direction edge(net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.BlockHitResult hit) {
-        if (hit.getDirection() != Direction.UP) return null;
-        double x = hit.getLocation().x - pos.getX(), z = hit.getLocation().z - pos.getZ();
-        Direction best = null;
-        double near = EDGE;
+    public static java.util.List<Direction> connectiveSides(net.minecraft.world.level.BlockGetter level, BlockPos pos, Direction face) {
+        java.util.List<Direction> sides = new java.util.ArrayList<>(4);
+        if (covered(level, pos.relative(face), face)) return sides;
         for (Direction d : Direction.Plane.HORIZONTAL) {
-            double dist = switch (d) { case EAST -> 1 - x; case WEST -> x; case SOUTH -> 1 - z; default -> z; };
-            if (dist < near && level.getBlockState(pos.relative(d)).is(OneMoreCore.SURFACES)) {
-                near = dist;
-                best = d;
-            }
+            if (d.getAxis() == face.getAxis()) continue;
+            BlockPos n = pos.relative(d);
+            if (!level.getBlockState(n).is(OneMoreCore.SURFACES) || covered(level, n.relative(face), face)) continue;
+            sides.add(d);
         }
-        return best;
+        return sides;
+    }
+
+    private static boolean covered(net.minecraft.world.level.BlockGetter level, BlockPos pos, Direction face) {
+        return level.getBlockState(pos).isFaceSturdy(level, pos, face.getOpposite());
+    }
+
+    /** The click zone of a side: the strip of the block, 6/16 wide, along that side (as Create's crafters). */
+    public static net.minecraft.world.phys.AABB zone(BlockPos pos, Direction d) {
+        double margin = 10 / 16.0;
+        double ax = Math.abs(d.getStepX()) * margin, az = Math.abs(d.getStepZ()) * margin;
+        return new net.minecraft.world.phys.AABB(pos).contract(ax, 0, az).move(ax / 2 + d.getStepX() / 2.0, 0, az / 2 + d.getStepZ() / 2.0)
+                .inflate(1 / 256.0);
+    }
+
+    /** The side that a click at hit (on face of the table block at pos) splits or joins, or null. */
+    public static Direction edge(net.minecraft.world.level.BlockGetter level, BlockPos pos, Direction face, net.minecraft.world.phys.Vec3 hit) {
+        for (Direction d : connectiveSides(level, pos, face)) if (zone(pos, d).contains(hit)) return d;
+        return null;
+    }
+
+    public static Direction edge(net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.BlockHitResult hit) {
+        return edge(level, pos, hit.getDirection(), hit.getLocation());
     }
 
     /** Client: the cuts of every restaurant that the player has seen. */

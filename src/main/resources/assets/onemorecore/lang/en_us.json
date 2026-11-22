@@ -117,8 +117,6 @@
   "onemorecore.computer.kind_set": "The kind is changed.",
   "onemorecore.tool.table_on": "Customers can use this table.",
   "onemorecore.tool.table_off": "This table is off. Customers do not use it.",
-  "onemorecore.tool.table_split": "The tables are split here: two tables.",
-  "onemorecore.tool.table_joined": "The tables are joined here: one table.",
   "onemorecore.tool.not_table": "This is not a table of the restaurant.",
   "onemorecore.free.tables": "Tables",
   "block.onemorecore.monitor": "Monitor",
@@ -214,8 +212,7 @@
   "onemorecore.card.title": "Table number",
   "onemorecore.card.no_restaurant": "Put it on a table of a restaurant",
   "item.onemorecore.screwdriver": "Screwdriver",
-  "onemorecore.tables.size": "Table: %s blocks",
-  "onemorecore.tables.split": "Click: split the tables here",
-  "onemorecore.tables.join": "Click: join the tables here",
-  "onemorecore.tables.point": "Point at an edge between two table blocks"
+  "onemorecore.tables.connected": "Connected Tables",
+  "onemorecore.tables.separate": "Click to separate tables",
+  "onemorecore.tables.merge": "Click to merge tables"
 }

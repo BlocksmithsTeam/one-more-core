@@ -250,9 +250,10 @@ public class OneMoreCore {
             event.setUseBlock(net.neoforged.neoforge.common.util.TriState.FALSE);
             return;
         }
-        // A screwdriver (or any mod's wrench) on a table top near the edge to another table block splits the two tables there or
-        // joins them again, like Create's wrench on mechanical crafters. The restaurant must be closed.
-        if (held.is(TABLE_TOOLS) && event.getHand() == InteractionHand.MAIN_HAND && event.getLevel().getBlockState(event.getPos()).is(SURFACES)) {
+        // A screwdriver (or any mod's wrench) on a table block, in the strip along a side towards another table block, splits the
+        // two tables there or joins them again: the same as Create's wrench on mechanical crafters. The restaurant must be closed.
+        if (held.is(TABLE_TOOLS) && event.getHand() == InteractionHand.MAIN_HAND && !event.getEntity().isShiftKeyDown()
+                && !event.getEntity().isSpectator() && event.getLevel().getBlockState(event.getPos()).is(SURFACES)) {
             net.minecraft.core.Direction edge = TableCuts.edge(event.getLevel(), event.getPos(), event.getHitVec());
             if (edge == null) return;
             if (event.getLevel() instanceof ServerLevel level) {
@@ -261,10 +262,7 @@ public class OneMoreCore {
                 if (r.isOpen()) {
                     event.getEntity().displayClientMessage(Component.translatable("onemorecore.tool.busy"), true);
                 } else if (r.toggleCut(level, event.getPos(), edge)) {
-                    boolean cut = r.cuts.cut(event.getPos(), edge);
-                    event.getEntity().displayClientMessage(Component.translatable("onemorecore.tool." + (cut ? "table_split" : "table_joined")), true);
-                    level.playSound(null, event.getPos(), cut ? net.minecraft.sounds.SoundEvents.CHAIN_BREAK : net.minecraft.sounds.SoundEvents.CHAIN_PLACE,
-                            net.minecraft.sounds.SoundSource.BLOCKS, 0.7f, 1.2f);
+                    level.playSound(null, event.getPos(), net.minecraft.sounds.SoundEvents.ITEM_FRAME_ADD_ITEM, net.minecraft.sounds.SoundSource.BLOCKS, 0.25f, 0.1f);
                 }
             }
             event.setCanceled(true);
