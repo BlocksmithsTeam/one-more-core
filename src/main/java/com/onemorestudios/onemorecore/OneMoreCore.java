@@ -86,6 +86,9 @@ public class OneMoreCore {
     /** The table card text of an order ticket and of a tray's label. */
     public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<String>> LABEL =
             COMPONENTS.registerComponentType("table_label", b -> b.persistent(com.mojang.serialization.Codec.STRING).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.stringUtf8(16)));
+    public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<java.util.List<TrayPose>>> TRAY_POSES =
+            COMPONENTS.registerComponentType("tray_poses", b -> b.persistent(TrayPose.SLOTS_CODEC)
+                    .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.fromCodec(TrayPose.SLOTS_CODEC)));
     /** A table number card: put it on a table and type its text. */
     /** Splits and joins tables (TableCuts), like a wrench. */
     public static final DeferredItem<Item> SCREWDRIVER = ITEMS.registerSimpleItem("screwdriver", new Item.Properties().stacksTo(1));

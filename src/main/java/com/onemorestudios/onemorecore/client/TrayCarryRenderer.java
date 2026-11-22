@@ -1,9 +1,13 @@
 package com.onemorestudios.onemorecore.client;
 
+import java.util.Map;
+import java.util.WeakHashMap;
+
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.onemorestudios.onemorecore.TrayItem;
 
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
@@ -39,6 +43,9 @@ public final class TrayCarryRenderer {
     private static final float RIM_HEIGHT = 2 / 16f;
     private static final float GRIP_X = 9 / 16f;
     private static final float HAND_Y = 9 / 16f;
+    private static final float MAX_DISH_SLIDE = 0.2f;
+    private static final float MAX_DISH_TILT = 1.5f * Mth.DEG_TO_RAD;
+    private static final Map<AbstractClientPlayer, DishSway> DISH_SWAY = new WeakHashMap<>();
 
     public static final EnumProxy<HumanoidModel.ArmPose> TRAY_POSE = new EnumProxy<>(HumanoidModel.ArmPose.class,
             true, (IArmPoseTransformer) TrayCarryRenderer::poseArms);
@@ -127,8 +134,67 @@ public final class TrayCarryRenderer {
         pose.mulPose(Axis.YP.rotationDegrees(180));
         pose.scale(FIRST_PERSON_SCALE, FIRST_PERSON_SCALE, FIRST_PERSON_SCALE);
         pose.translate(-0.5, 0, -0.5);
-        TrayRenderer.drawItem(stack, pose, buffers, light, OverlayTexture.NO_OVERLAY, true);
+        TrayRenderer.drawItem(stack, pose, buffers, light, OverlayTexture.NO_OVERLAY, true,
+                dishSway(player, event.getPartialTick()));
         pose.popPose();
+    }
+
+    private static TrayRenderer.Sway dishSway(AbstractClientPlayer player, float partialTick) {
+        if (Minecraft.getInstance().isPaused()) return TrayRenderer.Sway.NONE;
+        return DISH_SWAY.computeIfAbsent(player, ignored -> new DishSway()).sample(player, partialTick);
+    }
+
+    private static class DishSway {
+        private final Spring side = new Spring();
+        private final Spring fore = new Spring();
+        private long lastFrame;
+        private float lastYaw, lastPitch;
+
+        TrayRenderer.Sway sample(AbstractClientPlayer player, float partialTick) {
+            long now = Util.getNanos();
+            float dt = (now - lastFrame) / 1.0e9f;
+            if (dt >= 0.001f) {
+                float yaw = player.getViewYRot(partialTick);
+                float pitch = player.getViewXRot(partialTick);
+                lastFrame = now;
+                if (dt > 0.25f) {
+                    side.reset();
+                    fore.reset();
+                } else {
+                    float stride = player.walkAnimation.position(partialTick) * 0.6662f;
+                    float walk = player.onGround() ? Mth.clamp(player.walkAnimation.speed(partialTick), 0, 1) : 0;
+                    float turn = Mth.clamp(Mth.wrapDegrees(yaw - lastYaw) / (240 * dt), -1, 1);
+                    float look = Mth.clamp((pitch - lastPitch) / (240 * dt), -1, 1);
+                    side.step(0.75f * walk * Mth.sin(stride) - 0.35f * turn, dt);
+                    fore.step(0.6f * walk * Mth.cos(2 * stride) - 0.35f * look, dt);
+                }
+                lastYaw = yaw;
+                lastPitch = pitch;
+            }
+            float amount = Mth.sqrt(side.position * side.position + fore.position * fore.position);
+            if (amount < 0.001f) return TrayRenderer.Sway.NONE;
+            float x = side.position / Math.max(1, amount);
+            float z = fore.position / Math.max(1, amount);
+            return new TrayRenderer.Sway(x * MAX_DISH_SLIDE, z * MAX_DISH_SLIDE, z * MAX_DISH_TILT, -x * MAX_DISH_TILT);
+        }
+    }
+
+    private static class Spring {
+        private static final float RATE = 15;
+        private float position, velocity;
+
+        void reset() {
+            position = velocity = 0;
+        }
+
+        void step(float target, float dt) {
+            // Critically damped spring integrated over the frame, independent of frame rate.
+            float error = position - target;
+            float decay = (float) Math.exp(-RATE * dt);
+            float travel = (velocity + RATE * error) * dt;
+            position = target + (error + travel) * decay;
+            velocity = (velocity - RATE * travel) * decay;
+        }
     }
 
     private static void drawFirstPersonArm(PlayerRenderer renderer, LocalPlayer player, PoseStack pose,
@@ -259,7 +325,8 @@ public final class TrayCarryRenderer {
             pose.mulPose(Axis.ZP.rotationDegrees(180));
             pose.scale(THIRD_PERSON_SCALE, THIRD_PERSON_SCALE, THIRD_PERSON_SCALE);
             pose.translate(-0.5, 0, -0.5);
-            TrayRenderer.drawItem(tray, pose, buffers, light, OverlayTexture.NO_OVERLAY, true);
+            TrayRenderer.drawItem(tray, pose, buffers, light, OverlayTexture.NO_OVERLAY, true,
+                    dishSway(player, partialTick));
             pose.popPose();
         }
 

@@ -78,6 +78,7 @@ public class ClientSetup {
         ComputerCamera.register();
         if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) {
             WipingBehavior.register();
+            TrayDiegesis.register();
         }
     }
 
