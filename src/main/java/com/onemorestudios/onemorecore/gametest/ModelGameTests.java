@@ -84,6 +84,22 @@ public final class ModelGameTests {
         helper.succeed();
     }
 
+    /** A table number card off the middle of its block stays there through a save (the save's own x and z are the block position). */
+    @GameTest(template = "empty")
+    public static void tableNumberOffsetSurvivesSave(GameTestHelper helper) throws ReflectiveOperationException {
+        helper.setBlock(POS, OneMoreCore.TABLE_NUMBER_BLOCK.get());
+        var be = (com.onemorestudios.onemorecore.TableNumberBlockEntity) helper.getBlockEntity(POS);
+        var set = com.onemorestudios.onemorecore.TableNumberBlockEntity.class.getDeclaredMethod("setOffset", double.class, double.class);
+        set.setAccessible(true);
+        set.invoke(be, 0.375, -0.25);
+        var registries = helper.getLevel().registryAccess();
+        var saved = be.saveWithFullMetadata(registries);
+        var loaded = (com.onemorestudios.onemorecore.TableNumberBlockEntity) net.minecraft.world.level.block.entity.BlockEntity
+                .loadStatic(be.getBlockPos(), be.getBlockState(), saved, registries);
+        helper.assertTrue(loaded != null && loaded.offsetX() == 0.375f && loaded.offsetZ() == -0.25f, "offset after a save: " + (loaded == null ? null : loaded.offsetX() + "," + loaded.offsetZ()));
+        helper.succeed();
+    }
+
     /** The rack holds the trays players put in, at most six; an empty rack gives none, and taking one leaves the others. */
     @GameTest(template = "empty")
     public static void rackHoldsTheTraysPutIn(GameTestHelper helper) {
