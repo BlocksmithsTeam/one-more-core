@@ -54,16 +54,17 @@ public class TableNumberBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putString("text", text);
-        tag.putFloat("x", offsetX);
-        tag.putFloat("z", offsetZ);
+        // Not "x" and "z": the block entity's save puts its block position under those names over them.
+        tag.putFloat("offset_x", offsetX);
+        tag.putFloat("offset_z", offsetZ);
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         text = TableCards.clean(tag.getString("text"));
-        offsetX = grid(tag.getFloat("x"));
-        offsetZ = grid(tag.getFloat("z"));
+        offsetX = grid(tag.getFloat("offset_x"));
+        offsetZ = grid(tag.getFloat("offset_z"));
     }
 
     @Override
