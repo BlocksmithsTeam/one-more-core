@@ -32,7 +32,7 @@ change how one of them works, change its lines here in the same commit.
 - **Stream chat**: the computer's Stream app sets `chatPlatform`, `chatChannel`, `chatCommand` (operators only) and connects
   again at once (`SkinPool.configure`). Mods > One More Core > Config shows every option.
 - **Open sign**: chalkboard on a floor, Art Deco blade on a wall, plaque under a ceiling (`OpenSignRenderer`, models from
-  `art/open_sign_choice.bbmodel`).
+  `art/models/open_sign.bbmodel`).
 - **Menu book**: the list page is a printed menu (a heading per kind, a line per dish with dots to the price; `RecipeBook.MenuRows`).
 - **Windows**: the mod's windows use `client/Ui` (see-through black panel, letterbox bars, pill buttons). New windows use it too.
 

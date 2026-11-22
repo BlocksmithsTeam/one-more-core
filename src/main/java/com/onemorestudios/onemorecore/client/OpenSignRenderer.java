@@ -29,7 +29,7 @@ import net.neoforged.neoforge.client.event.ModelEvent;
 import net.neoforged.neoforge.client.model.data.ModelData;
 
 /**
- * Draws the open sign (models in art/open_sign_choice.bbmodel, made in Blockbench): on a floor a chalkboard that turns half
+ * Draws the open sign (models in art/models/open_sign.bbmodel, made in Blockbench): on a floor a chalkboard that turns half
  * round when the restaurant opens or closes and shows the new word from the moment it is edge-on; on a wall an Art Deco blade
  * whose word lights up; under a ceiling a plaque on a rope that turns.
  */
