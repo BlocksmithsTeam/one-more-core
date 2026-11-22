@@ -9,7 +9,6 @@ import com.pockyl.diegesis.api.client.DiegesisClient;
 import com.pockyl.diegesis.api.client.StationBehavior;
 import com.pockyl.diegesis.api.client.StationView;
 
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
@@ -44,12 +43,10 @@ final class ScreenStationBehavior implements StationBehavior {
         int side = view.facing() == state.getValue(MenuBoardBlock.FACING) ? 0 : Math.min(1, ScreenPicture.sides(anchorState) - 1);
         ScreenPicture picture = ScreenPicture.of(g.anchor(), anchorState, g.rect(), side);
         Vec3 middle = picture.world(picture.width() / 2, picture.height() / 2);
-        // The scene's frame: x along the facing's clockwise turn, z away from the camera's side, origin the block's corner.
-        Direction f = view.facing(), cw = f.getClockWise();
-        Vec3 local = middle.subtract(view.pos().getX() + 0.5, view.pos().getY(), view.pos().getZ() + 0.5).scale(16);
-        float sx = (float) (local.x * cw.getStepX() + local.z * cw.getStepZ()) + 8;
-        float sz = (float) -(local.x * f.getStepX() + local.z * f.getStepZ()) + 8;
-        float sy = (float) local.y;
+        // The scene's coordinates of the middle, from the station's own map (its axes are orthogonal).
+        Vec3 o = view.toWorld(0, 0, 0), ex = view.toWorld(1, 0, 0).subtract(o), ey = view.toWorld(0, 1, 0).subtract(o), ez = view.toWorld(0, 0, 1).subtract(o);
+        Vec3 p = middle.subtract(o);
+        float sx = (float) (p.dot(ex) / ex.lengthSqr()), sy = (float) (p.dot(ey) / ey.lengthSqr()), sz = (float) (p.dot(ez) / ez.lengthSqr());
         // Far enough for the whole picture (canvas units are tenths of a pixel), a little margin.
         float halfH = picture.height() / 20, halfW = picture.width() / 20;
         float distance = Math.max(halfH / HALF_FOV_TAN, halfW / (HALF_FOV_TAN * ASPECT)) * 1.15f + 2;
