@@ -36,8 +36,11 @@ public record ScreenClick(BlockPos pos, UUID orderId, float x, float y) implemen
         ScreenRect rect = group.rect();
         float unit = ScreenRect.unit(ScreenRect.of(state), r.screens.getOrDefault(click.pos, Restaurant.SCREEN_OFF));
         if (rect.cardSlot(unit, click.x, click.y) < 0) return;
-        Vec3 point = rect.cardPoint(click.pos, state, click.x, click.y);
         Vec3 eye = player.getEyePosition();
+        // A billboard shows its picture on both sides: the click counts on the side the player sees.
+        if (state.getBlock() instanceof BillboardBlock && !rect.faces(state, eye.subtract(rect.cardPoint(click.pos, state, click.x, click.y))))
+            state = ScreenRect.back(state);
+        Vec3 point = rect.cardPoint(click.pos, state, click.x, click.y);
         if (eye.distanceToSqr(point) > REACH * REACH || !rect.faces(state, eye.subtract(point))
                 || !ScreenRect.visible(level, player, group.members(), eye, point)) return;
         OrderBoardBlock.giveTicket(level, player, click.pos, OrderBoardBlock.ticketsAt(level, click.pos), click.orderId);

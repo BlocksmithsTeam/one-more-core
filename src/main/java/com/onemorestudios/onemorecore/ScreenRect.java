@@ -19,19 +19,22 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 /**
  * Where the picture of a television is, in the pixels of its model when the screen faces south (+z): the rectangle
  * x0..x1, y0..y1 on the plane z. flip: the block's facing is the back of the screen (the screen faces the other way).
- * The mod's own screens use the Yuushya wall TV model; other mods' televisions come from the config (screenBlocks).
+ * The mod's own screens use their own models; other mods' televisions come from the config (screenBlocks).
  */
 public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolean flip) {
-    /** The mod's TV: the Yuushya wall TV made thin and 3 x 2 blocks (x -16..32, y 0..32), its picture inside the bezel. */
-    public static final ScreenRect OWN = new ScreenRect(-14.8f, 1.4545f, 30.8f, 30.5455f, 1.0f, false);
-    /** The Monitor: the same, one block. */
+    /** The Order Screen: a kitchen display 3 x 2 blocks (x -16..32, y 0..32), its picture inside the bezel (art/order_screen.py). */
+    public static final ScreenRect OWN = new ScreenRect(-15f, 6f, 31f, 30f, 1.0f, false);
+    /** The Menu Screen: the billboard (1 x 2 blocks), its picture inside the frame; the back shows it too (turned half round). */
+    public static final ScreenRect BILLBOARD = new ScreenRect(1f, 8f, 15f, 30f, 9.0f, false);
+    /** The Monitor: the Yuushya wall TV made thin, one block. */
     public static final ScreenRect MONITOR = new ScreenRect(0.4f, 0.7273f, 15.6f, 15.2727f, 1.0f, false);
     /** The bottom back edge of the mod's own screens, model pixels: a tilted screen turns about it, its top coming out. */
     static final float PIVOT_Y = 0, PIVOT_Z = 0;
 
     /** The rectangle of a block, or null when it is no screen. */
     public static ScreenRect of(BlockState state) {
-        if (state.is(OneMoreCore.MENU_BOARD.get()) || state.is(OneMoreCore.ORDER_BOARD.get())) return OWN;
+        if (state.is(OneMoreCore.MENU_BOARD.get())) return BILLBOARD;
+        if (state.is(OneMoreCore.ORDER_BOARD.get())) return OWN;
         if (state.is(OneMoreCore.MONITOR.get())) return MONITOR;
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
         var key = net.minecraft.resources.ResourceLocation.parse(id);
@@ -94,6 +97,11 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
     /** The world point of a card click in canvas units (x right, y down). */
     Vec3 cardPoint(BlockPos pos, BlockState state, float x, float y) {
         return world(pos, state, x0 + x / 10, y1 - y / 10, z);
+    }
+
+    /** The back of a billboard as a screen of its own: the block state turned half round (its model is the same both ways). */
+    public static BlockState back(BlockState state) {
+        return state.setValue(BlockStateProperties.HORIZONTAL_FACING, state.getValue(BlockStateProperties.HORIZONTAL_FACING).getOpposite());
     }
 
     boolean faces(BlockState state, Vec3 towardViewer) {

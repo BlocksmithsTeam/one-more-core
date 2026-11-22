@@ -66,6 +66,20 @@ public class Restaurants extends SavedData {
 
     public static final int COMPUTER_RANGE = 32;
 
+    /** The restaurant with an area nearest to the position, at most range blocks from its edge on each axis, or null. */
+    public Restaurant nearArea(BlockPos pos, int range) {
+        Restaurant best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (Restaurant r : bySign.values()) {
+            if (r.area == null || !r.area.inflatedBy(range).isInside(pos)) continue;
+            long dx = Math.max(0, Math.max(r.area.minX() - pos.getX(), pos.getX() - r.area.maxX())),
+                    dy = Math.max(0, Math.max(r.area.minY() - pos.getY(), pos.getY() - r.area.maxY())),
+                    dz = Math.max(0, Math.max(r.area.minZ() - pos.getZ(), pos.getZ() - r.area.maxZ()));
+            if (dx + dy + dz < bestDistance) { bestDistance = dx + dy + dz; best = r; }
+        }
+        return best;
+    }
+
     /**
      * Sets the area of the restaurant if it is allowed, and returns the lang key suffix of the result (onemorecore.tool.*).
      * The area must hold the sign, must not be larger than maxArea in each axis and must not overlap another area.
