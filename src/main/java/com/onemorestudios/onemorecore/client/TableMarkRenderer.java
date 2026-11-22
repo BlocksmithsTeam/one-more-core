@@ -128,7 +128,8 @@ final class TableMarkRenderer {
         pose.translate(-cam.x, -cam.y, -cam.z);
         // The splits of this table and its neighbours, on the table tops.
         TableCuts cuts = TableCuts.client();
-        float t = 0.02f;
+        // One pixel wide, on the edge.
+        float t = PIXEL / 2;
         for (BlockPos p : BlockPos.betweenClosed(at.offset(-8, 0, -8), at.offset(8, 0, 8))) {
             for (Direction d : new Direction[] {Direction.EAST, Direction.SOUTH}) {
                 if (!cuts.cut(p, d)) continue;
@@ -161,11 +162,17 @@ final class TableMarkRenderer {
         buffers.endBatch();
     }
 
-    /** White corner marks of a square (half size h) on a face plane around c: an L of a third of the side at each corner. */
+    /** One model pixel (block units): the marks are drawn in whole pixels, like Minecraft textures. */
+    private static final float PIXEL = 1 / 16f;
+
+    /**
+     * White corner marks of a square (half size h) on a face plane around c: at each corner an L of two pixels by one pixel,
+     * inside the square.
+     */
     private static void corners(PoseStack pose, MultiBufferSource buffers, Vec3 c, Direction face, float h) {
         // Two axes across the face.
         Direction.Axis[] across = java.util.Arrays.stream(Direction.Axis.values()).filter(a -> a != face.getAxis()).toArray(Direction.Axis[]::new);
-        float len = h * 2 / 3, w = 1 / 64f;
+        float len = 2 * PIXEL, w = PIXEL;
         for (int su = -1; su <= 1; su += 2) {
             for (int sv = -1; sv <= 1; sv += 2) {
                 // Along u, then along v, from the corner inwards.
@@ -175,8 +182,8 @@ final class TableMarkRenderer {
                     int sa = k == 0 ? su : sv, so = k == 0 ? sv : su;
                     double cornerA = sa * h, cornerO = so * h;
                     set(lo, along, Math.min(cornerA, cornerA - sa * len)); set(hi, along, Math.max(cornerA, cornerA - sa * len));
-                    set(lo, other, cornerO - w); set(hi, other, cornerO + w);
-                    set(lo, face.getAxis(), -w / 2); set(hi, face.getAxis(), w / 2);
+                    set(lo, other, Math.min(cornerO, cornerO - so * w)); set(hi, other, Math.max(cornerO, cornerO - so * w));
+                    set(lo, face.getAxis(), -1 / 256.0); set(hi, face.getAxis(), 1 / 256.0);
                     SelectionBox.bar(pose, buffers, 0xFFFFFFFF, (float) lo[0], (float) lo[1], (float) lo[2], (float) hi[0], (float) hi[1], (float) hi[2]);
                 }
             }
