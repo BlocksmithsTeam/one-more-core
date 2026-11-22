@@ -322,6 +322,7 @@ public final class ScreenPainter {
             float ns = 0.9f * u;
             c.text(c.fit(none, c.w - 8 * u, ns), Math.max(4 * u, (c.w - c.width(none, ns)) / 2), (headH + c.h) / 2 - 4 * u, ns, 0xFF8A919C);
         }
+        c.rect(0, bottom, c.w, c.h - bottom, MENU_BG);
         // The header goes over the scrolled rows.
         header(c, Component.translatable("onemorecore.screen.menu").getString(), -1, 0xFFB71C1C, YELLOW, YELLOW);
         dots(c, shown, pages, YELLOW, 0x44FFFFFF);
@@ -409,6 +410,8 @@ public final class ScreenPainter {
             float ns = 0.95f * u;
             c.text(c.fit(none, c.w - 8 * u, ns), Math.max(4 * u, (c.w - c.width(none, ns)) / 2), (top + bottom) / 2 - 4 * u, ns, 0xFF8A96A6);
         }
+        // Cards scrolled past the bottom of the area end at its edge.
+        c.rect(0, bottom, c.w, c.h - bottom, KDS_BG);
         if (layout.summaryW() > 0) summary(c, tickets, layout);
         header(c, Component.translatable("onemorecore.screen.orders").getString(), tickets.size(), KDS_HEAD, BLUE, 0xFFFFFFFF);
         if (!c.scrolling) dots(c, page, layout.pages(), 0xFFFFFFFF, 0x44FFFFFF);
