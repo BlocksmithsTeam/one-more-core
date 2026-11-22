@@ -87,7 +87,9 @@ public class OneMoreCore {
     public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<String>> LABEL =
             COMPONENTS.registerComponentType("table_label", b -> b.persistent(com.mojang.serialization.Codec.STRING).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.stringUtf8(16)));
     /** A table number card: put it on a table and type its text. */
-    public static final DeferredItem<Item> TABLE_NUMBER = ITEMS.registerSimpleItem("table_number", new Item.Properties().stacksTo(16));
+    public static final DeferredBlock<TableNumberBlock> TABLE_NUMBER_BLOCK = BLOCKS.register("table_number",
+            () -> new TableNumberBlock(BlockBehaviour.Properties.of().strength(0.2f).noOcclusion().sound(SoundType.WOOD).pushReaction(PushReaction.DESTROY)));
+    public static final DeferredItem<BlockItem> TABLE_NUMBER = ITEMS.registerSimpleBlockItem(TABLE_NUMBER_BLOCK, new Item.Properties().stacksTo(16));
     public static final DeferredBlock<TrayBlock> TRAY = BLOCKS.register("tray", () -> new TrayBlock(trayProperties()));
     public static final DeferredItem<TrayItem> TRAY_ITEM = ITEMS.register("tray", () -> new TrayItem(TRAY.get(), new Item.Properties().stacksTo(1)));
     public static final DeferredBlock<TrayBlock> IRON_TRAY = BLOCKS.register("iron_tray", () -> new TrayBlock(trayProperties()));
@@ -117,6 +119,8 @@ public class OneMoreCore {
             () -> BlockEntityType.Builder.of(TrayBlockEntity::new, TRAY.get(), IRON_TRAY.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OrderBoardBlockEntity>> ORDER_BOARD_ENTITY = BLOCK_ENTITIES.register("order_board",
             () -> BlockEntityType.Builder.of(OrderBoardBlockEntity::new, ORDER_BOARD.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TableNumberBlockEntity>> TABLE_NUMBER_ENTITY = BLOCK_ENTITIES.register("table_number",
+            () -> BlockEntityType.Builder.of(TableNumberBlockEntity::new, TABLE_NUMBER_BLOCK.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBookBlockEntity>> MENU_BOOK_ENTITY = BLOCK_ENTITIES.register("menu_book",
             () -> BlockEntityType.Builder.of(MenuBookBlockEntity::new, MENU_BOOK.get()).build(null));
     public static final DeferredHolder<EntityType<?>, EntityType<Customer>> CUSTOMER = ENTITIES.register("customer",
@@ -232,14 +236,33 @@ public class OneMoreCore {
             event.setCancellationResult(InteractionResult.SUCCESS);
             return;
         }
-        if (TableCards.onUse(event) || ScreenSettings.onUse(event)) return;
+        if (ScreenSettings.onUse(event)) return;
         ItemStack held = event.getItemStack();
-        // Sneak-click with an empty hand on a table of a closed restaurant turns the table off or on (like PlateUp).
+        // A Table Number goes on a table like a block, also on tables of other mods that take items on a click (Kaleidoscope).
+        if (held.is(TABLE_NUMBER.get()) && event.getLevel().getBlockState(event.getPos()).is(SURFACES)
+                && event.getFace() == net.minecraft.core.Direction.UP) {
+            event.setUseBlock(net.neoforged.neoforge.common.util.TriState.FALSE);
+            return;
+        }
+        // Sneak-click with an empty hand on a table of a closed restaurant: near the edge to another table block, splits the two
+        // tables there or joins them again (like Create's mechanical crafters); elsewhere turns the table off or on (like PlateUp).
         if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND && event.getEntity().isShiftKeyDown()
                 && event.getLevel().getBlockState(event.getPos()).is(SURFACES)) {
             if (event.getLevel() instanceof ServerLevel level) {
                 Restaurant r = Restaurants.get(level).containing(event.getPos());
-                if (r == null || r.isOpen() || !r.toggleTable(level, event.getPos())) return;
+                if (r == null || r.isOpen()) return;
+                net.minecraft.core.Direction edge = TableCuts.edge(level, event.getPos(), event.getHitVec());
+                if (edge != null) {
+                    if (!r.toggleCut(level, event.getPos(), edge)) return;
+                    boolean cut = r.cuts.cut(event.getPos(), edge);
+                    event.getEntity().displayClientMessage(Component.translatable("onemorecore.tool." + (cut ? "table_split" : "table_joined")), true);
+                    level.playSound(null, event.getPos(), cut ? net.minecraft.sounds.SoundEvents.CHAIN_BREAK : net.minecraft.sounds.SoundEvents.CHAIN_PLACE,
+                            net.minecraft.sounds.SoundSource.BLOCKS, 0.7f, 1.2f);
+                    event.setCanceled(true);
+                    event.setCancellationResult(InteractionResult.SUCCESS);
+                    return;
+                }
+                if (!r.toggleTable(level, event.getPos())) return;
                 boolean on = r.isTableOn(r.tableAt(level, event.getPos()));
                 event.getEntity().displayClientMessage(Component.translatable("onemorecore.tool." + (on ? "table_on" : "table_off")), true);
                 level.playSound(null, event.getPos(), on ? net.minecraft.sounds.SoundEvents.WOODEN_BUTTON_CLICK_ON : net.minecraft.sounds.SoundEvents.WOODEN_BUTTON_CLICK_OFF,
@@ -276,8 +299,10 @@ public class OneMoreCore {
         // Wiping: an empty main hand on a dirty surface. Vanilla sends the click again every 4 ticks while the button is down,
         // with the hit position, and checks the reach. No own packet is necessary.
         if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND) {
-            // Diegesis also posts this event to check permission before opening a station.
-            if (event.getLevel() instanceof ServerLevel && net.neoforged.fml.ModList.get().isLoaded("diegesis")
+            // With Diegesis the click opens the wiping station: on the client too, the event must stay uncancelled, because
+            // Diegesis (1.0.0-beta.15) opens stations from its own lowest-priority listener, which skips cancelled events.
+            // Diegesis also posts this event on the server to check permission before opening a station.
+            if (net.neoforged.fml.ModList.get().isLoaded("diegesis")
                     && WipingStation.opens(event.getEntity(), event.getPos(), event.getLevel().getBlockState(event.getPos()))) return;
             boolean wiped;
             if (event.getLevel() instanceof ServerLevel level) {

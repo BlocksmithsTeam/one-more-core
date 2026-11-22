@@ -43,7 +43,7 @@ public final class WipingStation implements StationLogic {
         if (Dirt.CLIENT.isEmpty() && TableItems.CLIENT.isEmpty()) return false;
         Status.Received status = Status.near(pos, true);
         BoundingBox area = status == null ? new BoundingBox(pos).inflatedBy(Config.MAX_AREA.get()) : status.status().area();
-        return Restaurant.connectedTable(player.level(), area, pos).stream()
+        return Restaurant.connectedTable(player.level(), area, pos, TableCuts.client()).stream()
                 .anyMatch(p -> Dirt.CLIENT.containsKey(p) || TableItems.CLIENT.containsKey(p));
     }
 

@@ -39,8 +39,9 @@ public record Dirt(BlockPos pos, long cells) implements CustomPacketPayload {
         return false;
     }
 
-    /** The serving surfaces that touch pos, on one level, at most 64. */
+    /** The serving surfaces of the table at pos (touching, not cut apart: TableCuts), on one level, at most 64. */
     public static java.util.Set<BlockPos> tableOf(Level level, BlockPos pos) {
+        TableCuts cuts = TableCuts.client();
         java.util.Set<BlockPos> table = new java.util.HashSet<>();
         if (!level.getBlockState(pos).is(OneMoreCore.SURFACES)) return table;
         java.util.ArrayDeque<BlockPos> todo = new java.util.ArrayDeque<>(java.util.List.of(pos.immutable()));
@@ -49,7 +50,7 @@ public record Dirt(BlockPos pos, long cells) implements CustomPacketPayload {
             BlockPos p = todo.pop();
             for (Direction dir : Direction.Plane.HORIZONTAL) {
                 BlockPos next = p.relative(dir);
-                if (level.getBlockState(next).is(OneMoreCore.SURFACES) && table.add(next)) todo.push(next);
+                if (!cuts.cut(p, dir) && level.getBlockState(next).is(OneMoreCore.SURFACES) && table.add(next)) todo.push(next);
             }
         }
         return table;

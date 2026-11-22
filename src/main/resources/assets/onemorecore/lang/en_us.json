@@ -118,6 +118,8 @@
   "onemorecore.computer.kind_set": "The kind is changed.",
   "onemorecore.tool.table_on": "Customers can use this table.",
   "onemorecore.tool.table_off": "This table is off. Customers do not use it.",
+  "onemorecore.tool.table_split": "The tables are split here: two tables.",
+  "onemorecore.tool.table_joined": "The tables are joined here: one table.",
   "onemorecore.tool.not_table": "This is not a table of the restaurant.",
   "onemorecore.free.tables": "Tables",
   "block.onemorecore.monitor": "Monitor",
@@ -209,6 +211,7 @@
   "onemorecore.book.bonus": "+%s%%",
   "onemorecore.book.combo": "Combo",
   "item.onemorecore.table_number": "Table Number",
+  "block.onemorecore.table_number": "Table Number",
   "onemorecore.card.title": "Table number",
   "onemorecore.card.no_restaurant": "Put it on a table of a restaurant"
 }
