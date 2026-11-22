@@ -128,9 +128,28 @@ public final class KitchenStations {
      * (tooltips of the dishes), and on the order screen a click on a card gives its ticket.
      */
     public static final StationType SCREEN = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "screen"))
-            .block(OneMoreCore.MENU_BOARD).block(OneMoreCore.ORDER_BOARD).block(OneMoreCore.MONITOR)
+            .block(OneMoreCore.ORDER_BOARD).block(OneMoreCore.MONITOR)
             .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown())
             .build();
+
+    /**
+     * The Screen up close, one station for each tilt (its scene looks at the glass square on): the camera goes to the side the
+     * player stands on (each side has its own close-up), and the client moves it to the middle of the picture of the screen or
+     * of its joined group, as far as the picture needs (ScreenStationBehavior).
+     */
+    public static final StationType[] SCREEN_BOARD = new StationType[3];
+    static {
+        for (int k = 0; k < 3; k++) {
+            int tilt = k;
+            SCREEN_BOARD[k] = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "screen_board_" + k))
+                    .block(OneMoreCore.MENU_BOARD)
+                    .when(state -> state.getValue(MenuBoardBlock.TILT) == tilt)
+                    .orientation(StationType.Orientation.PLAYER)
+                    .scene(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "screen_board_" + k))
+                    .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown())
+                    .build();
+        }
+    }
 
     /** The menu book up close: the open book on the table, its pages turned by clicks (client only, it shows the synced menu). */
     public static final StationType BOOK = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "menu_book"))
@@ -143,5 +162,6 @@ public final class KitchenStations {
         Diegesis.register(BOOK);
         Diegesis.register(TRAY);
         Diegesis.register(SCREEN);
+        for (StationType t : SCREEN_BOARD) Diegesis.register(t);
     }
 }

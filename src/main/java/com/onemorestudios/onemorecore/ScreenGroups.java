@@ -35,12 +35,13 @@ public final class ScreenGroups {
         ScreenRect rect = ScreenRect.of(state);
         if (rect == null) return null;
         Group alone = new Group(pos, rect, 1, 1, List.of(pos));
-        if (!(state.getBlock() instanceof MenuBoardBlock board) || !board.tilts()) return alone;
-        int stepX = board.wide() ? 3 : 1, stepY = board.wide() ? 2 : 1;
+        if (!(state.getBlock() instanceof MenuBoardBlock board)) return alone;
+        ScreenLayout layout = state.getBlock() instanceof ScreenBlock ? ScreenLayout.of(state) : null;
+        int stepX = layout != null ? layout.stepX() : board.wide() ? 3 : 1, stepY = layout != null ? layout.stepY() : board.wide() ? 2 : 1;
         Direction facing = state.getValue(MenuBoardBlock.FACING);
         // Model +x is the viewer's right: facing south (+z), +x; turned with the block.
         Direction right = facing.getCounterClockWise();
-        boolean vertical = state.getValue(MenuBoardBlock.TILT) == 0;
+        boolean vertical = state.getValue(MenuBoardBlock.TILT) == 0 && (layout == null || layout.joinsUp());
         Map<BlockPos, int[]> cells = new HashMap<>();
         ArrayDeque<BlockPos> queue = new ArrayDeque<>();
         cells.put(pos, new int[] {0, 0});
@@ -53,7 +54,8 @@ public final class ScreenGroups {
                 BlockPos q = p.relative(right, d[0] * stepX).above(d[1] * stepY);
                 if (cells.containsKey(q)) continue;
                 BlockState s = level.getBlockState(q);
-                if (s.getBlock() != state.getBlock() || s.getValue(MenuBoardBlock.FACING) != facing || !s.getValue(MenuBoardBlock.TILT).equals(state.getValue(MenuBoardBlock.TILT))) continue;
+                if (s.getBlock() != state.getBlock() || s.getValue(MenuBoardBlock.FACING) != facing || !s.getValue(MenuBoardBlock.TILT).equals(state.getValue(MenuBoardBlock.TILT))
+                        || layout != null && !ScreenBlock.sameKind(state, s)) continue;
                 if (cells.size() == 64) return alone;
                 cells.put(q, new int[] {at[0] + d[0], at[1] + d[1]});
                 queue.add(q);

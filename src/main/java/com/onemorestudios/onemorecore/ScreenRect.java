@@ -33,7 +33,7 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
 
     /** The rectangle of a block, or null when it is no screen. */
     public static ScreenRect of(BlockState state) {
-        if (state.is(OneMoreCore.MENU_BOARD.get())) return BILLBOARD;
+        if (state.getBlock() instanceof ScreenBlock) return ScreenLayout.of(state).rect();
         if (state.is(OneMoreCore.ORDER_BOARD.get())) return OWN;
         if (state.is(OneMoreCore.MONITOR.get())) return MONITOR;
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
@@ -69,14 +69,24 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
         return state.hasProperty(MenuBoardBlock.TILT) ? state.getValue(MenuBoardBlock.TILT) * 22.5f : 0;
     }
 
+    /** The edge a screen turns down about, model pixels {y, z}: the bottom back edge, or the Screen's own (ScreenLayout). */
+    public static float[] pivot(BlockState state) {
+        if (state.getBlock() instanceof ScreenBlock) {
+            ScreenLayout l = ScreenLayout.of(state);
+            return new float[] {l.pivotY(), l.pivotZ()};
+        }
+        return new float[] {PIVOT_Y, PIVOT_Z};
+    }
+
     /** The world point of model pixel (x, y, z) of a south-facing model turned to the block's state. */
     public Vec3 world(BlockPos pos, BlockState state, float x, float y, float z) {
         float tilt = tilt(state);
         if (tilt != 0) {
             // Turned down: the top comes out towards +z (the side the picture faces), so the picture looks down.
-            double a = Math.toRadians(tilt), dy = y - PIVOT_Y, dz0 = z - PIVOT_Z;
-            y = (float) (PIVOT_Y + dy * Math.cos(a) - dz0 * Math.sin(a));
-            z = (float) (PIVOT_Z + dy * Math.sin(a) + dz0 * Math.cos(a));
+            float[] pv = pivot(state);
+            double a = Math.toRadians(tilt), dy = y - pv[0], dz0 = z - pv[1];
+            y = (float) (pv[0] + dy * Math.cos(a) - dz0 * Math.sin(a));
+            z = (float) (pv[1] + dy * Math.sin(a) + dz0 * Math.cos(a));
         }
         double dx = x - 8, dz = z - 8;
         // Clockwise turns: south (+z) goes to west (-x) for 90 degrees.

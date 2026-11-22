@@ -18,7 +18,8 @@ import net.neoforged.neoforge.network.PacketDistributor;
 /**
  * What a screen shows, packed in an int: the mode (bits 0-1: off, menu, orders), the kinds of the menu (bits 2-6, one per kind
  * of MenuBoardBlockEntity order; none set: all), the size (bits 7-8: normal, small, large) and paging (bit 9 set: the first page
- * only; clear: the pages change every 6 seconds). Sneak-click a screen with an empty hand to set it.
+ * only; clear: the pages change every 6 seconds). Sneak-click a screen with an empty hand to set it. A Screen (ScreenBlock) has two
+ * sides: bits 0-9 are its front; when bit 26 is set, bits 16-25 are its back (else the back shows what the front shows).
  */
 public final class ScreenSettings {
     private ScreenSettings() {}
@@ -42,7 +43,31 @@ public final class ScreenSettings {
     public static int withMode(int v, int mode) { return pack(mode, kinds(v), size(v), autoPages(v)); }
 
     /** A value from a save or a packet, cut to the known fields. */
-    public static int valid(int v) { return pack(mode(v), kinds(v), size(v), autoPages(v)); }
+    public static int valid(int v) {
+        int front = pack(mode(v), kinds(v), size(v), autoPages(v));
+        if ((v >> 26 & 1) == 0) return front;
+        int b = v >>> 16 & 0x3FF;
+        return front | pack(mode(b), kinds(b), size(b), autoPages(b)) << 16 | 1 << 26;
+    }
+
+    /** The settings of one side (0: front, 1: back) of a screen. */
+    public static int face(int v, int side) {
+        return side == 0 || (v >> 26 & 1) == 0 ? v & 0x3FF : v >>> 16 & 0x3FF;
+    }
+
+    /** The settings with one side changed; the other side keeps what it shows. */
+    public static int withFace(int v, int side, int settings) {
+        settings &= 0x3FF;
+        int back = face(v, 1);
+        int front = side == 0 ? settings : v & 0x3FF;
+        back = side == 1 ? settings : back;
+        return front | back << 16 | 1 << 26;
+    }
+
+    /** Whether no side of the screen shows anything. */
+    public static boolean allOff(int v) {
+        return mode(face(v, 0)) == 0 && mode(face(v, 1)) == 0;
+    }
 
     /** Whether the menu shows a kind (KINDS order). */
     public static boolean showsKind(int v, String kind) {
@@ -51,35 +76,74 @@ public final class ScreenSettings {
         return k == 0 || i >= 0 && (k >> i & 1) == 1;
     }
 
-    /** Server to client: open the settings of a screen; tilt -1 when the screen cannot tilt. */
-    public record Open(BlockPos pos, int settings, int tilt) implements CustomPacketPayload {
+    /**
+     * Server to client: open the settings of a screen at the side the player looks at. settings: both sides (see the class);
+     * tilt -1 when the screen cannot tilt; landscape -1 when it cannot turn wide (else 0 or 1); sides 1 or 2.
+     */
+    public record Open(BlockPos pos, int settings, int tilt, int side, int landscape, int sides) implements CustomPacketPayload {
+        public Open(BlockPos pos, int settings, int tilt) {
+            this(pos, settings, tilt, 0, -1, 1);
+        }
+
         public static final Type<Open> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "screen_settings_open"));
-        static final StreamCodec<ByteBuf, Open> CODEC = StreamCodec.composite(BlockPos.STREAM_CODEC, Open::pos, ByteBufCodecs.VAR_INT, Open::settings,
-                ByteBufCodecs.VAR_INT, Open::tilt, Open::new);
+        static final StreamCodec<ByteBuf, Open> CODEC = StreamCodec.of((b, o) -> {
+            BlockPos.STREAM_CODEC.encode(b, o.pos);
+            net.minecraft.network.VarInt.write(b, o.settings);
+            net.minecraft.network.VarInt.write(b, o.tilt + 1);
+            b.writeByte(o.side);
+            b.writeByte(o.landscape + 1);
+            b.writeByte(o.sides);
+        }, b -> new Open(BlockPos.STREAM_CODEC.decode(b), net.minecraft.network.VarInt.read(b), net.minecraft.network.VarInt.read(b) - 1, b.readByte(), b.readByte() - 1, b.readByte()));
         public static java.util.function.Consumer<Open> handler = o -> {};
 
         @Override
         public Type<Open> type() { return TYPE; }
     }
 
-    /** Client to server: the new settings (and tilt, -1: unchanged) of a screen. */
-    public record Save(BlockPos pos, int settings, int tilt) implements CustomPacketPayload {
+    /**
+     * Client to server: new settings of one side of a screen (-1: unchanged), its tilt (-1: unchanged), landscape (-1: unchanged,
+     * 0 upright, 1 wide), or only the mode of the side (-1: unchanged; from the tabs on the picture).
+     */
+    public record Save(BlockPos pos, int settings, int tilt, int side, int landscape, int mode) implements CustomPacketPayload {
+        public Save(BlockPos pos, int settings, int tilt) {
+            this(pos, settings, tilt, 0, -1, -1);
+        }
+
         public static final Type<Save> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "screen_settings_save"));
-        static final StreamCodec<ByteBuf, Save> CODEC = StreamCodec.composite(BlockPos.STREAM_CODEC, Save::pos, ByteBufCodecs.VAR_INT, Save::settings,
-                ByteBufCodecs.VAR_INT, Save::tilt, Save::new);
+        static final StreamCodec<ByteBuf, Save> CODEC = StreamCodec.of((b, s) -> {
+            BlockPos.STREAM_CODEC.encode(b, s.pos);
+            net.minecraft.network.VarInt.write(b, s.settings + 1);
+            net.minecraft.network.VarInt.write(b, s.tilt + 1);
+            b.writeByte(s.side);
+            b.writeByte(s.landscape + 1);
+            b.writeByte(s.mode + 1);
+        }, b -> new Save(BlockPos.STREAM_CODEC.decode(b), net.minecraft.network.VarInt.read(b) - 1, net.minecraft.network.VarInt.read(b) - 1, b.readByte(), b.readByte() - 1, b.readByte() - 1));
 
         static void handle(Save s, ServerPlayer player) {
             ServerLevel level = player.serverLevel();
-            if (!level.isLoaded(s.pos) || player.distanceToSqr(Vec3.atCenterOf(s.pos)) > 10 * 10) return;
+            if (!level.isLoaded(s.pos) || player.distanceToSqr(Vec3.atCenterOf(s.pos)) > 10 * 10 || !level.mayInteract(player, s.pos)) return;
             BlockState state = level.getBlockState(s.pos);
-            if (ScreenRect.of(state) == null) return;
+            if (ScreenRect.of(state) == null || s.side < 0 || s.side >= ScreenPicture.sides(state)) return;
             Restaurant r = owner(level, s.pos);
             if (r == null) return;
             ScreenGroups.Group group = ScreenGroups.of(level, s.pos);
-            r.setScreen(group.anchor(), valid(s.settings));
-            if (s.tilt >= 0 && s.tilt <= 2 && MenuBoardBlock.tilts(state)) {
-                for (BlockPos member : group.members()) level.setBlockAndUpdate(member, level.getBlockState(member).setValue(MenuBoardBlock.TILT, s.tilt));
+            BlockPos anchor = group.anchor();
+            int now = r.screens.getOrDefault(anchor, pack(((MenuBoardBlock) state.getBlock()).defaultMode(), 0, 0, true));
+            int face = face(now, s.side);
+            if (s.settings >= 0) face = valid(s.settings) & 0x3FF;
+            if (s.mode >= 0 && s.mode <= 2) face = withMode(face, s.mode);
+            if (s.settings >= 0 || s.mode >= 0) r.setScreen(anchor, ScreenPicture.sides(state) > 1 ? withFace(now, s.side, face) : face);
+            if (s.tilt >= 0 && s.tilt <= 2 && MenuBoardBlock.canTilt(state)) {
+                for (BlockPos member : group.members()) {
+                    BlockState m = level.getBlockState(member);
+                    if (m.getBlock() instanceof MenuBoardBlock) level.setBlockAndUpdate(member, m.setValue(MenuBoardBlock.TILT, s.tilt));
+                }
+                if (state.getBlock() instanceof ScreenBlock) for (BlockPos member : group.members()) ScreenBlock.refreshAround(level, member);
             }
+            if (s.landscape >= 0 && state.getBlock() instanceof ScreenBlock)
+                for (BlockPos member : group.members())
+                    if (!ScreenBlock.setLandscape(level, member, s.landscape == 1))
+                        player.displayClientMessage(net.minecraft.network.chat.Component.translatable("onemorecore.screen.no_room"), true);
         }
 
         @Override
@@ -93,26 +157,42 @@ public final class ScreenSettings {
     static Restaurant owner(ServerLevel level, BlockPos pos) {
         Restaurant r = Restaurants.get(level).withScreen(pos);
         if (r == null) r = Restaurants.get(level).forComputer(pos);
-        if (r == null && level.getBlockState(pos).getBlock() instanceof BillboardBlock) r = Restaurants.get(level).nearArea(pos, Restaurants.COMPUTER_RANGE);
+        if (r == null && level.getBlockState(pos).getBlock() instanceof ScreenBlock) r = Restaurants.get(level).nearArea(pos, Restaurants.COMPUTER_RANGE);
         return r;
     }
 
-    /** Sneak-click with an empty hand on a screen (or a part of a TV): its settings open. True when it was a screen. */
+    /**
+     * Sneak-click with an empty hand (or a screwdriver) on a screen or its part: its settings open at the side the player looks
+     * at. A click with a screwdriver on a Screen changes that side: off, menu, orders. True when it was a screen.
+     */
     static boolean onUse(PlayerInteractEvent.RightClickBlock e) {
-        if (e.getHand() != InteractionHand.MAIN_HAND || !e.getItemStack().isEmpty() || !e.getEntity().isShiftKeyDown()) return false;
+        if (e.getHand() != InteractionHand.MAIN_HAND) return false;
+        boolean tool = e.getItemStack().is(OneMoreCore.TABLE_TOOLS);
+        if (!tool && !(e.getItemStack().isEmpty() && e.getEntity().isShiftKeyDown())) return false;
         BlockPos pos = ScreenGroups.main(e.getLevel(), e.getPos());
         ScreenGroups.Group group = ScreenGroups.of(e.getLevel(), pos);
         if (group == null) return false;
         BlockPos clicked = pos;
         pos = group.anchor();
         BlockState state = e.getLevel().getBlockState(pos);
+        if (tool && !e.getEntity().isShiftKeyDown() && !(state.getBlock() instanceof ScreenBlock)) return false;
+        int side = ScreenPicture.sideFacing(pos, state, group.rect(), e.getEntity().getEyePosition());
         if (e.getLevel() instanceof ServerLevel level && e.getEntity() instanceof ServerPlayer player) {
             Restaurant r = owner(level, pos);
             if (r == null) {
                 player.displayClientMessage(net.minecraft.network.chat.Component.translatable("onemorecore.screen.no_restaurant"), true);
             } else {
-                int v = r.screens.getOrDefault(pos, pack(state.getBlock() instanceof OrderBoardBlock ? Restaurant.SCREEN_ORDERS : Restaurant.SCREEN_MENU, 0, 0, true));
-                PacketDistributor.sendToPlayer(player, new Open(clicked, v, MenuBoardBlock.tilts(state) ? state.getValue(MenuBoardBlock.TILT) : -1));
+                int v = r.screens.getOrDefault(pos, pack(state.getBlock() instanceof MenuBoardBlock b ? b.defaultMode() : Restaurant.SCREEN_MENU, 0, 0, true));
+                if (tool && !player.isShiftKeyDown()) {
+                    // The screwdriver: the side the player looks at shows the next thing.
+                    int face = face(v, side), mode = (mode(face) + 1) % 3;
+                    r.setScreen(pos, withFace(v, side, withMode(face, mode)));
+                    player.displayClientMessage(net.minecraft.network.chat.Component.translatable("onemorecore.screen.side_" + side + "_" + mode), true);
+                    level.playSound(null, clicked, net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), net.minecraft.sounds.SoundSource.BLOCKS, 0.4f, 1.6f);
+                } else {
+                    PacketDistributor.sendToPlayer(player, new Open(clicked, v, MenuBoardBlock.canTilt(state) ? state.getValue(MenuBoardBlock.TILT) : -1, side,
+                            state.getBlock() instanceof ScreenBlock ? (state.getValue(ScreenBlock.LANDSCAPE) ? 1 : 0) : -1, ScreenPicture.sides(state)));
+                }
             }
         }
         e.setCanceled(true);

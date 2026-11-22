@@ -81,6 +81,7 @@ public class ClientSetup {
         if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) {
             WipingBehavior.register();
             TrayDiegesis.register();
+            ScreenStationBehavior.register();
         }
     }
 

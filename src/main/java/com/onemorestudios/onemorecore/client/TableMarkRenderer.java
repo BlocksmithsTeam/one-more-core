@@ -224,15 +224,38 @@ final class TableMarkRenderer {
             box.setMaxLength(TableCards.MAX * Character.charCount(Character.MAX_CODE_POINT));
             box.setFilter(text -> text.codePointCount(0, text.length()) <= TableCards.MAX);
             box.setValue(start);
+            box.setBordered(false);
+            box.setTextColor(Ui.TEXT);
+            box.setX(width / 2 - 8);
+            box.setY(height / 2 - 4);
+            box.setWidth(30);
             addRenderableWidget(box);
             setInitialFocus(box);
-            addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds(width / 2 - 40, height / 2 + 18, 80, 20).build());
+        }
+
+        private final Ui ui = new Ui();
+
+        @Override
+        public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+            Ui.backdrop(g, width, height);
+            int x = width / 2 - 60, y = height / 2 - 36;
+            Ui.panel(g, font, x, y, 120, 76, title);
+            // The card: a white field like the paper of the table card.
+            g.fill(width / 2 - 18, height / 2 - 9, width / 2 + 18, height / 2 + 9, 0xFFF4F1EA);
+            g.fill(width / 2 - 18, height / 2 + 8, width / 2 + 18, height / 2 + 9, Ui.ACCENT);
         }
 
         @Override
         public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+            box.setTextColor(0xFF1A1A1A);
             super.render(g, mouseX, mouseY, partialTick);
-            g.drawCenteredString(font, title, width / 2, height / 2 - 26, 0xFFFFFFFF);
+            ui.clear();
+            ui.pill(g, font, width / 2 - 40, height / 2 + 16, 80, 14, Component.translatable("gui.done"), true, Ui.ACCENT, mouseX, mouseY, this::onClose);
+        }
+
+        @Override
+        public boolean mouseClicked(double mx, double my, int button) {
+            return button == 0 && ui.click(mx, my) || super.mouseClicked(mx, my, button);
         }
 
         @Override

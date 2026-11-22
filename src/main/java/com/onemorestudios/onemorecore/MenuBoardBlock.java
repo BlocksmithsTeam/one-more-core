@@ -57,12 +57,17 @@ public class MenuBoardBlock extends Block implements EntityBlock {
         Direction face = context.getClickedFace();
         float pitch = context.getPlayer() == null ? 0 : context.getPlayer().getXRot();
         BlockState state = defaultBlockState().setValue(FACING, face.getAxis().isHorizontal() ? face : context.getHorizontalDirection().getOpposite())
-                .setValue(TILT, tilts() ? tiltFor(pitch) : 0);
+                .setValue(TILT, tiltFor(pitch));
         // A TV needs its whole space.
-        for (BlockPos cell : parts(context.getClickedPos(), state.getValue(FACING)))
+        return roomFor(context, state) ? state : null;
+    }
+
+    /** Whether the cells of the screen besides its own block are free. */
+    static boolean roomFor(BlockPlaceContext context, BlockState state) {
+        for (BlockPos cell : ((MenuBoardBlock) state.getBlock()).parts(context.getClickedPos(), state))
             if (context.getLevel().isOutsideBuildHeight(cell) || !context.getLevel().getWorldBorder().isWithinBounds(cell)
-                    || !context.getLevel().getBlockState(cell).canBeReplaced(context)) return null;
-        return state;
+                    || !context.getLevel().getBlockState(cell).canBeReplaced(context)) return false;
+        return true;
     }
 
     /** 3 x 2 blocks; the Monitor is one. */
@@ -71,18 +76,18 @@ public class MenuBoardBlock extends Block implements EntityBlock {
     }
 
     /** The cells this screen keeps besides its own block (ScreenPartBlock). */
-    public java.util.List<BlockPos> parts(BlockPos pos, Direction facing) {
-        return wide() ? partCells(pos, facing) : java.util.List.of();
+    public java.util.List<BlockPos> parts(BlockPos pos, BlockState state) {
+        return wide() ? partCells(pos, state.getValue(FACING)) : java.util.List.of();
     }
 
-    /** Whether the screen can be turned down (TILT) and joins others of its kind into one picture. */
-    public boolean tilts() {
+    /** Whether the screen in this state can be turned down (TILT). */
+    public boolean tilts(BlockState state) {
         return true;
     }
 
     /** Whether a block state is a screen that can be turned down. */
-    public static boolean tilts(BlockState state) {
-        return state.getBlock() instanceof MenuBoardBlock board && board.tilts();
+    public static boolean canTilt(BlockState state) {
+        return state.getBlock() instanceof MenuBoardBlock board && board.tilts(state);
     }
 
     /** What a new screen of this block shows. */
@@ -102,14 +107,14 @@ public class MenuBoardBlock extends Block implements EntityBlock {
     @Override
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, net.minecraft.world.entity.LivingEntity placer, net.minecraft.world.item.ItemStack stack) {
         if (level.isClientSide) return;
-        for (BlockPos cell : parts(pos, state.getValue(FACING))) level.setBlock(cell, ScreenPartBlock.towards(cell, pos), 3);
+        for (BlockPos cell : parts(pos, state)) level.setBlock(cell, ScreenPartBlock.towards(cell, pos), 3);
     }
 
     /** The TV goes with its parts. */
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
         if (!level.isClientSide && !newState.is(this))
-            for (BlockPos cell : parts(pos, state.getValue(FACING)))
+            for (BlockPos cell : parts(pos, state))
                 if (level.getBlockState(cell).is(OneMoreCore.SCREEN_PART.get())
                         && ScreenPartBlock.main(cell, level.getBlockState(cell)).equals(pos)) level.removeBlock(cell, false);
         super.onRemove(state, level, pos, newState, moved);

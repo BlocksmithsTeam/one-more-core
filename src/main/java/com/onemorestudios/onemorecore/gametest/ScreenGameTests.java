@@ -22,6 +22,9 @@ import com.onemorestudios.onemorecore.Restaurants;
 import com.onemorestudios.onemorecore.ScreenClick;
 import com.onemorestudios.onemorecore.ScreenGroups;
 import com.onemorestudios.onemorecore.ScreenRect;
+import com.onemorestudios.onemorecore.ScreenSettings;
+import com.onemorestudios.onemorecore.ScreenPicture;
+import com.onemorestudios.onemorecore.ScreenBlock;
 import com.onemorestudios.onemorecore.TrayBlockEntity;
 import com.pockyl.diegesis.api.Diegesis;
 import com.pockyl.diegesis.api.state.SlotRef;
@@ -59,7 +62,7 @@ import net.neoforged.neoforge.network.registration.NetworkPayloadSetup;
 public final class ScreenGameTests {
     private static final BlockPos POS = new BlockPos(1, 1, 1);
     private static final BlockPos SIGN = POS.east();
-    private static final float CARD_Y = 90;
+    private static final float CARD_Y = 60;
 
     /** CLIENT-4: a wall and excessive reach block ticket requests, and a visible overhang remains clickable. */
     @GameTest(template = "empty")
@@ -88,12 +91,12 @@ public final class ScreenGameTests {
     }
 
     /**
-     * The Menu Screen is a billboard: it keeps the block above, joins no neighbour, goes with its part, and an order card on its
-     * back (seen from the north) gives a ticket as one on its front does.
+     * The Screen on a floor: it keeps the block above, joins the screen beside it into one picture (their frames open), goes with
+     * its part, and an order card on its back (seen from the north) gives a ticket as one on its front does.
      */
     @GameTest(template = "empty")
     @SuppressWarnings("unchecked")
-    public static void billboardStandsAloneAndShowsBothSides(GameTestHelper helper) throws ReflectiveOperationException {
+    public static void screensJoinAndShowBothSides(GameTestHelper helper) throws ReflectiveOperationException {
         var restaurant = placeRestaurant(helper);
         var level = helper.getLevel();
         BlockPos pos = helper.absolutePos(POS), side = pos.west();
@@ -104,25 +107,29 @@ public final class ScreenGameTests {
             block.setPlacedBy(level, p, state, null, ItemStack.EMPTY);
         }
         helper.assertTrue(level.getBlockState(pos.above()).is(OneMoreCore.SCREEN_PART.get())
-                && ScreenGroups.main(level, pos.above()).equals(pos), "the block above is the billboard's part");
+                && ScreenGroups.main(level, pos.above()).equals(pos), "the block above is the screen's part");
         var group = ScreenGroups.of(level, pos);
-        helper.assertTrue(group.members().size() == 1 && group.rect().equals(ScreenRect.BILLBOARD), "a billboard joins no neighbour");
+        helper.assertTrue(group.members().size() == 2 && group.anchor().equals(side), "screens side by side join, the left one draws");
+        helper.assertTrue(level.getBlockState(side).getValue(ScreenBlock.CONNECT_RIGHT) && level.getBlockState(pos).getValue(ScreenBlock.CONNECT_LEFT),
+                "the frames between them open");
 
+        BlockPos anchor = group.anchor();
         method(Restaurant.class, "setScreen", BlockPos.class, int.class)
-                .invoke(restaurant, pos, com.onemorestudios.onemorecore.ScreenSettings.pack(Restaurant.SCREEN_ORDERS, 0, 0, true));
+                .invoke(restaurant, anchor, ScreenSettings.pack(Restaurant.SCREEN_ORDERS, 0, 0, true));
         addOrder(helper, restaurant, Items.BREAD.getDefaultInstance());
         UUID id = OrderBoardBlockEntity.decode(OrderBoardBlockEntity.encode((List<OrderBoardBlockEntity.Ticket>) method(Restaurant.class, "tickets").invoke(restaurant), level.registryAccess()), level.registryAccess())
                 .getFirst().orderId();
         var player = GameTestSupport.player(helper);
-        var rect = ScreenRect.BILLBOARD;
-        Vec3 back = rect.world(pos, ScreenRect.back(state), rect.x0() + 5, rect.y1() - CARD_Y / 10, rect.z());
-        // Close behind the billboard, inside the test structure.
-        player.setPos(back.x, back.y - player.getEyeHeight(), back.z - 1.2);
-        request(new ScreenClick(pos, id, 50, CARD_Y), player);
-        helper.assertValueEqual(player.getInventory().countItem(OneMoreCore.TICKET.get()), 1, "ticket from the back of the billboard");
+        var back = ScreenPicture.of(anchor, level.getBlockState(anchor), group.rect(), 1);
+        Vec3 point = back.world(50, 50);
+        // Close behind the screen, inside the test structure.
+        player.setPos(point.x, point.y - player.getEyeHeight(), point.z - 1.2);
+        request(new ScreenClick(anchor, id, 50, 50, 1, -1, -1), player);
+        helper.assertValueEqual(player.getInventory().countItem(OneMoreCore.TICKET.get()), 1, "ticket from the back of the screen");
 
         level.destroyBlock(pos.above(), false);
-        helper.assertTrue(level.isEmptyBlock(pos) && level.getBlockState(side).is(block), "breaking the part breaks only its billboard");
+        helper.assertTrue(level.isEmptyBlock(pos) && level.getBlockState(side).is(block), "breaking the part breaks only its screen");
+        helper.assertTrue(!level.getBlockState(side).getValue(ScreenBlock.CONNECT_RIGHT), "the other screen's frame closes again");
         helper.succeed();
     }
 

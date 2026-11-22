@@ -69,7 +69,7 @@ public class OneMoreCore {
             () -> new OpenSignBlock(BlockBehaviour.Properties.of().strength(1.5f).lightLevel(s -> s.getValue(OpenSignBlock.OPEN) ? 9 : 0).noOcclusion().sound(SoundType.WOOD).pushReaction(PushReaction.BLOCK)));
     public static final DeferredItem<BlockItem> OPEN_SIGN_ITEM = ITEMS.registerSimpleBlockItem(OPEN_SIGN);
     public static final DeferredBlock<MenuBoardBlock> MENU_BOARD = BLOCKS.register("menu_board",
-            () -> new BillboardBlock(BlockBehaviour.Properties.of().strength(1.5f).noOcclusion().sound(SoundType.METAL)));
+            () -> new ScreenBlock(BlockBehaviour.Properties.of().strength(1.5f).noOcclusion().sound(SoundType.METAL)));
     public static final DeferredItem<BlockItem> MENU_BOARD_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOARD);
     public static final DeferredBlock<MonitorBlock> MONITOR = BLOCKS.register("monitor",
             () -> new MonitorBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.METAL)));

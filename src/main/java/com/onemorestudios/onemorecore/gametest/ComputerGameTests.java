@@ -129,7 +129,9 @@ public final class ComputerGameTests {
     public static void freeItemsAreNotCurrency(GameTestHelper helper) throws ReflectiveOperationException {
         GameTestSupport.place(helper, SIGN, OneMoreCore.OPEN_SIGN.get(), OpenSignBlockEntity.class);
         Restaurant restaurant = Restaurants.get(helper.getLevel()).at(helper.absolutePos(SIGN));
-        helper.setBlock(COMPUTER, OneMoreCore.TRAY_RACK.get());
+        // A rack with one oak tray in it: trays are taken out, not made.
+        helper.setBlock(COMPUTER, OneMoreCore.TRAY_RACK.get().defaultBlockState()
+                .setValue(com.onemorestudios.onemorecore.TrayRackBlock.SLOTS[0], com.onemorestudios.onemorecore.TrayRackBlock.Slot.OAK));
         TestPlayer player = GameTestSupport.player(helper);
         var field = Config.class.getDeclaredField("CURRENCY");
         field.setAccessible(true);
