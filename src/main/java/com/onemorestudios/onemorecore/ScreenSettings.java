@@ -77,7 +77,7 @@ public final class ScreenSettings {
             if (r == null) return;
             ScreenGroups.Group group = ScreenGroups.of(level, s.pos);
             r.setScreen(group.anchor(), valid(s.settings));
-            if (s.tilt >= 0 && s.tilt <= 2 && state.hasProperty(MenuBoardBlock.TILT)) {
+            if (s.tilt >= 0 && s.tilt <= 2 && MenuBoardBlock.tilts(state)) {
                 for (BlockPos member : group.members()) level.setBlockAndUpdate(member, level.getBlockState(member).setValue(MenuBoardBlock.TILT, s.tilt));
             }
         }
@@ -86,10 +86,15 @@ public final class ScreenSettings {
         public Type<Save> type() { return TYPE; }
     }
 
-    /** The restaurant of a screen: the one that knows it, else the one whose computer range holds it. */
+    /**
+     * The restaurant of a screen: the one that knows it, else the one whose computer range holds it. A billboard stands out on
+     * the street: it also joins the nearest restaurant whose area is within the computer range.
+     */
     static Restaurant owner(ServerLevel level, BlockPos pos) {
         Restaurant r = Restaurants.get(level).withScreen(pos);
-        return r != null ? r : Restaurants.get(level).forComputer(pos);
+        if (r == null) r = Restaurants.get(level).forComputer(pos);
+        if (r == null && level.getBlockState(pos).getBlock() instanceof BillboardBlock) r = Restaurants.get(level).nearArea(pos, Restaurants.COMPUTER_RANGE);
+        return r;
     }
 
     /** Sneak-click with an empty hand on a screen (or a part of a TV): its settings open. True when it was a screen. */
@@ -107,7 +112,7 @@ public final class ScreenSettings {
                 player.displayClientMessage(net.minecraft.network.chat.Component.translatable("onemorecore.screen.no_restaurant"), true);
             } else {
                 int v = r.screens.getOrDefault(pos, pack(state.getBlock() instanceof OrderBoardBlock ? Restaurant.SCREEN_ORDERS : Restaurant.SCREEN_MENU, 0, 0, true));
-                PacketDistributor.sendToPlayer(player, new Open(clicked, v, state.hasProperty(MenuBoardBlock.TILT) ? state.getValue(MenuBoardBlock.TILT) : -1));
+                PacketDistributor.sendToPlayer(player, new Open(clicked, v, MenuBoardBlock.tilts(state) ? state.getValue(MenuBoardBlock.TILT) : -1));
             }
         }
         e.setCanceled(true);

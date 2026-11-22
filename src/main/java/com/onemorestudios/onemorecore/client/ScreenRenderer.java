@@ -191,6 +191,9 @@ public final class ScreenRenderer {
                 pose.pushPose();
                 pose.translate(pos.getX() - cam.x, pos.getY() - cam.y, pos.getZ() - cam.z);
                 draw(pose, buffers, pos, state, g, e.getValue(), unit, display.lines(), display.tickets());
+                // A billboard shows the picture on its back too: the same model turned half round.
+                if (state.getBlock() instanceof com.onemorestudios.onemorecore.BillboardBlock)
+                    draw(pose, buffers, pos, ScreenRect.back(state), g, e.getValue(), unit, display.lines(), display.tickets());
                 pose.popPose();
             }
         }

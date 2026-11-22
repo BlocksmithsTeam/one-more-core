@@ -1,48 +1,48 @@
 {
  "variants": {
   "facing=north,tilt=0": {
-   "model": "onemorecore:block/screen",
+   "model": "onemorecore:block/billboard",
    "y": 180
   },
   "facing=north,tilt=1": {
-   "model": "onemorecore:block/screen_tilt1",
+   "model": "onemorecore:block/billboard",
    "y": 180
   },
   "facing=north,tilt=2": {
-   "model": "onemorecore:block/screen_tilt2",
+   "model": "onemorecore:block/billboard",
    "y": 180
   },
   "facing=east,tilt=0": {
-   "model": "onemorecore:block/screen",
+   "model": "onemorecore:block/billboard",
    "y": 270
   },
   "facing=east,tilt=1": {
-   "model": "onemorecore:block/screen_tilt1",
+   "model": "onemorecore:block/billboard",
    "y": 270
   },
   "facing=east,tilt=2": {
-   "model": "onemorecore:block/screen_tilt2",
+   "model": "onemorecore:block/billboard",
    "y": 270
   },
   "facing=south,tilt=0": {
-   "model": "onemorecore:block/screen"
+   "model": "onemorecore:block/billboard"
   },
   "facing=south,tilt=1": {
-   "model": "onemorecore:block/screen_tilt1"
+   "model": "onemorecore:block/billboard"
   },
   "facing=south,tilt=2": {
-   "model": "onemorecore:block/screen_tilt2"
+   "model": "onemorecore:block/billboard"
   },
   "facing=west,tilt=0": {
-   "model": "onemorecore:block/screen",
+   "model": "onemorecore:block/billboard",
    "y": 90
   },
   "facing=west,tilt=1": {
-   "model": "onemorecore:block/screen_tilt1",
+   "model": "onemorecore:block/billboard",
    "y": 90
   },
   "facing=west,tilt=2": {
-   "model": "onemorecore:block/screen_tilt2",
+   "model": "onemorecore:block/billboard",
    "y": 90
   }
  }

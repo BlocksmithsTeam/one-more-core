@@ -35,7 +35,7 @@ public final class ScreenGroups {
         ScreenRect rect = ScreenRect.of(state);
         if (rect == null) return null;
         Group alone = new Group(pos, rect, 1, 1, List.of(pos));
-        if (!(state.getBlock() instanceof MenuBoardBlock board)) return alone;
+        if (!(state.getBlock() instanceof MenuBoardBlock board) || !board.tilts()) return alone;
         int stepX = board.wide() ? 3 : 1, stepY = board.wide() ? 2 : 1;
         Direction facing = state.getValue(MenuBoardBlock.FACING);
         // Model +x is the viewer's right: facing south (+z), +x; turned with the block.
