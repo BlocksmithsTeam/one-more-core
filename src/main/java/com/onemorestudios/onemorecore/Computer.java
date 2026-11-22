@@ -67,12 +67,12 @@ public class Computer extends Block {
             new double[] {9, 0, 15, 13, 1, 16});
     public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
             TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9, SET_KIND = 10, ADD_COMBO = 11, REMOVE_COMBO = 12,
-            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17, REFRESH_MANAGER = 18, CLOSE = 19, EDIT_COMBO = 20;
+            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17, REFRESH_MANAGER = 18, CLOSE = 19, EDIT_COMBO = 20, SET_STREAM = 21;
     public static final int MAX_REQUEST_LENGTH = 1024, MAX_CART_LINES = 32, MAX_CART_COUNT = 64;
     /** How far from the computer the manager app may set a point, in blocks per axis. */
     public static final int PLACE_RANGE = 48;
     /** Bits of {@link State#apps}. */
-    public static final int APP_MENU = 1, APP_SHOP = 2, APP_MANAGER = 4, APP_UPGRADES = 8;
+    public static final int APP_MENU = 1, APP_SHOP = 2, APP_MANAGER = 4, APP_UPGRADES = 8, APP_STREAM = 16;
     /** The upgrades of the upgrades app, in order. */
     public static final List<String> UPGRADES = List.of("decor", "delivery", "bell");
 
@@ -125,7 +125,14 @@ public class Computer extends Block {
     public record State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance,
             List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message,
             Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
-            List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades) implements CustomPacketPayload {
+            List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades,
+            List<String> stream) implements CustomPacketPayload {
+        /** stream: platform, channel, command, "on" or "off", viewers in the pool; empty for the other apps. */
+        public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, List<MenuLine> menu, List<ShopLine> shop,
+                List<Component> info, Component message, Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
+                List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades) {
+            this(pos, open, found, apps, currency, balance, menu, shop, info, message, sign, area, spawn, delivery, combos, surfaces, offSurfaces, upgrades, List.of());
+        }
         public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, List<MenuLine> menu, List<ShopLine> shop,
                 List<Component> info, Component message, Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
                 List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces) {
@@ -158,12 +165,13 @@ public class Computer extends Block {
             POSITIONS.encode(b, s.surfaces);
             POSITIONS.encode(b, s.offSurfaces);
             UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).encode(b, s.upgrades);
+            ByteBufCodecs.stringUtf8(256).apply(ByteBufCodecs.list(8)).encode(b, s.stream);
         }, b -> new State(b.readBlockPos(), b.readBoolean(), b.readBoolean(), b.readVarInt(), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(),
                 MenuLine.CODEC.apply(ByteBufCodecs.list()).decode(b), ShopLine.CODEC.apply(ByteBufCodecs.list()).decode(b),
                 ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(b), ComponentSerialization.STREAM_CODEC.decode(b),
                 OPTIONAL_POS.decode(b), INTS.decode(b), OPTIONAL_POS.decode(b), OPTIONAL_POS.decode(b),
                 ComboLine.CODEC.apply(ByteBufCodecs.list()).decode(b), POSITIONS.decode(b), POSITIONS.decode(b),
-                UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).decode(b)));
+                UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).decode(b), ByteBufCodecs.stringUtf8(256).apply(ByteBufCodecs.list(8)).decode(b)));
 
         @Override
         public Type<State> type() { return TYPE; }
@@ -306,6 +314,13 @@ public class Computer extends Block {
             else if (Restaurant.container(level, a) == null) key = "not_container";
             else { r.setDelivery(a); key = "delivery_set"; }
             message = Component.translatable("onemorecore.tool." + key, key.equals("too_big") ? Config.MAX_AREA.get() : PLACE_RANGE);
+        } else if (request.action == SET_STREAM) {
+            // The chat reader is the server's: only an operator, or the owner of a single player world, may change it.
+            if (!Config.APP_STREAM.get() || !(player instanceof ServerPlayer sp)) return null;
+            String[] f = request.id.split("\n", -1);
+            if (f.length != 3) return null;
+            boolean allowed = sp.hasPermissions(2) || sp.server.isSingleplayerOwner(sp.getGameProfile());
+            message = Component.translatable("onemorecore.computer." + (allowed ? SkinPool.configure(sp.server, f[0], f[1], f[2]) : "stream.not_allowed"));
         } else if (request.action == BUY_UPGRADE) {
             if (r == null || !Config.APP_UPGRADES.get()) return null;
             Restaurant.Upgrade result = r.buyUpgrade(request.id);
@@ -494,10 +509,16 @@ public class Computer extends Block {
         return out;
     }
 
+    /** The stream chat settings and state, for the Stream app. */
+    private static List<String> stream() {
+        return List.of(Config.CHAT_PLATFORM.get(), Config.CHAT_CHANNEL.get(), Config.CHAT_COMMAND.get(), SkinPool.connected() ? "on" : "off",
+                String.valueOf(SkinPool.viewers()));
+    }
+
     /** Everything the screen shows. The menu and shop files exist on the server only. */
     private static State state(ServerLevel level, BlockPos pos, Restaurant r, boolean open, boolean manager, Component message) {
         int apps = (Config.APP_MENU.get() ? APP_MENU : 0) | (Config.APP_SHOP.get() ? APP_SHOP : 0) | (Config.APP_MANAGER.get() ? APP_MANAGER : 0)
-                | (Config.APP_UPGRADES.get() ? APP_UPGRADES : 0);
+                | (Config.APP_UPGRADES.get() ? APP_UPGRADES : 0) | (Config.APP_STREAM.get() ? APP_STREAM : 0);
         ItemStack currency = new ItemStack(Config.currency());
         if (r == null) return new State(pos, open, false, apps, currency, 0, List.of(), List.of(), List.of(), message,
                 Optional.empty(), List.of(), Optional.empty(), Optional.empty());
@@ -541,6 +562,7 @@ public class Computer extends Block {
                     var costs = Restaurant.upgradeCosts(id);
                     int lv = r.upgrade(id);
                     return new UpgradeLine(id, lv, costs.size(), lv < costs.size() ? costs.get(lv) : 0);
-                }).toList());
+                }).toList(),
+                stream());
     }
 }

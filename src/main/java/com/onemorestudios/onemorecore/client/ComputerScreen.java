@@ -28,8 +28,10 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * picker that adds any food. Shop: a searchable catalog. Manager: what is set, and the free camera that sets it.
  */
 public class ComputerScreen extends Screen {
-    private static final int[] APPS = {Computer.APP_MENU, Computer.APP_SHOP, Computer.APP_MANAGER, Computer.APP_UPGRADES};
-    private static final String[] KEYS = {"menu", "shop", "manager", "upgrades"};
+    private static final int[] APPS = {Computer.APP_MENU, Computer.APP_SHOP, Computer.APP_MANAGER, Computer.APP_UPGRADES, Computer.APP_STREAM};
+    private static final String[] KEYS = {"menu", "shop", "manager", "upgrades", "stream"};
+    private static final String[] PLATFORMS = {"none", "twitch", "kick", "youtube"};
+    private static final int[] PLATFORM_COLORS = {0xFF5A6270, 0xFF9146FF, 0xFF53FC18, 0xFFFF0033};
     private static final int WHITE = 0xFFFFFFFF, GREY = 0xFF9AA3AD, WINDOW = 0xFF1B1F25, TITLE_BAR = 0xFF262B33, CARD = 0xFF262C34,
             CARD_HOVER = 0xFF2E3540, PICTURE = 0xFF323A45, OFF = 0xFF3A414B, GREEN = 0xFF3FB55A, GREEN_HOVER = 0xFF52C96C,
             BLUE = 0xFF3D7FE0, BLUE_HOVER = 0xFF5A95F0, RED = 0xFFD9443B, YELLOW = 0xFFFFD866;
@@ -63,6 +65,9 @@ public class ComputerScreen extends Screen {
     private Component message = Component.empty();
     private long messageTime;
     private EditBox search;
+    /** The Stream app: the channel and the chat command, and the platform picked (null: as the server has it). */
+    private EditBox channel, command;
+    private String platform;
     /** Every food and drink item of the game, for the picker. */
     private List<ItemStack> foods;
 
@@ -121,6 +126,7 @@ public class ComputerScreen extends Screen {
         filter = "all";
         scroll = 0;
         if (search != null) search.setValue("");
+        platform = null;
         send(which == Computer.APP_MANAGER ? Computer.REFRESH_MANAGER : Computer.REFRESH, "");
     }
 
@@ -145,6 +151,8 @@ public class ComputerScreen extends Screen {
         search.setHint(Component.translatable("onemorecore.computer.search").withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
         search.setResponder(s -> { scroll = 0; hits.clear(); });
         addWidget(search);
+        channel = streamBox(channel, 64);
+        command = streamBox(command, 16);
     }
 
     private boolean hasSearch() {
@@ -192,6 +200,8 @@ public class ComputerScreen extends Screen {
             g.drawString(font, name, x + 18 - font.width(name) / 2, y + 35, on ? WHITE : GREY, true);
             if (on) hits.add(new Hit(x, y, 36, 44, () -> open(bit)));
             y += 48;
+            // A column that reaches the task bar continues to the right.
+            if (y + 44 > dy + dh - TASKBAR) { y = dy + 6; x += 40; }
         }
     }
 
@@ -212,7 +222,7 @@ public class ComputerScreen extends Screen {
     }
 
     private static int index(int app) {
-        return app == Computer.APP_MENU ? 0 : app == Computer.APP_SHOP ? 1 : app == Computer.APP_MANAGER ? 2 : 3;
+        return app == Computer.APP_MENU ? 0 : app == Computer.APP_SHOP ? 1 : app == Computer.APP_MANAGER ? 2 : app == Computer.APP_UPGRADES ? 3 : 4;
     }
 
     /** A rectangle with its corners cut by one pixel. */
@@ -292,6 +302,7 @@ public class ComputerScreen extends Screen {
                     : filter.equals("combos") ? drawCombos(g, mouseX, mouseY) : drawMenu(g, mouseX, mouseY);
             case Computer.APP_SHOP -> drawShop(g, mouseX, mouseY);
             case Computer.APP_UPGRADES -> { drawUpgrades(g, mouseX, mouseY); yield ItemStack.EMPTY; }
+            case Computer.APP_STREAM -> { drawStream(g, mouseX, mouseY, partialTick); yield ItemStack.EMPTY; }
             default -> { drawManager(g, mouseX, mouseY); yield ItemStack.EMPTY; }
         };
         g.disableScissor();
@@ -839,6 +850,81 @@ public class ComputerScreen extends Screen {
         }
     }
 
+    private EditBox streamBox(EditBox old, int max) {
+        EditBox box = new EditBox(font, 0, 0, 100, 10, Component.empty());
+        box.setBordered(false);
+        box.setMaxLength(max);
+        if (old != null) box.setValue(old.getValue());
+        addWidget(box);
+        return box;
+    }
+
+    private List<EditBox> streamBoxes() {
+        return app == Computer.APP_STREAM ? List.of(channel, command) : List.of();
+    }
+
+    /**
+     * The Stream app: the platform whose chat viewers become customers, the channel, the chat command, whether the reader
+     * is connected and how many viewers wait in the pool. Save sets the server's config and connects again.
+     */
+    private void drawStream(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        List<String> st = state.stream();
+        if (st.size() < 5) return;
+        if (platform == null) {
+            platform = st.get(0);
+            channel.setValue(st.get(1));
+            command.setValue(st.get(2));
+        }
+        int y = cy + 2;
+        g.drawString(font, text("stream.platform"), cx + 2, y + 2, GREY, false);
+        y += 13;
+        int bw = (cw - 3 * 4) / 4;
+        for (int i = 0; i < PLATFORMS.length; i++) {
+            String p = PLATFORMS[i];
+            boolean on = p.equals(platform);
+            int bx = cx + i * (bw + 4);
+            boolean over = inside(mouseX, mouseY, bx, y, bw, 18);
+            rounded(g, bx, y, bw, 18, on ? PLATFORM_COLORS[i] : over ? CARD_HOVER : CARD);
+            if (!on) g.fill(bx + 3, y + 7, bx + 7, y + 11, PLATFORM_COLORS[i]);
+            Component label = text("stream." + p);
+            g.drawString(font, label, bx + (bw - font.width(label)) / 2 + (on ? 0 : 3), y + 5, on && i == 2 ? 0xFF101010 : WHITE, false);
+            clipHit(bx, y, bw, 18, () -> platform = p);
+        }
+        y += 24;
+        boolean needsChannel = !platform.equals("none");
+        for (int k = 0; k < 2; k++) {
+            EditBox box = k == 0 ? channel : command;
+            g.drawString(font, text(k == 0 ? "stream.channel." + platform : "stream.command"), cx + 2, y, GREY, false);
+            y += 11;
+            boolean active = k == 1 || needsChannel;
+            rounded(g, cx, y, cw, 16, box.isFocused() ? 0xFF0B0E12 : 0xFF11151A);
+            if (box.isFocused()) g.fill(cx + 1, y + 15, cx + cw - 1, y + 16, BLUE);
+            box.setX(cx + 6);
+            box.setY(y + 4);
+            box.setWidth(cw - 12);
+            box.setEditable(active);
+            box.setTextColor(active ? WHITE : GREY);
+            box.render(g, mouseX, mouseY, partialTick);
+            y += 22;
+        }
+        // The state of the reader.
+        boolean on = st.get(3).equals("on");
+        rounded(g, cx, y, cw, 20, CARD);
+        rounded(g, cx + 6, y + 7, 6, 6, on ? GREEN : st.get(0).equals("none") ? OFF : RED);
+        Component status = on ? text("stream.status_on", st.get(0), st.get(1), st.get(4)) : text("stream.status_off");
+        g.drawString(font, font.plainSubstrByWidth(status.getString(), cw - 24), cx + 18, y + 6, on ? WHITE : GREY, false);
+        y += 26;
+        Component save = text("stream.save");
+        button(g, cx, y, cw, 18, save, BLUE, BLUE_HOVER, true, mouseX, mouseY,
+                () -> send(Computer.SET_STREAM, platform + "\n" + channel.getValue() + "\n" + command.getValue()));
+        y += 24;
+        var help = font.split(text("stream.help", command.getValue().isBlank() ? "!omc" : command.getValue().strip()), cw - 4);
+        for (var line : help) {
+            g.drawString(font, line, cx + 2, y, 0xFF6B7480, false);
+            y += 10;
+        }
+    }
+
     /** What is set, with a mark each, and the button of the free camera. */
     private void drawManager(GuiGraphics g, int mouseX, int mouseY) {
         boolean[] set = {!state.area().isEmpty(), state.spawn().isPresent(), state.delivery().isPresent()};
@@ -874,6 +960,14 @@ public class ComputerScreen extends Screen {
                 }
             }
         }
+        for (EditBox box : streamBoxes()) {
+            boolean on = box.isMouseOver(mouseX, mouseY) && (box == command || !"none".equals(platform));
+            box.setFocused(on);
+            if (on) {
+                setFocused(box);
+                return box.mouseClicked(mouseX, mouseY, button);
+            }
+        }
         // Focus or unfocus the search bar.
         boolean onSearch = hasSearch() && search.isMouseOver(mouseX, mouseY);
         search.setFocused(onSearch);
@@ -897,11 +991,13 @@ public class ComputerScreen extends Screen {
             return true;
         }
         if (hasSearch() && search.keyPressed(key, scanCode, modifiers)) return true;
+        for (EditBox box : streamBoxes()) if (box.isFocused() && box.keyPressed(key, scanCode, modifiers)) return true;
         return super.keyPressed(key, scanCode, modifiers);
     }
 
     @Override
     public boolean charTyped(char c, int modifiers) {
+        for (EditBox box : streamBoxes()) if (box.isFocused()) return box.charTyped(c, modifiers);
         if (hasSearch()) {
             if (!search.isFocused()) { search.setFocused(true); setFocused(search); }
             return search.charTyped(c, modifiers);

@@ -109,6 +109,30 @@ public class SkinPool {
         }
     }
 
+    /** Sets the stream chat (the config is saved) and connects again. Returns a lang key suffix of the result. */
+    static String configure(MinecraftServer server, String platform, String channel, String command) {
+        if (!java.util.List.of("none", "twitch", "kick", "youtube").contains(platform)) return "stream.bad_platform";
+        channel = channel.strip();
+        command = command.strip();
+        if (channel.length() > 64 || command.isEmpty() || command.length() > 16 || command.contains(" ")) return "stream.bad_text";
+        Config.CHAT_PLATFORM.set(platform);
+        Config.CHAT_CHANNEL.set(channel);
+        Config.CHAT_COMMAND.set(command);
+        Config.SPEC.save();
+        stop();
+        start(server);
+        return platform.equals("none") || channel.isEmpty() ? "stream.off" : reader != null ? "stream.connected" : "stream.failed";
+    }
+
+    /** Whether a chat reader runs, and how many viewers are in the pool. */
+    static boolean connected() {
+        return reader != null;
+    }
+
+    static int viewers() {
+        return chat.size();
+    }
+
     static void stop() {
         if (chatTick != null) NeoForge.EVENT_BUS.unregister(chatTick);
         chatTick = null;

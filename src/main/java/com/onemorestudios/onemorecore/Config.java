@@ -72,8 +72,8 @@ public class Config {
             .comment("Chance that the next customers come as a group. A group of 2 is twice as likely as one of 3, and so on up to maxGroupSize.")
             .defineInRange("groupChance", 0.6, 0, 1);
     static final ModConfigSpec.DoubleValue WALK_SPEED = B
-            .comment("Walking speed of customers (movement speed attribute; a zombie has 0.23).")
-            .defineInRange("walkSpeed", 0.17, 0.05, 1);
+            .comment("Walking speed of customers (movement speed attribute; a zombie has 0.23, a walking villager about 0.25).")
+            .defineInRange("walkSpeed", 0.26, 0.05, 1);
     static final ModConfigSpec.BooleanValue DIRT_ENABLED = B
             .comment("Customers leave a dirty spot on the serving surface. A dirty spot gets no customer until a player wipes it.")
             .define("dirtEnabled", true);
@@ -101,7 +101,7 @@ public class Config {
                     "chatChannel: the Twitch or Kick channel name (Kick: or the chatroom id, digits), or for YouTube a channel handle (@name) or a video id.",
                     "Kick and YouTube have no public chat API for this: the mod reads them like their web pages do, which can stop working when they change.",
                     "A viewer writes the chat command and a Minecraft account name, for example: !omc Notch",
-                    "The customer gets the skin of that account and the chat name of the viewer. A restart applies changes.")
+                    "The customer gets the skin of that account and the chat name of the viewer. The Stream app of the computer sets these and reconnects at once.")
             .define("chatPlatform", "none", o -> "none".equals(o) || "twitch".equals(o) || "kick".equals(o) || "youtube".equals(o));
     static final ModConfigSpec.ConfigValue<String> CHAT_CHANNEL = B.define("chatChannel", "");
     static final ModConfigSpec.ConfigValue<String> CHAT_COMMAND = B.define("chatCommand", "!omc");
@@ -121,6 +121,9 @@ public class Config {
     static final ModConfigSpec.BooleanValue APP_SHOP = B.define("appShop", true);
     static final ModConfigSpec.BooleanValue APP_MANAGER = B.define("appManager", true);
     static final ModConfigSpec.BooleanValue APP_UPGRADES = B.define("appUpgrades", true);
+    static final ModConfigSpec.BooleanValue APP_STREAM = B
+            .comment("The Stream app: an operator (or the owner of a single player world) sets chatPlatform, chatChannel and chatCommand in the game.")
+            .define("appStream", true);
     static final ModConfigSpec.BooleanValue COLLECT_PAYMENTS = B
             .comment("Customers leave their bill as coins on the table; a player collects them for the register. Off: the money goes",
                     "straight into the register.")
