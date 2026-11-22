@@ -102,70 +102,101 @@ final class TableMarkRenderer {
         }
     }
 
-    /** The table edge that a click with the tool would split or join now (client), or null. */
+    /** The table side under the crosshair that a click with the tool splits or joins (client), or null; its block. */
     private static Direction hoveredEdge;
-    private static java.util.Set<BlockPos> hoveredTable = java.util.Set.of();
     private static BlockPos hoveredPos;
 
     /**
-     * With a screwdriver or a wrench in the hand, pointing at a table: the outline of the table on its top (green), the edges
-     * where it is split from a touching table (red), and the edge a click would change (white), like Create's crafters.
+     * With a screwdriver or a wrench in the hand (not sneaking), on a table block: as Create's wrench on mechanical crafters
+     * (EdgeInteractionRenderer, MIT), white corner marks on the face where the click zone of the nearest side is, when the
+     * crosshair is in it, and a hint below the crosshair. The splits of the table show as red lines on its top.
      */
     private static void renderTool(RenderLevelStageEvent event) {
         Minecraft mc = Minecraft.getInstance();
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
         hoveredEdge = null;
-        hoveredTable = java.util.Set.of();
         hoveredPos = null;
-        if (mc.level == null || mc.player == null || !mc.player.getMainHandItem().is(OneMoreCore.TABLE_TOOLS)
+        if (mc.level == null || mc.player == null || mc.player.isShiftKeyDown() || !mc.player.getMainHandItem().is(OneMoreCore.TABLE_TOOLS)
                 || !(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
                 || !mc.level.getBlockState(hit.getBlockPos()).is(OneMoreCore.SURFACES)) return;
         BlockPos at = hit.getBlockPos();
-        java.util.Set<BlockPos> table = Dirt.tableOf(mc.level, at);
-        TableCuts cuts = TableCuts.client();
-        hoveredTable = table;
-        hoveredPos = at;
-        hoveredEdge = TableCuts.edge(mc.level, at, hit);
+        Direction face = hit.getDirection();
         PoseStack pose = event.getPoseStack();
         Vec3 cam = event.getCamera().getPosition();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
         pose.pushPose();
         pose.translate(-cam.x, -cam.y, -cam.z);
-        float t = 0.03f;
-        for (BlockPos p : table) {
-            float y = (float) (p.getY() + Dirt.top(mc.level, p)) + 0.01f;
-            for (Direction d : Direction.Plane.HORIZONTAL) {
-                BlockPos n = p.relative(d);
-                boolean hovered = p.equals(at) && d == hoveredEdge;
-                if (table.contains(n) && !hovered) continue;
-                boolean split = !table.contains(n) && mc.level.getBlockState(n).is(OneMoreCore.SURFACES) && cuts.cut(p, d);
-                int argb = hovered ? 0xFFFFFFFF : split ? 0xF0E04545 : 0xF04DE066;
-                float w = hovered ? t * 1.6f : t;
-                // The edge on the side d of the block's top.
-                float x0 = p.getX(), z0 = p.getZ(), x1 = x0 + 1, z1 = z0 + 1;
-                switch (d) {
-                    case NORTH -> SelectionBox.bar(pose, buffers, argb, x0 - w, y - w, z0 - w, x1 + w, y + w, z0 + w);
-                    case SOUTH -> SelectionBox.bar(pose, buffers, argb, x0 - w, y - w, z1 - w, x1 + w, y + w, z1 + w);
-                    case WEST -> SelectionBox.bar(pose, buffers, argb, x0 - w, y - w, z0 - w, x0 + w, y + w, z1 + w);
-                    default -> SelectionBox.bar(pose, buffers, argb, x1 - w, y - w, z0 - w, x1 + w, y + w, z1 + w);
-                }
+        // The splits of this table and its neighbours, on the table tops.
+        TableCuts cuts = TableCuts.client();
+        float t = 0.02f;
+        for (BlockPos p : BlockPos.betweenClosed(at.offset(-8, 0, -8), at.offset(8, 0, 8))) {
+            for (Direction d : new Direction[] {Direction.EAST, Direction.SOUTH}) {
+                if (!cuts.cut(p, d)) continue;
+                float y = (float) (p.getY() + Dirt.top(mc.level, p)) + 0.01f;
+                if (d == Direction.EAST) SelectionBox.bar(pose, buffers, 0xF0E04545, p.getX() + 1 - t, y - t, p.getZ(), p.getX() + 1 + t, y + t, p.getZ() + 1);
+                else SelectionBox.bar(pose, buffers, 0xF0E04545, p.getX(), y - t, p.getZ() + 1 - t, p.getX() + 1, y + t, p.getZ() + 1 + t);
+            }
+        }
+        java.util.List<Direction> sides = TableCuts.connectiveSides(mc.level, at, face);
+        if (!sides.isEmpty()) {
+            // The side nearest the crosshair; marked only when the crosshair is in its click zone.
+            Vec3 center = Vec3.atCenterOf(at), point = hit.getLocation();
+            Direction closest = sides.getFirst();
+            double best = Double.MAX_VALUE;
+            for (Direction d : sides) {
+                double distance = Vec3.atLowerCornerOf(d.getNormal()).subtract(point.subtract(center)).length();
+                if (distance < best) { best = distance; closest = d; }
+            }
+            if (TableCuts.zone(at, closest).contains(point)) {
+                hoveredEdge = closest;
+                hoveredPos = at;
+                // The marks sit on the face, over the edge between the two blocks; on the top face, at the table's height.
+                Vec3 f = Vec3.atLowerCornerOf(face.getNormal()), e = Vec3.atLowerCornerOf(closest.getNormal());
+                Vec3 c = center.add(e.scale(0.5)).add(f.scale(0.5 + 1 / 128.0));
+                if (face == Direction.UP) c = new Vec3(c.x, at.getY() + Dirt.top(mc.level, at) + 1 / 128.0, c.z);
+                corners(pose, buffers, c, face, 3 / 16f);
             }
         }
         pose.popPose();
         buffers.endBatch();
     }
 
-    /** Under the crosshair, with the tool on a table: its size, and what a click does. */
+    /** White corner marks of a square (half size h) on a face plane around c: an L of a third of the side at each corner. */
+    private static void corners(PoseStack pose, MultiBufferSource buffers, Vec3 c, Direction face, float h) {
+        // Two axes across the face.
+        Direction.Axis[] across = java.util.Arrays.stream(Direction.Axis.values()).filter(a -> a != face.getAxis()).toArray(Direction.Axis[]::new);
+        float len = h * 2 / 3, w = 1 / 64f;
+        for (int su = -1; su <= 1; su += 2) {
+            for (int sv = -1; sv <= 1; sv += 2) {
+                // Along u, then along v, from the corner inwards.
+                for (int k = 0; k < 2; k++) {
+                    double[] lo = {c.x, c.y, c.z}, hi = {c.x, c.y, c.z};
+                    Direction.Axis along = across[k], other = across[1 - k];
+                    int sa = k == 0 ? su : sv, so = k == 0 ? sv : su;
+                    double cornerA = sa * h, cornerO = so * h;
+                    set(lo, along, Math.min(cornerA, cornerA - sa * len)); set(hi, along, Math.max(cornerA, cornerA - sa * len));
+                    set(lo, other, cornerO - w); set(hi, other, cornerO + w);
+                    set(lo, face.getAxis(), -w / 2); set(hi, face.getAxis(), w / 2);
+                    SelectionBox.bar(pose, buffers, 0xFFFFFFFF, (float) lo[0], (float) lo[1], (float) lo[2], (float) hi[0], (float) hi[1], (float) hi[2]);
+                }
+            }
+        }
+    }
+
+    private static void set(double[] v, Direction.Axis axis, double offset) {
+        int i = axis.ordinal();
+        v[i] += offset;
+    }
+
+    /** Below the crosshair while a click zone is marked: as Create's crafters, the title and what a click does. */
     private static void renderToolText(net.neoforged.neoforge.client.event.RenderGuiEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
-        if (hoveredPos == null || mc.screen != null || mc.level == null) return;
+        if (hoveredPos == null || hoveredEdge == null || mc.screen != null || mc.level == null) return;
         var g = event.getGuiGraphics();
-        int cx = g.guiWidth() / 2, y = g.guiHeight() / 2 + 14;
-        g.drawCenteredString(mc.font, Component.translatable("onemorecore.tables.size", hoveredTable.size()), cx, y, 0xFFFFFFFF);
-        Component hint;
-        if (hoveredEdge == null) hint = Component.translatable("onemorecore.tables.point");
-        else hint = Component.translatable(TableCuts.client().cut(hoveredPos, hoveredEdge) ? "onemorecore.tables.join" : "onemorecore.tables.split");
-        g.drawCenteredString(mc.font, hint, cx, y + 11, 0xFFB8F5C2);
+        int cx = g.guiWidth() / 2, y = g.guiHeight() / 2 + 20;
+        boolean joined = !TableCuts.client().cut(hoveredPos, hoveredEdge);
+        g.drawCenteredString(mc.font, Component.translatable("onemorecore.tables.connected"), cx, y, 0xFFFFFFFF);
+        g.drawCenteredString(mc.font, Component.translatable(joined ? "onemorecore.tables.separate" : "onemorecore.tables.merge"), cx, y + 11, 0xFFAAAAAA);
     }
 
     /** The card's text box: at most two characters; Done or Enter sends it. */
