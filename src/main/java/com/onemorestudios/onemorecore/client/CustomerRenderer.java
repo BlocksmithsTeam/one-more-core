@@ -342,6 +342,11 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         pose.popPose();
     }
 
+    /** Whether a dish shows as the block it places (see display). */
+    static boolean showsBlock(ItemStack stack) {
+        return display(stack, Minecraft.getInstance().level).equals("block");
+    }
+
     /**
      * "flat", "upright" or "block". Without a config entry: a 3D item model stays upright; a 2D item whose item places
      * a modelled block (cake, pie and meal blocks) shows that block; any other 2D item lies flat.
