@@ -43,8 +43,8 @@ public final class TrayCarryRenderer {
     private static final float RIM_HEIGHT = 2 / 16f;
     private static final float GRIP_X = 9 / 16f;
     private static final float HAND_Y = 9 / 16f;
-    private static final float MAX_DISH_SLIDE = 0.2f;
-    private static final float MAX_DISH_TILT = 1.5f * Mth.DEG_TO_RAD;
+    private static final float MAX_DISH_SLIDE = 0.35f;
+    private static final float MAX_DISH_TILT = 2.5f * Mth.DEG_TO_RAD;
     private static final Map<AbstractClientPlayer, DishSway> DISH_SWAY = new WeakHashMap<>();
 
     public static final EnumProxy<HumanoidModel.ArmPose> TRAY_POSE = new EnumProxy<>(HumanoidModel.ArmPose.class,
