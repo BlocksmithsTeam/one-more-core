@@ -64,7 +64,7 @@ public final class TableCuts {
      * The edge of a table top that a click on its top face is near, towards another serving surface; null for a click
      * elsewhere (the middle of the block, a side face) or an edge with no table behind it.
      */
-    static Direction edge(net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.BlockHitResult hit) {
+    public static Direction edge(net.minecraft.world.level.BlockGetter level, BlockPos pos, net.minecraft.world.phys.BlockHitResult hit) {
         if (hit.getDirection() != Direction.UP) return null;
         double x = hit.getLocation().x - pos.getX(), z = hit.getLocation().z - pos.getZ();
         Direction best = null;

@@ -80,7 +80,6 @@
   "onemorecore.free.area": "Area",
   "onemorecore.free.spawn": "Customer spawn",
   "onemorecore.free.delivery": "Delivery container",
-  "onemorecore.wiping.cloth": "Pick up and drag to wipe. Esc: leave.",
   "onemorecore.computer.dish_on": "The dish is on the menu.",
   "onemorecore.computer.dish_off": "The dish is off the menu.",
   "onemorecore.computer.dish_added": "The dish is on the menu.",
@@ -213,5 +212,10 @@
   "item.onemorecore.table_number": "Table Number",
   "block.onemorecore.table_number": "Table Number",
   "onemorecore.card.title": "Table number",
-  "onemorecore.card.no_restaurant": "Put it on a table of a restaurant"
+  "onemorecore.card.no_restaurant": "Put it on a table of a restaurant",
+  "item.onemorecore.screwdriver": "Screwdriver",
+  "onemorecore.tables.size": "Table: %s blocks",
+  "onemorecore.tables.split": "Click: split the tables here",
+  "onemorecore.tables.join": "Click: join the tables here",
+  "onemorecore.tables.point": "Point at an edge between two table blocks"
 }

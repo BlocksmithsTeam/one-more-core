@@ -87,9 +87,12 @@ public class OneMoreCore {
     public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<String>> LABEL =
             COMPONENTS.registerComponentType("table_label", b -> b.persistent(com.mojang.serialization.Codec.STRING).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.stringUtf8(16)));
     /** A table number card: put it on a table and type its text. */
+    /** Splits and joins tables (TableCuts), like a wrench. */
+    public static final DeferredItem<Item> SCREWDRIVER = ITEMS.registerSimpleItem("screwdriver", new Item.Properties().stacksTo(1));
     public static final DeferredBlock<TableNumberBlock> TABLE_NUMBER_BLOCK = BLOCKS.register("table_number",
             () -> new TableNumberBlock(BlockBehaviour.Properties.of().strength(0.2f).noOcclusion().sound(SoundType.WOOD).pushReaction(PushReaction.DESTROY)));
-    public static final DeferredItem<BlockItem> TABLE_NUMBER = ITEMS.registerSimpleBlockItem(TABLE_NUMBER_BLOCK, new Item.Properties().stacksTo(16));
+    public static final DeferredItem<TableNumberItem> TABLE_NUMBER = ITEMS.register("table_number",
+            () -> new TableNumberItem(TABLE_NUMBER_BLOCK.get(), new Item.Properties().stacksTo(16)));
     public static final DeferredBlock<TrayBlock> TRAY = BLOCKS.register("tray", () -> new TrayBlock(trayProperties()));
     public static final DeferredItem<TrayItem> TRAY_ITEM = ITEMS.register("tray", () -> new TrayItem(TRAY.get(), new Item.Properties().stacksTo(1)));
     public static final DeferredBlock<TrayBlock> IRON_TRAY = BLOCKS.register("iron_tray", () -> new TrayBlock(trayProperties()));
@@ -147,12 +150,15 @@ public class OneMoreCore {
                 output.accept(IRON_TRAY_ITEM);
                 output.accept(COIN);
                 output.accept(TABLE_NUMBER);
+                output.accept(SCREWDRIVER);
             }).build());
 
     /** Blocks a customer can sit on. */
     public static final TagKey<Block> SEATS = BlockTags.create(ResourceLocation.fromNamespaceAndPath(MODID, "seats"));
     /** Blocks that food is served on: tables, counters. */
     public static final TagKey<Block> SURFACES = BlockTags.create(ResourceLocation.fromNamespaceAndPath(MODID, "serving_surfaces"));
+    /** Items that split and join tables: the screwdriver and other mods' wrenches (c:tools/wrench). */
+    public static final TagKey<Item> TABLE_TOOLS = net.minecraft.tags.ItemTags.create(ResourceLocation.fromNamespaceAndPath(MODID, "table_tools"));
 
     public OneMoreCore(IEventBus bus, ModContainer container) {
         if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) {
@@ -244,25 +250,33 @@ public class OneMoreCore {
             event.setUseBlock(net.neoforged.neoforge.common.util.TriState.FALSE);
             return;
         }
-        // Sneak-click with an empty hand on a table of a closed restaurant: near the edge to another table block, splits the two
-        // tables there or joins them again (like Create's mechanical crafters); elsewhere turns the table off or on (like PlateUp).
-        if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND && event.getEntity().isShiftKeyDown()
-                && event.getLevel().getBlockState(event.getPos()).is(SURFACES)) {
+        // A screwdriver (or any mod's wrench) on a table top near the edge to another table block splits the two tables there or
+        // joins them again, like Create's wrench on mechanical crafters. The restaurant must be closed.
+        if (held.is(TABLE_TOOLS) && event.getHand() == InteractionHand.MAIN_HAND && event.getLevel().getBlockState(event.getPos()).is(SURFACES)) {
+            net.minecraft.core.Direction edge = TableCuts.edge(event.getLevel(), event.getPos(), event.getHitVec());
+            if (edge == null) return;
             if (event.getLevel() instanceof ServerLevel level) {
                 Restaurant r = Restaurants.get(level).containing(event.getPos());
-                if (r == null || r.isOpen()) return;
-                net.minecraft.core.Direction edge = TableCuts.edge(level, event.getPos(), event.getHitVec());
-                if (edge != null) {
-                    if (!r.toggleCut(level, event.getPos(), edge)) return;
+                if (r == null) return;
+                if (r.isOpen()) {
+                    event.getEntity().displayClientMessage(Component.translatable("onemorecore.tool.busy"), true);
+                } else if (r.toggleCut(level, event.getPos(), edge)) {
                     boolean cut = r.cuts.cut(event.getPos(), edge);
                     event.getEntity().displayClientMessage(Component.translatable("onemorecore.tool." + (cut ? "table_split" : "table_joined")), true);
                     level.playSound(null, event.getPos(), cut ? net.minecraft.sounds.SoundEvents.CHAIN_BREAK : net.minecraft.sounds.SoundEvents.CHAIN_PLACE,
                             net.minecraft.sounds.SoundSource.BLOCKS, 0.7f, 1.2f);
-                    event.setCanceled(true);
-                    event.setCancellationResult(InteractionResult.SUCCESS);
-                    return;
                 }
-                if (!r.toggleTable(level, event.getPos())) return;
+            }
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return;
+        }
+        // Sneak-click with an empty hand on a table of a closed restaurant turns the table off or on (like PlateUp).
+        if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND && event.getEntity().isShiftKeyDown()
+                && event.getLevel().getBlockState(event.getPos()).is(SURFACES)) {
+            if (event.getLevel() instanceof ServerLevel level) {
+                Restaurant r = Restaurants.get(level).containing(event.getPos());
+                if (r == null || r.isOpen() || !r.toggleTable(level, event.getPos())) return;
                 boolean on = r.isTableOn(r.tableAt(level, event.getPos()));
                 event.getEntity().displayClientMessage(Component.translatable("onemorecore.tool." + (on ? "table_on" : "table_off")), true);
                 level.playSound(null, event.getPos(), on ? net.minecraft.sounds.SoundEvents.WOODEN_BUTTON_CLICK_ON : net.minecraft.sounds.SoundEvents.WOODEN_BUTTON_CLICK_OFF,

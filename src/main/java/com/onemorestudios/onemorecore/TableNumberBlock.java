@@ -29,7 +29,8 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
- * A table number: a card in a wooden holder, placed on a serving surface like any block. Its text (TableCards.MAX characters)
+ * A table number: a card in a wooden holder, placed on a serving surface like any block, where the player clicks (on a grid of
+ * 1/8 block, also between two blocks of a table: TableNumberItem). Its text (TableCards.MAX characters)
  * names the table on the order screens and the tickets; a click with an empty hand opens the text box, breaking it takes it.
  */
 public class TableNumberBlock extends Block implements EntityBlock {
@@ -66,9 +67,18 @@ public class TableNumberBlock extends Block implements EntityBlock {
                 : super.updateShape(state, dir, neighbor, level, pos, neighborPos);
     }
 
+    /** The shape stands where the card stands (TableNumberBlockEntity offset). */
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return SHAPES[state.getValue(FACING).get2DDataValue()];
+        VoxelShape shape = SHAPES[state.getValue(FACING).get2DDataValue()];
+        return level.getBlockEntity(pos) instanceof TableNumberBlockEntity be && (be.offsetX() != 0 || be.offsetZ() != 0)
+                ? shape.move(be.offsetX(), 0, be.offsetZ()) : shape;
+    }
+
+    /** Drawn by its block entity renderer, which can move the card off the middle of the block. */
+    @Override
+    protected net.minecraft.world.level.block.RenderShape getRenderShape(BlockState state) {
+        return net.minecraft.world.level.block.RenderShape.ENTITYBLOCK_ANIMATED;
     }
 
     @Override

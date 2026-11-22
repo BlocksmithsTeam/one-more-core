@@ -35,7 +35,29 @@ final class WipingBehavior implements StationBehavior {
         }
         float back = Math.max(maxX - minX, maxZ - minZ) * 0.8f;
         float mx = ((minX + maxX + 1) / 2f - view.pos().getX() - 0.5f) * 16, mz = ((minZ + maxZ + 1) / 2f - view.pos().getZ() - 0.5f) * 16;
+        // Like the third-person camera of Minecraft: when a block stands between the table and the far camera, the camera
+        // stays close over this block instead, and the arrow keys or WASD move it to the neighbouring blocks of the table
+        // (Diegesis neighbours, wiping.json).
+        if (back > 0 && blocked(view, mx, offset, mz, back)) back = mx = mz = 0;
         view.moveCamera(mx, offset + 21 * back, mz - 11 * back);
+    }
+
+    /** The camera of wiping.json: 8, 37, -3 looking at 8, 16, 8 (scene pixels); the far camera moves back along that line. */
+    private boolean blocked(StationView view, float mx, float offset, float mz, float back) {
+        var from = view.toWorld(8 + mx, 16 + offset + 2, 8 + mz);
+        var to = view.toWorld(8 + mx, 37 + offset + 21 * back, -3 + mz - 11 * back);
+        java.util.Set<net.minecraft.core.BlockPos> table = this.table;
+        var hit = view.level().clip(new net.minecraft.world.level.ClipContext(from, to, net.minecraft.world.level.ClipContext.Block.VISUAL,
+                net.minecraft.world.level.ClipContext.Fluid.NONE, net.minecraft.world.phys.shapes.CollisionContext.empty()) {
+            @Override
+            public net.minecraft.world.phys.shapes.VoxelShape getBlockShape(net.minecraft.world.level.block.state.BlockState state,
+                    net.minecraft.world.level.BlockGetter level, net.minecraft.core.BlockPos pos) {
+                // The table and what stands on it (cards, food) do not hide the table.
+                return table.contains(pos) || table.contains(pos.below()) ? net.minecraft.world.phys.shapes.Shapes.empty()
+                        : super.getBlockShape(state, level, pos);
+            }
+        });
+        return hit.getType() != net.minecraft.world.phys.HitResult.Type.MISS;
     }
 
     @Override

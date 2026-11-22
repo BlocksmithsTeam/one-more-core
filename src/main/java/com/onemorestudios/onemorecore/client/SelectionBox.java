@@ -23,6 +23,10 @@ final class SelectionBox {
 
     /** rgb: 0xRRGGBB. The pose is in world coordinates (camera already subtracted). */
     static void draw(PoseStack pose, MultiBufferSource buffers, AABB box, int rgb, float faceAlpha) {
+        // Like Create's outlines (catnip AABBOutline, MIT): the faces stand 1/128 block off the block faces they enclose
+        // (outwards, or inwards when the camera is inside), so they do not flicker against them (z-fighting).
+        var camera = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+        box = box.inflate(box.contains(camera) ? -1 / 128.0 : 1 / 128.0);
         int face = (Math.round(faceAlpha * 255) << 24) | rgb, edge = 0xF0000000 | rgb;
         VertexConsumer f = buffers.getBuffer(FACES);
         PoseStack.Pose p = pose.last();
@@ -57,6 +61,11 @@ final class SelectionBox {
 
     private static void vertex(VertexConsumer c, PoseStack.Pose p, int argb, float x, float y, float z, float u, float v) {
         c.addVertex(p, x, y, z).setColor(argb).setUv(u, v).setOverlay(OverlayTexture.NO_OVERLAY).setLight(LightTexture.FULL_BRIGHT).setNormal(p, 0, 1, 0);
+    }
+
+    /** A solid bar from (x0, y0, z0) to (x1, y1, z1), in one colour (argb); the pose in world coordinates. */
+    static void bar(PoseStack pose, MultiBufferSource buffers, int argb, float x0, float y0, float z0, float x1, float y1, float z1) {
+        bar(buffers.getBuffer(EDGES), pose.last(), argb, x0, y0, z0, x1, y1, z1);
     }
 
     /** A solid bar from (x0, y0, z0) to (x1, y1, z1). */

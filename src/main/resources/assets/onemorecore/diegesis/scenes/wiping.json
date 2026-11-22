@@ -13,14 +13,14 @@
     ],
     "fov": 48,
     "neighbors": {
-      "enabled": false
+      "enabled": true
     }
   },
   "work_plane": 16,
   "interface": {
     "inventory_panel": false,
     "hide_player": true,
-    "carry_margin": 0,
+    "carry_margin": 128,
     "shadows": false
   },
   "nodes": [
@@ -52,7 +52,6 @@
         16.1,
         2
       ],
-      "tooltip": "onemorecore.wiping.cloth",
       "collider": {
         "from": [
           -3,
