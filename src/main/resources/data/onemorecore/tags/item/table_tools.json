@@ -1,0 +1,6 @@
+{
+  "values": [
+    "onemorecore:screwdriver",
+    {"id": "#c:tools/wrench", "required": false}
+  ]
+}

@@ -58,6 +58,7 @@ public class ClientSetup {
             }
         }, OneMoreCore.TRAY_ITEM.get(), OneMoreCore.IRON_TRAY_ITEM.get()));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.TABLE_NUMBER_ENTITY.get(), TableMarkRenderer.Text::new));
+        bus.addListener(TableMarkRenderer::registerModels);
         TableMarkRenderer.register();
         ScreenRenderer.register();
         com.onemorestudios.onemorecore.ScreenSettings.Open.handler = o -> Minecraft.getInstance().setScreen(new ScreenSettingsScreen(o));
