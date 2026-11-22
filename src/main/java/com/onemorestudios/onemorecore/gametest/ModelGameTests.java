@@ -3,6 +3,7 @@ package com.onemorestudios.onemorecore.gametest;
 import com.onemorestudios.onemorecore.Config;
 import com.onemorestudios.onemorecore.KitchenStations;
 import com.onemorestudios.onemorecore.OneMoreCore;
+import com.onemorestudios.onemorecore.TrayRackBlock;
 import com.onemorestudios.onemorecore.OpenSignBlockEntity;
 import com.onemorestudios.onemorecore.Restaurants;
 import com.onemorestudios.onemorecore.TrayBlockEntity;
@@ -83,17 +84,34 @@ public final class ModelGameTests {
         helper.succeed();
     }
 
+    /** The rack holds the trays players put in, at most six; an empty rack gives none, and taking one leaves the others. */
     @GameTest(template = "empty")
-    public static void rackGivesTraysByShelf(GameTestHelper helper) {
+    public static void rackHoldsTheTraysPutIn(GameTestHelper helper) {
         helper.setBlock(POS, OneMoreCore.TRAY_RACK.get());
         var player = GameTestSupport.player(helper);
-        for (int y : new int[] {3, 8, 13}) {
-            var expected = y == 8 ? OneMoreCore.IRON_TRAY_ITEM.get() : OneMoreCore.TRAY_ITEM.get();
-            helper.assertTrue(GameTestSupport.click(helper, player, POS, y / 16.0).consumesAction(), "rack click at shelf height " + y);
-            helper.assertTrue(player.getMainHandItem().is(expected), "tray type at shelf height " + y);
-            helper.assertTrue(GameTestSupport.click(helper, player, POS, y / 16.0).consumesAction(), "rack accepts the empty tray");
-            helper.assertTrue(player.getMainHandItem().isEmpty(), "empty tray was returned to the rack");
+        helper.assertTrue(GameTestSupport.click(helper, player, POS, 0.5).consumesAction(), "click on the empty rack");
+        helper.assertTrue(player.getMainHandItem().isEmpty(), "an empty rack gives no tray");
+        for (int i = 0; i < TrayRackBlock.LEVELS; i++) {
+            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,
+                    new net.minecraft.world.item.ItemStack(i == 2 ? OneMoreCore.IRON_TRAY_ITEM.get() : OneMoreCore.TRAY_ITEM.get()));
+            GameTestSupport.click(helper, player, POS, 0.5);
+            helper.assertTrue(player.getMainHandItem().isEmpty(), "tray " + i + " went into the rack");
         }
+        helper.assertValueEqual(TrayRackBlock.count(helper.getBlockState(POS)), 6, "trays in the rack");
+        player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new net.minecraft.world.item.ItemStack(OneMoreCore.TRAY_ITEM.get()));
+        GameTestSupport.click(helper, player, POS, 0.5);
+        helper.assertTrue(player.getMainHandItem().is(OneMoreCore.TRAY_ITEM.get()), "a full rack refuses a seventh tray");
+        player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.ItemStack.EMPTY);
+        int taken = 0;
+        for (int i = 0; i < 6; i++) {
+            GameTestSupport.click(helper, player, POS, 0.5);
+            helper.assertTrue(!player.getMainHandItem().isEmpty(), "tray " + i + " taken");
+            if (player.getMainHandItem().is(OneMoreCore.IRON_TRAY_ITEM.get())) taken++;
+            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.ItemStack.EMPTY);
+        }
+        helper.assertValueEqual(taken, 1, "the iron tray came back once");
+        GameTestSupport.click(helper, player, POS, 0.5);
+        helper.assertTrue(player.getMainHandItem().isEmpty(), "the rack is empty again");
         helper.succeed();
     }
 
