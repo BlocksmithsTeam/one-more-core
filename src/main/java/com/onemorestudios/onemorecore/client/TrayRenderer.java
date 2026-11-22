@@ -70,7 +70,9 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
             ItemStack dish = dishes.get(i);
             if (dish.isEmpty() || dish.getItem() instanceof TrayItem) continue;
             TrayPose at = positions.apply(i);
-            if (DiegesisHook.LOADED) TrayDiegesis.drawDish(dish, at, sway, pose, buffers, light, i);
+            // Foods with a block form (Display Delight plates, cakes, pies) show that block, as on the tables; Diegesis's
+            // placing shape only knows the item model, which is a flat sprite for them.
+            if (DiegesisHook.LOADED && !CustomerRenderer.showsBlock(dish)) TrayDiegesis.drawDish(dish, at, sway, pose, buffers, light, i);
             else drawStandalone(dish, at, sway, pose, buffers, light, i);
         }
     }
@@ -79,7 +81,7 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
         Minecraft mc = Minecraft.getInstance();
         var items = mc.getItemRenderer();
         var model = items.getModel(dish, mc.level, null, 0);
-        BlockState block = model.isGui3d() ? null : FoodModels.block(dish);
+        BlockState block = CustomerRenderer.showsBlock(dish) ? FoodModels.block(dish) : null;
         if (block != null && block.hasProperty(BlockStateProperties.LIT)) {
             block = block.setValue(BlockStateProperties.LIT, true);
         }
