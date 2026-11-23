@@ -70,6 +70,10 @@ change how one of them works, change its lines here in the same commit.
   above, or after a screwdriver click, a wall sign is the small chalkboard flat on the wall (`CHALK`).
 - **Menu book**: a printed menu over both pages (a heading per kind, a line per dish with dots to the price; `RecipeBook.MenuRows`,
   a spread is two list pages). The kinds are bookmarks along the head of both pages, the search last (`RecipeBook.tabSlot`).
+- **Wiping** (Diegesis close-up): the client sends a stroke every tick, from where the cloth touched in the last tick to where
+  it touches now (`WipingBehavior`); the server cleans every cell on the way and its neighbours (`Restaurant.wipeCells` with two
+  ends, a stroke longer than a block counts as its end only), so the dirt goes as soon as the cloth passes. Test:
+  `MoneyGameTests.strokeWipesEveryCellOnItsWay`.
 - **Table Number card**: its place on the block is saved as `offset_x`/`offset_z` (a block entity's save writes its own
   position as `x`, `y`, `z`; never use those names in a block entity). Test: `ModelGameTests.tableNumberOffsetSurvivesSave`.
 - **Day start**: no title or status text from the server; each client darkens the screen with "Day N" and a chime when
