@@ -44,6 +44,10 @@ change how one of them works, change its lines here in the same commit.
   rest pose up close (optional mixin, `required: false`). Up close the tray has one place more than its dishes: a ticket put
   anywhere on it becomes the label and takes no dish's place (`KitchenStations.TicketSlot`; test
   `TrayPlacementGameTests.diegesisTrayUsesAndPersistsPlacedPoses`).
+  The tray keeps the whole ticket (`TrayBlockEntity.ticket`, item component `tray_ticket`), not only its table text: looking
+  at the label shows the ticket's tooltip (table and dishes, `ClientSetup.renderOrderTooltip`), an empty-hand click on the label
+  (`TrayBlock.onLabel`: middle of the front rim) gives the ticket back and does not open the close-up, and a new ticket hands
+  the old one back (dropped on the tray up close). Test: `TrayPlacementGameTests.labelTicketComesBack`.
   The carried tray's hands and dishes move on springs (`TrayCarryRenderer.CarrySway`), stepped once per frame so a second
   render of the player in the same frame (the inventory's player picture) does not push them.
 - **Grilling skewers** (`compat/GrillingSkewers`): Kaleidoscope Grilling items in `onemorecore:lying_dishes` or with an ID

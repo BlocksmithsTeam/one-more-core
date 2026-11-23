@@ -64,6 +64,7 @@ public class TrayItem extends BlockItem {
         tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(left));
         if (left.stream().allMatch(ItemStack::isEmpty)) {
             tray.remove(OneMoreCore.LABEL.get());
+            tray.remove(OneMoreCore.TRAY_TICKET.get());
             tray.remove(OneMoreCore.TRAY_POSES.get());
         }
     }

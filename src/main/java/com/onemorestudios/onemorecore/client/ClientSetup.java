@@ -92,6 +92,11 @@ public class ClientSetup {
     private static void renderOrderTooltip(RenderGuiEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         ItemStack shown = !BubbleHover.stack.isEmpty() ? BubbleHover.stack : ScreenRenderer.stack;
+        // The label of a tray: the ticket with its table and dishes.
+        if (shown.isEmpty() && mc.player != null && mc.hitResult instanceof net.minecraft.world.phys.BlockHitResult hit
+                && mc.hitResult.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK
+                && mc.level.getBlockEntity(hit.getBlockPos()) instanceof com.onemorestudios.onemorecore.TrayBlockEntity tray
+                && com.onemorestudios.onemorecore.TrayBlock.onLabel(tray, hit.getLocation())) shown = tray.ticket();
         if (mc.screen != null || shown.isEmpty()) return;
         var g = event.getGuiGraphics();
         g.renderTooltip(mc.font, shown, g.guiWidth() / 2 + 8, g.guiHeight() / 2 + 8);

@@ -27,6 +27,7 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -117,9 +118,9 @@ public class TrayBlock extends Block implements EntityBlock {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         if (level.isClientSide) return ItemInteractionResult.SUCCESS;
         if (stack.is(OneMoreCore.TICKET.get())) {
-            tray.label = TableCards.clean(stack.getOrDefault(OneMoreCore.LABEL.get(), ""));
-            tray.changed();
+            ItemStack old = tray.putTicket(stack);
             stack.consume(1, player);
+            if (!old.isEmpty()) give(player, old);
             level.playSound(null, pos, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8f, 1.3f);
             return ItemInteractionResult.SUCCESS;
         }
@@ -141,6 +142,26 @@ public class TrayBlock extends Block implements EntityBlock {
     /** The blockstate model's clockwise turn from north, in degrees. */
     public static float bedYaw(Direction facing) {
         return (facing.toYRot() + 180) % 360;
+    }
+
+    /**
+     * Whether a point on the tray is on its label: the ticket hangs on the middle of the front rim (TrayRenderer.drawLabel,
+     * x 6.2..9.8, z 1.9 in tray pixels), so the label is hit through the rim behind it: x 5.5..10.5 and z up to 3.5.
+     */
+    public static boolean onLabel(TrayBlockEntity tray, Vec3 point) {
+        if (tray.label.isEmpty()) return false;
+        float yaw = bedYaw(tray.getBlockState().getValue(FACING));
+        Vec3 local = point.subtract(Vec3.atCenterOf(tray.getBlockPos())).yRot(yaw * Mth.DEG_TO_RAD);
+        double x = 8 + local.x * 16, z = 8 + local.z * 16;
+        return Math.abs(x - 8) <= 2.5 && z <= 3.5;
+    }
+
+    /** Whether the player's crosshair is on the label of the tray at pos. */
+    public static boolean looksAtLabel(Player player, BlockPos pos) {
+        if (!(player.level().getBlockEntity(pos) instanceof TrayBlockEntity tray)) return false;
+        HitResult hit = player.pick(player.blockInteractionRange(), 1, false);
+        return hit instanceof BlockHitResult block && block.getType() == HitResult.Type.BLOCK && block.getBlockPos().equals(pos)
+                && onLabel(tray, block.getLocation());
     }
 
     private static boolean put(TrayBlockEntity tray, ItemStack dish, BlockHitResult hit, Player player) {
@@ -194,6 +215,12 @@ public class TrayBlock extends Block implements EntityBlock {
             level.removeBlock(pos, false);
             give(player, item);
             level.playSound(null, pos, SoundEvents.ITEM_PICKUP, SoundSource.BLOCKS, 0.6f, 1);
+            return InteractionResult.SUCCESS;
+        }
+        if (onLabel(tray, hit.getLocation())) {
+            // The ticket comes off the front rim into the hand.
+            give(player, tray.takeTicket());
+            level.playSound(null, pos, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8f, 1.1f);
             return InteractionResult.SUCCESS;
         }
         for (int i = TrayBlockEntity.SIZE - 1; i >= 0; i--) {
