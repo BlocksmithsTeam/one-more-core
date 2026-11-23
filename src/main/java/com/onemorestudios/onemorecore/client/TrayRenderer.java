@@ -11,6 +11,7 @@ import com.onemorestudios.onemorecore.TrayBlock;
 import com.onemorestudios.onemorecore.TrayBlockEntity;
 import com.onemorestudios.onemorecore.TrayItem;
 import com.onemorestudios.onemorecore.TrayPose;
+import com.onemorestudios.onemorecore.compat.GrillingSkewers;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -41,8 +42,9 @@ import org.joml.Vector3fc;
 public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     static final RenderType PAPER = RenderType.entityCutout(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/block/ticket_paper.png"));
 
-    record Sway(float x, float z, float pitch, float roll) {
-        static final Sway NONE = new Sway(0, 0, 0, 0);
+    /** How the carried dishes move off their place: slide (px), tilt (radians) and lift off the bed (px). */
+    record Sway(float x, float z, float pitch, float roll, float lift) {
+        static final Sway NONE = new Sway(0, 0, 0, 0, 0);
 
         Quaternionfc turn(Quaternionfc rest) {
             return this == NONE ? rest : new Quaternionf().rotationXYZ(pitch, 0, roll).mul(rest);
@@ -80,11 +82,13 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
         Minecraft mc = Minecraft.getInstance();
         var items = mc.getItemRenderer();
         var model = items.getModel(dish, mc.level, null, 0);
-        BlockState block = CustomerRenderer.showsBlock(dish) ? FoodModels.block(dish) : null;
+        boolean skewer = GrillingSkewers.matches(dish);
+        BlockState block = !skewer && CustomerRenderer.showsBlock(dish) ? FoodModels.block(dish) : null;
         if (block != null && block.hasProperty(BlockStateProperties.LIT)) {
             block = block.setValue(BlockStateProperties.LIT, true);
         }
-        ItemDisplayContext context = model.isGui3d() && !model.isCustomRenderer() ? ItemDisplayContext.NONE : ItemDisplayContext.FIXED;
+        ItemDisplayContext context = skewer || (model.isGui3d() && !model.isCustomRenderer())
+                ? ItemDisplayContext.NONE : ItemDisplayContext.FIXED;
         DishBounds bounds = new DishBounds();
         drawModel(dish, block, context, new PoseStack(), type -> bounds.consumer(), light, seed);
         Vector3f half = bounds.half();
@@ -92,8 +96,8 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
         float shortest = Math.min(half.x, Math.min(half.y, half.z));
         float size = TrayPose.ITEM_SIZE * at.scale();
         float scale = size * (shortest > longest * 0.6f ? 0.8f : 1) / (2 * longest);
-        Quaternionf rest = new Quaternionf(at.rotation());
-        if (at.lift() == 0 && block == null && shortest < longest * 0.2f) rest.rotateX(Mth.HALF_PI);
+        Quaternionf rest = skewer ? SkewerPose.lyingTurn(at.rotation(), half) : new Quaternionf(at.rotation());
+        if (!skewer && at.lift() == 0 && block == null && shortest < longest * 0.2f) rest.rotateX(Mth.HALF_PI);
         Quaternionfc turn = sway.turn(rest);
         Vector3f extents = rotatedHalf(half, turn).mul(scale);
         if (sway != Sway.NONE) {
@@ -112,7 +116,7 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
         pose.popPose();
     }
 
-    private static Vector3f rotatedHalf(Vector3fc half, Quaternionfc turn) {
+    static Vector3f rotatedHalf(Vector3fc half, Quaternionfc turn) {
         Matrix3f m = new Matrix3f().rotation(turn);
         return new Vector3f(
                 Math.abs(m.m00()) * half.x() + Math.abs(m.m10()) * half.y() + Math.abs(m.m20()) * half.z(),
@@ -133,7 +137,7 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     static void moveDish(PoseStack pose, TrayPose at, Sway sway, Quaternionfc turn, Vector3fc extents, float lift, float scale) {
         float x = at.x() + slide(sway.x(), at.x(), extents.x(), TrayPose.MIN_X, TrayPose.MAX_X);
         float z = at.z() + slide(sway.z(), at.z(), extents.z(), TrayPose.MIN_Z, TrayPose.MAX_Z);
-        pose.translate(x / 16, (at.y() + lift) / 16, z / 16);
+        pose.translate(x / 16, (at.y() + lift + sway.lift()) / 16, z / 16);
         pose.mulPose(new Quaternionf(turn));
         pose.scale(scale / 16, scale / 16, scale / 16);
     }
@@ -166,7 +170,7 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
         pose.popPose();
     }
 
-    private static final class DishBounds {
+    static final class DishBounds {
         private float minX = Float.POSITIVE_INFINITY, minY = Float.POSITIVE_INFINITY, minZ = Float.POSITIVE_INFINITY;
         private float maxX = Float.NEGATIVE_INFINITY, maxY = Float.NEGATIVE_INFINITY, maxZ = Float.NEGATIVE_INFINITY;
 

@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    { "id": "#kaleidoscope_grilling:grilled_skewers", "required": false },
+    { "id": "#kaleidoscope_grilling:raw_skewers", "required": false }
+  ]
+}
