@@ -42,5 +42,8 @@
         ]
       }
     }
-  ]
+  ],
+  "clear_view": {
+    "blocks": false
+  }
 }

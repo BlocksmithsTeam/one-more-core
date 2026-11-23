@@ -33,6 +33,11 @@ public final class FoodModels {
         return null;
     }
 
+    /** The block a dish shows on trays and tables (CustomerRenderer.display "block"), or null. */
+    public static BlockState shownBlock(ItemStack stack) {
+        return CustomerRenderer.showsBlock(stack) ? block(stack) : null;
+    }
+
     /** A stackable plate shows several portions by default ("stacks"); one order is one portion. */
     private static BlockState single(BlockState state) {
         for (var property : state.getProperties()) {

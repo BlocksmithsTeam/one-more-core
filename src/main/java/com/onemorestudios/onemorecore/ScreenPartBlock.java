@@ -49,6 +49,7 @@ public class ScreenPartBlock extends Block {
         BlockState main = level.getBlockState(main(pos, state));
         BlockPos mainPos = main(pos, state);
         if (main.getBlock() instanceof ScreenBlock) return ScreenBlock.shapeIn(main, pos.subtract(mainPos));
+        if (main.getBlock() instanceof OpenSignBlock && OpenSignBlock.hasPart(main)) return OpenSignBlock.bladeTop(main);
         return main.getBlock() instanceof MenuBoardBlock board ? board.getShape(main, level, pos, context) : Shapes.empty();
     }
 
@@ -59,11 +60,31 @@ public class ScreenPartBlock extends Block {
         return Shapes.empty();
     }
 
+    /** A click on the blade's upper part is a click on the sign. */
+    @Override
+    protected net.minecraft.world.InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, net.minecraft.world.entity.player.Player player,
+            net.minecraft.world.phys.BlockHitResult hit) {
+        BlockPos main = main(pos, state);
+        BlockState owner = level.getBlockState(main);
+        if (owner.getBlock() instanceof OpenSignBlock) return owner.useWithoutItem(level, player, hit.withPosition(main));
+        return net.minecraft.world.InteractionResult.PASS;
+    }
+
+    @Override
+    protected net.minecraft.world.ItemInteractionResult useItemOn(net.minecraft.world.item.ItemStack stack, BlockState state, Level level, BlockPos pos,
+            net.minecraft.world.entity.player.Player player, net.minecraft.world.InteractionHand hand, net.minecraft.world.phys.BlockHitResult hit) {
+        BlockPos main = main(pos, state);
+        BlockState owner = level.getBlockState(main);
+        if (owner.getBlock() instanceof OpenSignBlock) return owner.useItemOn(stack, level, player, hand, hit.withPosition(main));
+        return net.minecraft.world.ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+    }
+
     /** A part broken by a player breaks the TV (which drops itself and removes its other parts). */
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
         BlockPos main = main(pos, state);
-        if (!level.isClientSide && !newState.is(this) && level.getBlockState(main).getBlock() instanceof MenuBoardBlock) level.destroyBlock(main, true);
+        Block owner = level.getBlockState(main).getBlock();
+        if (!level.isClientSide && !newState.is(this) && (owner instanceof MenuBoardBlock || owner instanceof OpenSignBlock)) level.destroyBlock(main, true);
         super.onRemove(state, level, pos, newState, moved);
     }
 }

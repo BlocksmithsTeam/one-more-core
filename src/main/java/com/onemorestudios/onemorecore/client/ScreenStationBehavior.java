@@ -48,13 +48,17 @@ final class ScreenStationBehavior implements StationBehavior {
         BlockState anchorState = level.getBlockState(g.anchor());
         int side = view.facing() == state.getValue(MenuBoardBlock.FACING) ? 0 : Math.min(1, ScreenPicture.sides(anchorState) - 1);
         ScreenPicture picture = ScreenPicture.of(g.anchor(), anchorState, g.rect(), side);
-        Vec3 middle = picture.world(picture.width() / 2, picture.height() / 2);
+        // A very long or tall picture is not shown whole (it would be too small to read): the camera shows a window of it, at most
+        // 2.4 times as wide as high (or 2 times as high as wide), at its start (left, top), where the menu and the tickets begin.
+        float w = picture.width(), h = picture.height(), viewW = Math.min(w, h * 2.4f), viewH = Math.min(h, w * 2f);
+        float cx = viewW / 2, cy = viewH / 2;
+        Vec3 middle = picture.world(cx, cy);
         // The scene's coordinates of the middle, from the station's own map (its axes are orthogonal).
         Vec3 o = view.toWorld(0, 0, 0), ex = view.toWorld(1, 0, 0).subtract(o), ey = view.toWorld(0, 1, 0).subtract(o), ez = view.toWorld(0, 0, 1).subtract(o);
         Vec3 p = middle.subtract(o);
         float sx = (float) (p.dot(ex) / ex.lengthSqr()), sy = (float) (p.dot(ey) / ey.lengthSqr()), sz = (float) (p.dot(ez) / ez.lengthSqr());
         // Far enough for the whole picture (canvas units are tenths of a pixel), a little margin.
-        float halfH = picture.height() / 20, halfW = picture.width() / 20;
+        float halfH = viewH / 20, halfW = viewW / 20;
         float distance = Math.max(halfH / HALF_FOV_TAN, halfW / (HALF_FOV_TAN * ASPECT)) * 1.15f + 2;
         double tilt = Math.toRadians(ScreenRect.tilt(state));
         float ny = (float) -Math.sin(tilt), nz = (float) -Math.cos(tilt);
