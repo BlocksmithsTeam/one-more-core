@@ -64,6 +64,10 @@ change how one of them works, change its lines here in the same commit.
   position as `x`, `y`, `z`; never use those names in a block entity). Test: `ModelGameTests.tableNumberOffsetSurvivesSave`.
 - **Day start**: no title or status text from the server; each client darkens the screen with "Day N" and a chime when
   the restaurant it stands in opens (`client/DayFade`).
+- **Computer boot** (`ComputerScreen`): once per opening (`ComputerCamera.booted`; the desktop after the free camera does not
+  boot) the monitor powers on, shows boot text from the state the client already has (no packet) and the logo with a loading
+  bar, about 3.5 s on `Util.getMillis()`; a click or a key but a movement key skips it. Escape on the desktop turns the CRT
+  off (0.3 s) before `ComputerCamera.leave`; the other ways out leave at once. App icons: `art/computer/make_icons.py`.
 - **Windows**: the mod's windows use `client/Ui` (see-through black panel, letterbox bars, pill buttons). New windows use it too.
 
 ## Art

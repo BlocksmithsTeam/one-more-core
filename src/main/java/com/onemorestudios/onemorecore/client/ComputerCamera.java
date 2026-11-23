@@ -65,6 +65,8 @@ public final class ComputerCamera {
     private static boolean hideGuiBefore;
     /** The app that the desktop opens with, after the free camera. */
     static int reopenApp;
+    /** The monitor booted in this opening of the computer: the desktop that opens again after the free camera does not boot. */
+    static boolean booted;
 
     // Free camera.
     enum Tool { AREA, SPAWN, DELIVERY, TABLES, SCREENS }
@@ -108,6 +110,7 @@ public final class ComputerCamera {
         }
         if (!s.open() || mc.player == null || mc.level == null || active()) return;
         state = s;
+        booted = false;
         camera = new Marker(EntityType.MARKER, mc.level);
         Vec3 eye = mc.player.getEyePosition();
         place(eye, mc.player.getYRot(), mc.player.getXRot());
@@ -166,7 +169,10 @@ public final class ComputerCamera {
         toPitch = (float) view[2];
     }
 
-    /** Leaves the desktop: the camera flies back to the eyes of the player. */
+    /**
+     * Leaves the desktop: the camera flies back to the eyes of the player. Escape on the desktop first turns the CRT off
+     * (ComputerScreen); the other ways out (walked away, another screen) leave at once.
+     */
     static void leave() {
         Minecraft mc = Minecraft.getInstance();
         closeSession();
@@ -197,6 +203,7 @@ public final class ComputerCamera {
         Minecraft mc = Minecraft.getInstance();
         mode = Mode.NONE;
         camera = null;
+        booted = false;
         state = null;
         corner = null;
         mc.options.hideGui = hideGuiBefore;
