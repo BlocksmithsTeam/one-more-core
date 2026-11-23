@@ -33,14 +33,17 @@ change how one of them works, change its lines here in the same commit.
   around (`clear_view`).
 - **Screen drawing**: every fill uses `ScreenPainter.FILL`, which writes no depth and is not sorted: fills cover each other in the
   order drawn and text and items stay in front. Do not go back to fills that each stand a little in front (far away the depth
-  buffer mixed them with the text).
+  buffer mixed them with the text). Text and items are cut at the scrolled area's edges by `ClipBuffers` (quads along the
+  canvas axes are cut with their texture), so a row coming in shows its part in view.
   A floor or ceiling Screen turns in 16 directions (`TURN`), like a sign; a turned one joins no other.
 - **Tray Rack**: holds up to six trays that players put in (`slot0..slot5` state); an empty rack gives nothing. Its hitbox is a
   shell 1 px thick, open at the front, the back and inside, so every level can be clicked. Tests:
   `ModelGameTests.rackHoldsTheTraysPutIn`, `FixesGameTests.trayRackIsAnOpenShell`.
 - **Trays**: dishes with a block form (Display Delight plates, cakes) draw as that block, also with Diegesis
   (`CustomerRenderer.showsBlock`). `mixin/PlacedShapeMixin` gives Diegesis the same block, for the look, the hitbox and the
-  rest pose up close (optional mixin, `required: false`).
+  rest pose up close (optional mixin, `required: false`). Up close the tray has one place more than its dishes: a ticket put
+  anywhere on it becomes the label and takes no dish's place (`KitchenStations.TicketSlot`; test
+  `TrayPlacementGameTests.diegesisTrayUsesAndPersistsPlacedPoses`).
 - **Customers**: `walkSpeed` 0.26; a customer whose path does not move it steps onto the next free node (`Customer.hopAlong`);
   stuck within 4 blocks of its seat with no free node (behind a sofa's back), it sits down at once.
 - **Stream chat**: the computer's Stream app sets `chatPlatform`, `chatChannel`, `chatCommand` (operators only) and connects

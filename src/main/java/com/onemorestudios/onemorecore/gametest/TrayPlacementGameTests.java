@@ -136,7 +136,7 @@ public final class TrayPlacementGameTests {
             ScreenGameTests.enableDiegesisChannel(player);
             var group = KitchenStations.TRAY.schema().slotGroups().get(KitchenStations.TRAY_DISHES);
             helper.assertTrue(group.rules().handPlaced() && !group.rules().returnOnClose(), "Tray uses kept free placing");
-            helper.assertValueEqual(group.size(), 3, "Free placing capacity");
+            helper.assertValueEqual(group.size(), TrayBlockEntity.SIZE + 1, "Three dishes and a place for the ticket");
 
             var slot = group.ref(0);
             tray.items.setItem(0, Items.BREAD.getDefaultInstance());
@@ -158,6 +158,15 @@ public final class TrayPlacementGameTests {
                 state.setItem(newSlot, Items.APPLE.getDefaultInstance());
                 helper.assertTrue(tray.items.getItem(1).is(Items.APPLE), "The station places into the tray");
                 helper.assertValueEqual(tray.getPose(1).x(), 12.0f, "The placement reaches the tray with its pose");
+
+                // A ticket put on the tray becomes its label and takes no dish's place, also on a full tray.
+                state.setItem(group.ref(2), Items.CARROT.getDefaultInstance());
+                var ticket = new net.minecraft.world.item.ItemStack(OneMoreCore.TICKET.get());
+                ticket.set(OneMoreCore.LABEL.get(), "7");
+                state.setItem(group.ref(TrayBlockEntity.SIZE), ticket);
+                helper.assertValueEqual(tray.label, "7", "The ticket is the tray's label");
+                helper.assertTrue(state.getItem(group.ref(TrayBlockEntity.SIZE)).isEmpty() && tray.items.getItem(2).is(Items.CARROT),
+                        "The ticket takes no place");
             } finally {
                 Diegesis.close(player);
             }
