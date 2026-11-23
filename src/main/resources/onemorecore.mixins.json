@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "com.onemorestudios.onemorecore.mixin",
   "compatibilityLevel": "JAVA_21",
-  "client": ["PlacedShapeMixin"],
+  "client": ["PlacedShapeMixin", "TrayPlacerMixin"],
   "injectors": {"defaultRequire": 0}
 }
