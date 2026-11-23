@@ -11,6 +11,7 @@ import com.mojang.math.Axis;
 import com.onemorestudios.onemorecore.Config;
 import com.onemorestudios.onemorecore.Customer;
 import com.onemorestudios.onemorecore.OneMoreCore;
+import com.onemorestudios.onemorecore.compat.GrillingSkewers;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -37,6 +38,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 
 /** A player model with a default skin, the patience bar, the order icons and the served food. */
 public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<Customer>> {
@@ -323,9 +325,13 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
 
     /**
      * Draws a food with the middle of its bottom at the origin, as on a table: the placed block of a food item at 0.4
-     * size, a 3D item standing, a 2D item lying flat. Also used for the food on trays.
+     * size, a 3D item standing, or a 2D item or grilling skewer lying flat.
      */
     public static void renderFood(ItemStack stack, net.minecraft.world.level.Level level, PoseStack pose, MultiBufferSource buffers, int light, float scale, int seed) {
+        if (GrillingSkewers.matches(stack)) {
+            renderSkewer(stack, level, pose, buffers, light, scale, seed);
+            return;
+        }
         var items = Minecraft.getInstance().getItemRenderer();
         pose.pushPose();
         String display = display(stack, level);
@@ -345,6 +351,25 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
             }
             items.renderStatic(stack, ItemDisplayContext.FIXED, light, OverlayTexture.NO_OVERLAY, pose, buffers, level, seed);
         }
+        pose.popPose();
+    }
+
+    private static void renderSkewer(ItemStack stack, net.minecraft.world.level.Level level, PoseStack pose,
+            MultiBufferSource buffers, int light, float scale, int seed) {
+        var items = Minecraft.getInstance().getItemRenderer();
+        var bounds = new TrayRenderer.DishBounds();
+        items.renderStatic(stack, ItemDisplayContext.NONE, light, OverlayTexture.NO_OVERLAY,
+                new PoseStack(), type -> bounds.consumer(), level, seed);
+        var half = bounds.half();
+        var turn = SkewerPose.lyingTurn(new Quaternionf(), half);
+        var center = bounds.center();
+        float size = 0.5f * scale;
+        pose.pushPose();
+        pose.scale(size, size, size);
+        pose.translate(0, TrayRenderer.rotatedHalf(half, turn).y, 0);
+        pose.mulPose(turn);
+        pose.translate(-center.x, -center.y, -center.z);
+        items.renderStatic(stack, ItemDisplayContext.NONE, light, OverlayTexture.NO_OVERLAY, pose, buffers, level, seed);
         pose.popPose();
     }
 
