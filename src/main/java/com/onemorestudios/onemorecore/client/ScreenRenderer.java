@@ -137,7 +137,8 @@ public final class ScreenRenderer {
         Vec3 point = from.add(dir.scale(t));
         Vec3 p = point.subtract(o);
         double u = p.dot(ux) / ux.lengthSqr(), v = p.dot(vy) / vy.lengthSqr();
-        if (u < 0 || u > 1 || v < 0 || v > 1 || !ScreenRect.visible(mc.level, mc.player, screens, cam, point)) return none;
+        // Up close the camera can stand inside a wall or a counter (Diegesis no longer clears the blocks): no block test there.
+        if (u < 0 || u > 1 || v < 0 || v > 1 || !close && !ScreenRect.visible(mc.level, mc.player, screens, cam, point)) return none;
         return new float[] {(float) (u * picture.width()), (float) (v * picture.height()), (float) t};
     }
 
@@ -189,7 +190,7 @@ public final class ScreenRenderer {
 
     /** The blocks of the Diegesis screen stations (KitchenStations). */
     private static boolean isStation(BlockState state) {
-        return state.is(OneMoreCore.MENU_BOARD.get());
+        return state.is(OneMoreCore.MENU_BOARD.get()) || state.is(OneMoreCore.SCREEN_PART.get());
     }
 
     /** Keeps the view for the pointer, and draws every screen that a restaurant sent. */
@@ -207,6 +208,8 @@ public final class ScreenRenderer {
         Vec3 cam = event.getCamera().getPosition();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
         Map<BlockPos, ScreenGroups.Group> groups = new HashMap<>();
+        // One picture per screen even if two restaurants' data name it (the server gives a screen to one; this guards the client).
+        java.util.Set<BlockPos> drawn = new java.util.HashSet<>();
         for (ScreenData d : ScreenData.CLIENT.values()) {
             long[] at = d.data().getLongArray("pos");
             int[] modes = d.data().getIntArray("mode");
@@ -220,7 +223,7 @@ public final class ScreenRenderer {
                 if (g == null) continue;
                 for (BlockPos m : g.members()) groups.putIfAbsent(m, g);
                 // The anchor draws the group, with its own settings; a group whose anchor shows nothing stays dark.
-                if (!g.anchor().equals(pos)) continue;
+                if (!g.anchor().equals(pos) || !drawn.add(pos)) continue;
                 if (display == null) {
                     display = DISPLAYS.get(d.sign());
                     if (display == null || display.data() != d) {

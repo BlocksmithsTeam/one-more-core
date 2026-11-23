@@ -92,6 +92,18 @@ for (attach, orient), v in V.items():
             els = json.loads(json.dumps(els))
             if tilt and name != 'mount':
                 for e in els: e['rotation'] = {'angle': tilt * 22.5, 'axis': 'x', 'origin': [8, v['pivot'][0], v['pivot'][1]]}
+            if name == 'mount' and attach == 'wall' and tilt:
+                # Turned down, the panel's back leaves the wall: the bracket becomes an L, a plate on the wall and an arm out to
+                # the panel's back at the bracket's height (the panel turns about its bottom back edge, pivot (y 0, z 2)).
+                import math
+                (bx0, by0, _), (bx1, by1, _) = v['mount'][0]
+                yb = (by0 + by1) / 2
+                a = math.radians(tilt * 22.5)
+                y1 = round(v['pivot'][0] + (yb - v['pivot'][0]) * math.cos(a))
+                z1 = max(2, round(v['pivot'][1] + (yb - v['pivot'][0]) * math.sin(a)))
+                cx = (bx0 + bx1) / 2
+                els = [box((bx0, y1 - 2, 0), (bx1, y1 + 2, 1), P, 'post', 'mount_plate'),
+                       box((cx - 1, y1 - 1, 1), (cx + 1, y1 + 1, z1), P, 'post', 'mount_arm')]
             model = f'screen/{attach}_{orient}_{tilt}_{name}'
             json.dump({'textures': TEX, 'elements': els}, open(f'{OUT}/models/block/{model}.json', 'w'), indent=1)
             base = {'face': attach, 'landscape': 'true' if orient == 'l' else 'false', 'tilt': str(tilt), 'turn': '0'}

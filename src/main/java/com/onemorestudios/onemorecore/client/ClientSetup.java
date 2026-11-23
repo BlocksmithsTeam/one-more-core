@@ -83,6 +83,7 @@ public class ClientSetup {
             WipingBehavior.register();
             TrayDiegesis.register();
             ScreenStationBehavior.register();
+            DiegesisHook.register();
         }
     }
 

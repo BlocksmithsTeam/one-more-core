@@ -35,7 +35,8 @@ import net.neoforged.neoforge.client.model.data.ModelData;
  */
 public class OpenSignRenderer implements BlockEntityRenderer<OpenSignBlockEntity> {
     static final ModelResourceLocation PLAQUE_OPEN = model("plaque_open"), PLAQUE_CLOSED = model("plaque_closed"), ROPE = model("rope"),
-            FRAME = model("frame"), HOOK = model("hook"), CHALKBOARD = model("chalkboard"), BLADE = model("blade");
+            FRAME = model("frame"), HOOK = model("hook"), CHALKBOARD = model("chalkboard"), BLADE = model("blade"), BLADE_CLOSED = model("blade_closed"),
+            WALL_CHALKBOARD = model("wall_chalkboard");
     /** Ticks of one half turn. */
     static final float TURN_TICKS = 12;
     /** Plaque width that the longest word may use, in pixels. */
@@ -52,7 +53,7 @@ public class OpenSignRenderer implements BlockEntityRenderer<OpenSignBlockEntity
     }
 
     static void registerModels(ModelEvent.RegisterAdditional event) {
-        for (ModelResourceLocation m : new ModelResourceLocation[] {PLAQUE_OPEN, PLAQUE_CLOSED, ROPE, FRAME, HOOK, CHALKBOARD, BLADE}) event.register(m);
+        for (ModelResourceLocation m : new ModelResourceLocation[] {PLAQUE_OPEN, PLAQUE_CLOSED, ROPE, FRAME, HOOK, CHALKBOARD, BLADE, BLADE_CLOSED, WALL_CHALKBOARD}) event.register(m);
     }
 
     /** The wall blade reaches into the block above. */
@@ -75,6 +76,10 @@ public class OpenSignRenderer implements BlockEntityRenderer<OpenSignBlockEntity
             sign.turnStart = now;
         }
         float t = (float) Mth.clamp((now - sign.turnStart) / TURN_TICKS, 0, 1);
+        if (state.getValue(OpenSignBlock.FACE) == AttachFace.WALL && state.getValue(OpenSignBlock.CHALK)) {
+            wallChalkboard(font, pose, buffers, light, overlay, state.getValue(OpenSignBlock.ROTATION), t < 0.5f ? !sign.target : sign.target);
+            return;
+        }
         draw(font, pose, buffers, light, overlay, state.getValue(OpenSignBlock.FACE), state.getValue(OpenSignBlock.ROTATION), t,
                 t < 0.5f ? !sign.target : sign.target);
     }
@@ -156,20 +161,35 @@ public class OpenSignRenderer implements BlockEntityRenderer<OpenSignBlockEntity
             pose.pushPose();
             pose.translate(0.5, 7.5 / 16, 0.5);
             if (side == 1) pose.mulPose(Axis.YP.rotationDegrees(180));
-            // The chalk faces are at z 9 (front) and 6 (back): 1.5 px out from the middle.
-            pose.translate(0, 0, 1.5 / 16 + 0.002f);
+            // The chalk faces are at z 9 (front) and 6 (back): 1 and 2 px out from the middle that the board turns about.
+            pose.translate(0, 0, (side == 0 ? 1.0 : 2.0) / 16 + 0.002f);
             pose.scale(scale, -scale, scale);
             font.drawInBatch(word, -font.width(word) / 2f, -4, showOpen ? 0xFFF2F2E6 : 0xFFF3B2A8, false, pose.last().pose(), buffers, Font.DisplayMode.POLYGON_OFFSET, 0, light);
             pose.popPose();
         }
     }
 
-    /** The blade stands out of the wall; its word runs down both faces, a letter under the other. */
+    /** The small chalkboard flat on a wall (its back on the wall at z 0), the word on its face. */
+    private static void wallChalkboard(Font font, PoseStack pose, MultiBufferSource buffers, int light, int overlay, int rotation, boolean showOpen) {
+        pose.pushPose();
+        pose.translate(0.5, 0, 0.5);
+        pose.mulPose(Axis.YP.rotationDegrees(-RotationSegment.convertToDegrees(rotation)));
+        pose.translate(-0.5, 0, -0.5);
+        part(pose, buffers, WALL_CHALKBOARD, light, overlay);
+        Component word = Component.translatable(showOpen ? "onemorecore.sign.open" : "onemorecore.sign.closed");
+        float scale = 12f / 16 / Math.max(font.width(Component.translatable("onemorecore.sign.open")), font.width(Component.translatable("onemorecore.sign.closed")));
+        pose.translate(0.5, 7.5 / 16, 2.0 / 16 + 0.002f);
+        pose.scale(scale, -scale, scale);
+        font.drawInBatch(word, -font.width(word) / 2f, -4, showOpen ? 0xFFF2F2E6 : 0xFFF3B2A8, false, pose.last().pose(), buffers, Font.DisplayMode.POLYGON_OFFSET, 0, light);
+        pose.popPose();
+    }
+
+    /** The blade stands out of the wall; its word runs down both faces, a letter under the other: blue when open, red when closed. */
     private static void blade(Font font, PoseStack pose, MultiBufferSource buffers, int light, int overlay, boolean showOpen) {
-        part(pose, buffers, BLADE, light, overlay);
+        part(pose, buffers, showOpen ? BLADE : BLADE_CLOSED, light, overlay);
         String word = Component.translatable(showOpen ? "onemorecore.sign.open" : "onemorecore.sign.closed").getString();
-        int color = showOpen ? 0xFFFFD166 : 0xFF8A3A30;
-        int textLight = showOpen ? net.minecraft.client.renderer.LightTexture.FULL_BRIGHT : light;
+        int color = 0xFFFFD166;
+        int textLight = net.minecraft.client.renderer.LightTexture.FULL_BRIGHT;
         // The blade's faces: x 7 and x 9; its letters fill y 4..28 and z 3..11.
         int n = Math.max(1, word.length());
         float room = 24f / 16, step = room / n, scale = Math.min(step / 8.5f, 7f / 16 / Math.max(1, font.width("W")));

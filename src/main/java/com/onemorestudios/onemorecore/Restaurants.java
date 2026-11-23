@@ -98,6 +98,11 @@ public class Restaurants extends SavedData {
         return false;
     }
 
+    /** A screen belongs to one restaurant: the others forget it. */
+    void claimScreen(Restaurant owner, BlockPos pos) {
+        for (Restaurant r : bySign.values()) if (r != owner && r.screens.remove(pos) != null) setDirty();
+    }
+
     Restaurant create(BlockPos sign) {
         setDirty();
         return bySign.computeIfAbsent(sign.immutable(), p -> new Restaurant(this, p));
@@ -105,6 +110,9 @@ public class Restaurants extends SavedData {
 
     Restaurant remove(BlockPos sign) {
         setDirty();
+        // The players' screens forget what this restaurant showed; else its last picture stays on them for good.
+        if (net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer() != null)
+            net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(new ScreenData(sign.immutable(), new net.minecraft.nbt.CompoundTag()));
         return bySign.remove(sign);
     }
 
@@ -148,6 +156,9 @@ public class Restaurants extends SavedData {
             Restaurant r = Restaurant.load(data, (CompoundTag) t);
             data.bySign.put(r.sign, r);
         }
+        // Old saves could give one screen to two restaurants, which drew two pictures on it: the first keeps it.
+        java.util.Set<BlockPos> seen = new java.util.HashSet<>();
+        for (Restaurant r : data.bySign.values()) r.screens.keySet().removeIf(p -> !seen.add(p));
         return data;
     }
 }

@@ -65,13 +65,13 @@ public class TrayRackBlock extends Block {
         return 1 + 2 * i;
     }
 
+    /**
+     * A shell one pixel thick: the two sides, the top and the bottom; the front, the back and the inside are open, so that a click
+     * on a side at the height of a level reaches that level, the lowest ones too.
+     */
     private static final VoxelShape[] FRAMES = BoxShapes.byFacing(
-            new double[] {0, 0, 1, 1, 16, 2}, new double[] {15, 0, 1, 16, 16, 2},
-            new double[] {0, 0, 14, 1, 16, 15}, new double[] {15, 0, 14, 16, 16, 15},
-            new double[] {1, 15, 1, 15, 16, 2}, new double[] {1, 15, 14, 15, 16, 15},
-            new double[] {1, 0, 1, 15, 1, 2}, new double[] {1, 0, 14, 15, 1, 15},
-            new double[] {0, 1, 2, 1, 12, 14}, new double[] {15, 1, 2, 16, 12, 14});
-    private static final java.util.Map<BlockState, VoxelShape> SHAPES = new java.util.concurrent.ConcurrentHashMap<>();
+            new double[] {0, 0, 1, 1, 16, 15}, new double[] {15, 0, 1, 16, 16, 15},
+            new double[] {1, 15, 1, 15, 16, 15}, new double[] {1, 0, 1, 15, 1, 15});
 
     public TrayRackBlock(Properties properties) {
         super(properties);
@@ -91,15 +91,9 @@ public class TrayRackBlock extends Block {
         return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
     }
 
-    /** The frame, and a box for each tray in it. */
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return SHAPES.computeIfAbsent(state, s -> {
-            VoxelShape shape = FRAMES[s.getValue(FACING).get2DDataValue()];
-            for (int i = 0; i < LEVELS; i++)
-                if (s.getValue(SLOTS[i]) != Slot.EMPTY) shape = Shapes.or(shape, Block.box(1, levelY(i), 1, 15, levelY(i) + 2, 15));
-            return shape.optimize();
-        });
+        return FRAMES[state.getValue(FACING).get2DDataValue()];
     }
 
     @Override

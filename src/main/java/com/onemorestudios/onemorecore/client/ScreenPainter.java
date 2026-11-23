@@ -170,37 +170,45 @@ public final class ScreenPainter {
         c.rect(0, hh - 1.2f * u, c.w, 1.2f * u, accent);
         float ts = Math.min(1.1f * u, (hh - 6 * u) / 7);
         float ty = (hh - 1.2f * u - 7 * ts) / 2;
-        float x = 6 * u;
-        c.text(c.fit(title, c.w * 0.4f, ts), x, ty, ts, titleColor);
-        x += Math.min(c.width(title, ts), c.w * 0.4f) + 4 * u;
-        if (count >= 0) {
-            String n = String.valueOf(count);
-            float cw = c.width(n, ts) + 6 * u;
-            c.box(x, ty - 2.5f * u, cw, 7 * ts + 4 * u, 1.2f * u, count == 0 ? 0xFF3A3D44 : accent);
-            c.text(n, x + 3 * u, ty, ts, 0xFFFFFFFF);
-        }
-        // The tabs.
+        // From the right: the time left, then the tabs; the title and the count get what is left, never under them.
         int mode = ScreenSettings.mode(c.settings);
         float tabS = 0.7f * u, right = c.w - 4 * u;
         Status s = Status.client;
         if (s != null && s.serviceLeft() > 0) {
             int sec = s.serviceLeft() / 20;
             String clock = String.format("%02d:%02d", sec / 60, sec % 60);
-            right -= c.width(clock, ts);
-            c.text(clock, right, ty, ts, sec < 30 ? 0xFFFF6B5E : 0xFFFFC94D);
-            right -= 5 * u;
+            if (c.width(clock, ts) < c.w * 0.3f) {
+                right -= c.width(clock, ts);
+                c.text(clock, right, ty, ts, sec < 30 ? 0xFFFF6B5E : 0xFFFFC94D);
+                right -= 5 * u;
+            }
         }
         String[] tabs = {Component.translatable("onemorecore.screen.tab.orders").getString(), Component.translatable("onemorecore.screen.tab.menu").getString()};
         int[] modes = {Restaurant.SCREEN_ORDERS, Restaurant.SCREEN_MENU};
-        for (int i = 0; i < 2; i++) {
-            float tw = c.width(tabs[i], tabS) + 8 * u, tx = right - tw, th = 12 * u, tyTab = (hh - 1.2f * u - th) / 2;
-            if (tx < c.w * 0.45f) break;
-            boolean on = mode == modes[i];
-            int target = modes[i];
-            boolean over = !on && c.hit(tx, tyTab, tw, th, () -> setMode(c.anchor, c.side, target));
-            c.box(tx, tyTab, tw, th, 1.5f * u, on ? accent : over ? 0x55FFFFFF : 0x22FFFFFF);
-            c.text(tabs[i], tx + 4 * u, tyTab + (th - 7 * tabS) / 2, tabS, on ? 0xFFFFFFFF : 0xFFB8C0CC);
-            right = tx - 2.5f * u;
+        float tabsW = 0;
+        for (String t : tabs) tabsW += c.width(t, tabS) + 8 * u + 2.5f * u;
+        // The tabs only when the title keeps at least a third of the width.
+        if (right - tabsW > c.w / 3) {
+            for (int i = 0; i < 2; i++) {
+                float tw = c.width(tabs[i], tabS) + 8 * u, tx = right - tw, th = 12 * u, tyTab = (hh - 1.2f * u - th) / 2;
+                boolean on = mode == modes[i];
+                int target = modes[i];
+                boolean over = !on && c.hit(tx, tyTab, tw, th, () -> setMode(c.anchor, c.side, target));
+                c.box(tx, tyTab, tw, th, 1.5f * u, on ? accent : over ? 0x55FFFFFF : 0x22FFFFFF);
+                c.text(tabs[i], tx + 4 * u, tyTab + (th - 7 * tabS) / 2, tabS, on ? 0xFFFFFFFF : 0xFFB8C0CC);
+                right = tx - 2.5f * u;
+            }
+        }
+        float x = 6 * u, room = right - x - 4 * u;
+        String n = count >= 0 ? String.valueOf(count) : "";
+        float pill = count >= 0 ? c.width(n, ts) + 6 * u + 4 * u : 0;
+        boolean withPill = count >= 0 && c.width(title, ts) + pill <= room;
+        String shown = c.fit(title, withPill ? room - pill : room, ts);
+        c.text(shown, x, ty, ts, titleColor);
+        if (withPill) {
+            float px = x + c.width(shown, ts) + 4 * u, cw = c.width(n, ts) + 6 * u;
+            c.box(px, ty - 2.5f * u, cw, 7 * ts + 4 * u, 1.2f * u, count == 0 ? 0xFF3A3D44 : accent);
+            c.text(n, px + 3 * u, ty, ts, 0xFFFFFFFF);
         }
     }
 
@@ -209,7 +217,7 @@ public final class ScreenPainter {
         PacketDistributor.sendToServer(new ScreenSettings.Save(anchor, -1, -1, side, -1, mode));
     }
 
-    private static final int MENU_BG = 0xFF17191E, ROW = 0xFF22252C, ICON_BG = 0xFF2C3038, YELLOW = 0xFFFFC72C;
+    private static final int MENU_BG = 0xFF17191E, ROW = 0xFF22252C, ROW_OVER = 0xFF30343D, ICON_BG = 0xFF2C3038, YELLOW = 0xFFFFC72C;
 
     /** One block of the menu's flow: a kind's heading (line null) or a dish line. */
     private record Cell(String kind, MenuBoardBlockEntity.Line line) {}
@@ -301,7 +309,10 @@ public final class ScreenPainter {
                 continue;
             }
             MenuBoardBlockEntity.Line l = cell.line();
-            c.box(x, y, colW, rowH, 1.2f * u, ROW);
+            // The whole row is the pointer's target (the icon alone is small up close): its first dish's tooltip.
+            boolean overRow = c.over(x, y, colW, rowH) && !l.items().isEmpty();
+            c.box(x, y, colW, rowH, 1.2f * u, overRow ? ROW_OVER : ROW);
+            if (overRow && c.hovered.isEmpty()) c.hovered = l.items().get(0);
             c.rect(x, y + 3 * u, 1.2f * u, rowH - 6 * u, color);
             float icon = rowH - 6 * u, iconBox = rowH - 3 * u;
             int n = Math.min(3, l.items().size());

@@ -103,7 +103,10 @@ public class SkinPool {
         }
         if (reader != null) {
             chatTick = e -> {
-                if (e.getServer() == server) pending.drain((user, entry) -> putChat(chat, user, entry, cap));
+                if (e.getServer() == server) pending.drain((user, entry) -> {
+                    putChat(chat, user, entry, cap);
+                    OneMoreCore.LOGGER.info("Stream chat: {} ({}) waits to come in", entry.displayName(), entry.minecraftName());
+                });
             };
             NeoForge.EVENT_BUS.addListener(ServerTickEvent.Post.class, chatTick);
         }
@@ -112,7 +115,10 @@ public class SkinPool {
     /** Sets the stream chat (the config is saved) and connects again. Returns a lang key suffix of the result. */
     static String configure(MinecraftServer server, String platform, String channel, String command) {
         if (!java.util.List.of("none", "twitch", "kick", "youtube").contains(platform)) return "stream.bad_platform";
+        // A pasted channel link works too: its last path part is the channel.
         channel = channel.strip();
+        if (platform.equals("kick") || platform.equals("twitch"))
+            channel = channel.replaceFirst("^(?i)(https?://)?(www\\.)?(kick\\.com|twitch\\.tv)/", "").replaceFirst("[/?#].*$", "");
         command = command.strip();
         if (channel.length() > 64 || command.isEmpty() || command.length() > 16 || command.contains(" ")) return "stream.bad_text";
         Config.CHAT_PLATFORM.set(platform);
@@ -149,11 +155,15 @@ public class SkinPool {
         return all;
     }
 
-    /** A random entry that no living customer uses. Entries repeat when the pool is too small. Null: the pool is empty. */
+    /**
+     * A random entry that no living customer uses; null when none is free (the customer keeps a default skin), so that two
+     * customers never share a face. A chat viewer comes once: picking the entry takes it out of the pool.
+     */
     static Entry pick(RandomSource random, Collection<Customer> living) {
-        List<Entry> all = entries();
-        List<Entry> free = all.stream().filter(e -> living.stream().noneMatch(c -> e.equals(c.identity))).toList();
-        if (!free.isEmpty()) all = free;
-        return all.isEmpty() ? null : all.get(random.nextInt(all.size()));
+        List<Entry> free = entries().stream().filter(e -> living.stream().noneMatch(c -> e.equals(c.identity))).toList();
+        if (free.isEmpty()) return null;
+        Entry e = free.get(random.nextInt(free.size()));
+        chat.values().remove(e);
+        return e;
     }
 }

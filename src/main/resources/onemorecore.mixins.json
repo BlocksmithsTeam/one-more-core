@@ -1,0 +1,8 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.onemorestudios.onemorecore.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": ["PlacedShapeMixin"],
+  "injectors": {"defaultRequire": 0}
+}

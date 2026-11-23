@@ -150,8 +150,10 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         items = context.getItemRenderer();
     }
 
-    // ponytail: one map entry per account name for the whole session, and a failed lookup stays failed. Add expiry if this shows.
+    /** One lookup per account name; a failed or empty one is asked again after RETRY_MS (the account can be new, the network down). */
     private static final Map<String, CompletableFuture<PlayerSkin>> SKINS = new HashMap<>();
+    private static final Map<String, Long> FAILED = new HashMap<>();
+    private static final long RETRY_MS = 30_000;
 
     /** The skin of the customer's Minecraft account. A vanilla default skin until it is loaded, or if the account does not exist. */
     private static PlayerSkin skin(Customer customer) {
@@ -159,9 +161,13 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         String name = customer.getSkinName();
         if (name.isEmpty()) return fallback;
         // Both steps load in the background, like a player head. The render thread only reads the result.
-        PlayerSkin skin = SKINS.computeIfAbsent(name, n -> SkullBlockEntity.fetchGameProfile(n).thenComposeAsync(
+        Long failedAt = FAILED.get(name);
+        if (failedAt != null && System.currentTimeMillis() - failedAt > RETRY_MS) { FAILED.remove(name); SKINS.remove(name); }
+        CompletableFuture<PlayerSkin> lookup = SKINS.computeIfAbsent(name, n -> SkullBlockEntity.fetchGameProfile(n).thenComposeAsync(
                 profile -> profile.isPresent() ? Minecraft.getInstance().getSkinManager().getOrLoad(profile.get())
-                        : CompletableFuture.completedFuture(null), Minecraft.getInstance())).getNow(null);
+                        : CompletableFuture.completedFuture(null), Minecraft.getInstance()));
+        PlayerSkin skin = lookup.isCompletedExceptionally() ? null : lookup.getNow(null);
+        if (lookup.isDone() && skin == null) FAILED.putIfAbsent(name, System.currentTimeMillis());
         return skin == null ? fallback : skin;
     }
 

@@ -46,26 +46,34 @@ public class OpenSignBlock extends Block implements EntityBlock {
     public static final EnumProperty<AttachFace> FACE = BlockStateProperties.ATTACH_FACE;
     /** Like a vanilla sign: 0 faces south, 4 west, 8 north, 12 east. A wall sign uses only 0, 4, 8 and 12. */
     public static final IntegerProperty ROTATION = BlockStateProperties.ROTATION_16;
+    /** On a wall: the small chalkboard flat on the wall instead of the blade (a screwdriver changes it). */
+    public static final BooleanProperty CHALK = BooleanProperty.create("chalk");
     private static final VoxelShape FLOOR = box(2, 0, 2, 14, 14, 14), CEILING = box(4, 2, 4, 12, 16, 12);
-    /** The wall sign that faces north: the wall is at z 16, the blade (x 7..9) stands out of it up to z 4. */
-    private static final VoxelShape[] WALL = BoxShapes.byFacing(new double[] {7, 2, 4, 9, 16, 16});
+    /** The wall sign that faces north: the wall is at z 16, the blade (x 7..9) stands out of it up to z 4; the chalkboard lies on it. */
+    private static final VoxelShape[] WALL = BoxShapes.byFacing(new double[] {7, 2, 4, 9, 16, 16}),
+            WALL_CHALK = BoxShapes.byFacing(new double[] {0, 0, 14, 16, 14, 16}),
+            BLADE_TOP = BoxShapes.byFacing(new double[] {7, 0, 4, 9, 15, 16});
 
     public OpenSignBlock(Properties properties) {
         super(properties);
-        registerDefaultState(stateDefinition.any().setValue(OPEN, false).setValue(FACE, AttachFace.FLOOR).setValue(ROTATION, 0));
+        registerDefaultState(stateDefinition.any().setValue(OPEN, false).setValue(FACE, AttachFace.FLOOR).setValue(ROTATION, 0).setValue(CHALK, false));
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(OPEN, FACE, ROTATION);
+        builder.add(OPEN, FACE, ROTATION, CHALK);
     }
 
     /** Clicked on top of a block: on the floor; under a block: hanging; on a side: on the wall. Floor and ceiling face the player. */
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         Direction clicked = context.getClickedFace();
-        if (clicked.getAxis().isHorizontal())
-            return defaultBlockState().setValue(FACE, AttachFace.WALL).setValue(ROTATION, RotationSegment.convertToSegment(clicked));
+        if (clicked.getAxis().isHorizontal()) {
+            // The blade is two blocks high; without room above, the chalkboard goes flat on the wall.
+            BlockPos above = context.getClickedPos().above();
+            boolean room = !context.getLevel().isOutsideBuildHeight(above) && context.getLevel().getBlockState(above).canBeReplaced(context);
+            return defaultBlockState().setValue(FACE, AttachFace.WALL).setValue(ROTATION, RotationSegment.convertToSegment(clicked)).setValue(CHALK, !room);
+        }
         return defaultBlockState().setValue(FACE, clicked == Direction.UP ? AttachFace.FLOOR : AttachFace.CEILING)
                 .setValue(ROTATION, RotationSegment.convertToSegment(context.getRotation() + 180));
     }
@@ -81,8 +89,18 @@ public class OpenSignBlock extends Block implements EntityBlock {
         return switch (state.getValue(FACE)) {
             case FLOOR -> FLOOR;
             case CEILING -> CEILING;
-            case WALL -> WALL[wallFacing(state).get2DDataValue()];
+            case WALL -> (state.getValue(CHALK) ? WALL_CHALK : WALL)[wallFacing(state).get2DDataValue()];
         };
+    }
+
+    /** The blade's part in the block above (ScreenPartBlock). */
+    static VoxelShape bladeTop(BlockState state) {
+        return BLADE_TOP[wallFacing(state).get2DDataValue()];
+    }
+
+    /** Whether the sign keeps the block above (the blade). */
+    static boolean hasPart(BlockState state) {
+        return state.getValue(FACE) == AttachFace.WALL && !state.getValue(CHALK);
     }
 
     /** Like a vanilla sign, players and customers walk through it. */
@@ -122,6 +140,9 @@ public class OpenSignBlock extends Block implements EntityBlock {
         if (level instanceof ServerLevel sl && !newState.is(this)) {
             Restaurants restaurants = Restaurants.get(sl);
             Restaurant r = restaurants.at(pos);
+            BlockPos above = pos.above();
+            if (hasPart(state) && level.getBlockState(above).is(OneMoreCore.SCREEN_PART.get())
+                    && ScreenPartBlock.main(above, level.getBlockState(above)).equals(pos)) level.removeBlock(above, false);
             if (r != null) {
                 r.open = false; // the customers remove themselves
                 r.settleOnRemoval(sl);
@@ -161,10 +182,26 @@ public class OpenSignBlock extends Block implements EntityBlock {
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, LivingEntity placer, ItemStack stack) {
         CompoundTag data = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
         if (level instanceof ServerLevel sl && data.contains("restaurant")) Restaurants.get(sl).create(pos).restore(data.getCompound("restaurant"));
+        if (!level.isClientSide && hasPart(state)) level.setBlock(pos.above(), ScreenPartBlock.towards(pos.above(), pos), 3);
     }
 
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        // A screwdriver on a wall sign: the blade or the chalkboard.
+        if (stack.is(OneMoreCore.TABLE_TOOLS) && state.getValue(FACE) == AttachFace.WALL) {
+            if (!level.isClientSide) {
+                boolean chalk = !state.getValue(CHALK);
+                BlockPos above = pos.above();
+                if (!chalk && !level.getBlockState(above).canBeReplaced()) {
+                    player.displayClientMessage(Component.translatable("onemorecore.screen.no_room"), true);
+                } else {
+                    if (chalk && level.getBlockState(above).is(OneMoreCore.SCREEN_PART.get())) level.removeBlock(above, false);
+                    level.setBlock(pos, state.setValue(CHALK, chalk), 3);
+                    if (!chalk) level.setBlock(above, ScreenPartBlock.towards(above, pos), 3);
+                }
+            }
+            return ItemInteractionResult.sidedSuccess(level.isClientSide);
+        }
         if (stack.is(Config.currency())) {
             if (level instanceof ServerLevel sl) {
                 int n = Restaurants.get(sl).create(pos).deposit(stack.getCount());

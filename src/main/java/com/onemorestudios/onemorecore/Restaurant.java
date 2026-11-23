@@ -1183,6 +1183,7 @@ public class Restaurant {
 
     /** Sets what a screen shows (ScreenSettings, packed). */
     void setScreen(BlockPos pos, int settings) {
+        owner.claimScreen(this, pos);
         screens.put(pos.immutable(), settings);
         owner.setDirty();
     }

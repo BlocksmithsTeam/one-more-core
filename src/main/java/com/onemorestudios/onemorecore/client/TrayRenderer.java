@@ -70,9 +70,8 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
             ItemStack dish = dishes.get(i);
             if (dish.isEmpty() || dish.getItem() instanceof TrayItem) continue;
             TrayPose at = positions.apply(i);
-            // Foods with a block form (Display Delight plates, cakes, pies) show that block, as on the tables; Diegesis's
-            // placing shape only knows the item model, which is a flat sprite for them.
-            if (DiegesisHook.LOADED && !CustomerRenderer.showsBlock(dish)) TrayDiegesis.drawDish(dish, at, sway, pose, buffers, light, i);
+            // With Diegesis the tray draws the same shape as its close-up (PlacedShapeMixin gives block foods their block).
+            if (DiegesisHook.LOADED) TrayDiegesis.drawDish(dish, at, sway, pose, buffers, light, i);
             else drawStandalone(dish, at, sway, pose, buffers, light, i);
         }
     }
