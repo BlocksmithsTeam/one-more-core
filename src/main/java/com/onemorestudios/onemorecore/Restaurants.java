@@ -105,7 +105,11 @@ public class Restaurants extends SavedData {
 
     Restaurant create(BlockPos sign) {
         setDirty();
-        return bySign.computeIfAbsent(sign.immutable(), p -> new Restaurant(this, p));
+        return bySign.computeIfAbsent(sign.immutable(), p -> {
+            Restaurant restaurant = new Restaurant(this, p);
+            restaurant.register = Config.STARTING_BALANCE.get();
+            return restaurant;
+        });
     }
 
     Restaurant remove(BlockPos sign) {

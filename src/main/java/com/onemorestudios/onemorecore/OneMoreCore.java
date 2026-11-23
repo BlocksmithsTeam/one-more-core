@@ -4,7 +4,6 @@ import java.util.List;
 
 import org.slf4j.Logger;
 
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.logging.LogUtils;
@@ -12,6 +11,7 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataSerializer;
@@ -45,6 +45,8 @@ import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ChunkWatchEvent;
+import net.neoforged.neoforge.event.OnDatapackSyncEvent;
+import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -167,7 +169,13 @@ public class OneMoreCore {
         BLOCK_ENTITIES.register(bus);
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
         bus.addListener((EntityAttributeCreationEvent e) -> e.put(CUSTOMER.get(), Customer.createAttributes().build()));
-        NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> Menu.load(e.getServer().registryAccess()));
+        NeoForge.EVENT_BUS.addListener((ServerAboutToStartEvent e) -> {
+            Menu.load(e.getServer().registryAccess());
+            Ingredients.rebuild(e.getServer());
+        });
+        NeoForge.EVENT_BUS.addListener((OnDatapackSyncEvent e) -> {
+            if (e.getPlayer() == null) Ingredients.rebuild(e.getPlayerList().getServer());
+        });
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> SkinPool.start(e.getServer()));
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStoppingEvent e) -> SkinPool.stop());
         NeoForge.EVENT_BUS.addListener((LevelTickEvent.Post e) -> {
@@ -332,12 +340,13 @@ public class OneMoreCore {
     private static void registerCommands(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal(MODID)
                 .then(Commands.literal("menu").executes(OneMoreCore::listMenu))
-                .then(Commands.literal("unlock").then(Commands.argument("id", StringArgumentType.word())
-                        .suggests((c, b) -> SharedSuggestionProvider.suggest(Menu.entries.stream().map(Menu.Entry::id), b))
+                .then(Commands.literal("unlock").then(Commands.argument("id", ResourceLocationArgument.id())
+                        .suggests((c, b) -> SharedSuggestionProvider.suggest(Ingredients.current().raw.stream().map(ResourceLocation::toString), b))
                         .executes(OneMoreCore::unlock)))
                 .then(Commands.literal("reload").requires(s -> s.hasPermission(2)).executes(c -> {
                     Menu.load(c.getSource().registryAccess());
                     Shop.load(c.getSource().registryAccess());
+                    Ingredients.rebuild(c.getSource().getServer());
                     c.getSource().sendSuccess(() -> Component.translatable("onemorecore.cmd.reloaded", Menu.entries.size()), true);
                     return Menu.entries.size();
                 })));
@@ -353,28 +362,31 @@ public class OneMoreCore {
     private static int listMenu(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         Restaurant r = restaurantOf(c);
         if (r == null) return 0;
-        for (Menu.Entry e : Menu.entries)
-            c.getSource().sendSuccess(() -> Component.translatable("onemorecore.cmd.menu_line", e.id(), e.price(), e.day(), e.cost(),
-                    r.isAvailable(e) ? "available" : "locked"), false);
-        return Menu.entries.size();
+        List<Menu.Entry> dishes = r.dishes();
+        for (Menu.Entry dish : dishes)
+            c.getSource().sendSuccess(() -> Component.translatable("onemorecore.cmd.menu_line", dish.id(), dish.price(),
+                    r.orderable(dish) ? "available" : "unavailable"), false);
+        return dishes.size();
     }
 
     private static int unlock(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         Restaurant r = restaurantOf(c);
         if (r == null) return 0;
-        String id = StringArgumentType.getString(c, "id");
-        Menu.Entry e = Menu.byId(id);
-        if (e == null) {
-            c.getSource().sendFailure(Component.translatable("onemorecore.cmd.unknown", id));
-            return 0;
-        }
-        Component message = switch (r.unlock(e)) {
+        ResourceLocation item = ResourceLocationArgument.getId(c, "id");
+        if (!c.getSource().getLevel().mayInteract(c.getSource().getPlayerOrException(), r.sign)) return 0;
+        Restaurant.Unlock result = r.unlockIngredient(item);
+        Component message = unlockMessage(r, item.toString(), item, result);
+        if (result == Restaurant.Unlock.OK) c.getSource().sendSuccess(() -> message, false);
+        else c.getSource().sendFailure(message);
+        return result == Restaurant.Unlock.OK ? 1 : 0;
+    }
+
+    static Component unlockMessage(Restaurant r, String id, ResourceLocation item, Restaurant.Unlock result) {
+        return switch (result) {
             case OK -> Component.translatable("onemorecore.cmd.unlocked", id);
             case ALREADY -> Component.translatable("onemorecore.cmd.already", id);
-            case DAY -> Component.translatable("onemorecore.cmd.day", id, e.day());
-            case COST -> Component.translatable("onemorecore.cmd.cost", id, e.cost(), r.register());
+            case UNKNOWN -> Component.translatable("onemorecore.cmd.unknown", id);
+            case COST -> Component.translatable("onemorecore.cmd.cost", id, Ingredients.current().unlockCost(item), r.register());
         };
-        c.getSource().sendSuccess(() -> message, false);
-        return 1;
     }
 }

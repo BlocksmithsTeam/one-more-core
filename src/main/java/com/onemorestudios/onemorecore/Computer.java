@@ -6,8 +6,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.EncoderException;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -65,9 +69,9 @@ public class Computer extends Block {
             new double[] {11, 0, 11.25, 13.75, 0.5, 11.75},
             new double[] {8.25, 0.5, 15, 8.75, 3, 15.5},
             new double[] {8.25, 0, 15, 13, 0.5, 15.5});
-    public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
+    public static final int REFRESH = 0, UNLOCK_INGREDIENT = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
             TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9, SET_KIND = 10, ADD_COMBO = 11, REMOVE_COMBO = 12,
-            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17, REFRESH_MANAGER = 18, CLOSE = 19, EDIT_COMBO = 20, SET_STREAM = 21;
+            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17, REFRESH_MANAGER = 18, CLOSE = 19, EDIT_COMBO = 20, SET_STREAM = 21, REFRESH_MENU = 22;
     public static final int MAX_REQUEST_LENGTH = 1024, MAX_CART_LINES = 32, MAX_CART_COUNT = 64;
     /** How far from the computer the manager app may set a point, in blocks per axis. */
     public static final int PLACE_RANGE = 48;
@@ -84,23 +88,52 @@ public class Computer extends Block {
         static final StreamCodec<RegistryFriendlyByteBuf, UpgradeLine> CODEC = StreamCodec.composite(ByteBufCodecs.STRING_UTF8, UpgradeLine::id,
                 ByteBufCodecs.VAR_INT, UpgradeLine::level, ByteBufCodecs.VAR_INT, UpgradeLine::max, ByteBufCodecs.VAR_INT, UpgradeLine::nextCost, UpgradeLine::new);
     }
-    /** Values of {@link MenuLine#state}. */
-    public static final int AVAILABLE = 0, LOCKED_DAY = 1, BUYABLE = 2;
+    public static final int AVAILABLE = 0, LOCKED_INGREDIENTS = 1;
 
-    /** A dish. "on": customers order it. "custom": a player added it, so its price can change and it can be removed. */
-    public record MenuLine(String id, ItemStack icon, int price, int day, int cost, int state, boolean on, boolean custom, String kind) {
+    /** A dish. State describes the recipe; on is the player's menu toggle. */
+    public record MenuLine(String id, ItemStack icon, int price, int state, boolean on, boolean custom, boolean priceEditable, String kind) {
         static final StreamCodec<RegistryFriendlyByteBuf, MenuLine> CODEC = StreamCodec.of((b, l) -> {
             ByteBufCodecs.STRING_UTF8.encode(b, l.id);
             ItemStack.OPTIONAL_STREAM_CODEC.encode(b, l.icon);
             b.writeVarInt(l.price);
-            b.writeVarInt(l.day);
-            b.writeVarInt(l.cost);
             b.writeVarInt(l.state);
             b.writeBoolean(l.on);
             b.writeBoolean(l.custom);
+            b.writeBoolean(l.priceEditable);
             ByteBufCodecs.stringUtf8(16).encode(b, l.kind);
-        }, b -> new MenuLine(ByteBufCodecs.STRING_UTF8.decode(b), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(), b.readVarInt(),
-                b.readVarInt(), b.readVarInt(), b.readBoolean(), b.readBoolean(), ByteBufCodecs.stringUtf8(16).decode(b)));
+        }, b -> new MenuLine(ByteBufCodecs.STRING_UTF8.decode(b), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(),
+                b.readVarInt(), b.readBoolean(), b.readBoolean(), b.readBoolean(), ByteBufCodecs.stringUtf8(16).decode(b)));
+    }
+
+    public record IngredientLine(ResourceLocation id, int unlockCost, boolean unlocked, int newlyOrderable) {
+        static final StreamCodec<RegistryFriendlyByteBuf, IngredientLine> CODEC = StreamCodec.composite(
+                ResourceLocation.STREAM_CODEC, IngredientLine::id, ByteBufCodecs.VAR_INT, IngredientLine::unlockCost,
+                ByteBufCodecs.BOOL, IngredientLine::unlocked, ByteBufCodecs.VAR_INT, IngredientLine::newlyOrderable,
+                IngredientLine::new);
+    }
+
+    public record LockedDish(String dishId, List<ResourceLocation> missing) {
+        static final StreamCodec<RegistryFriendlyByteBuf, LockedDish> CODEC = StreamCodec.composite(
+                ByteBufCodecs.STRING_UTF8, LockedDish::dishId,
+                ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list(6)), LockedDish::missing, LockedDish::new);
+    }
+
+    /** This section is present only in responses to Menu requests. Counts describe omitted rows. */
+    public record IngredientData(List<IngredientLine> ingredients, List<LockedDish> lockedDishes,
+            int moreIngredients, int moreLockedDishes) {
+        static final int BYTE_BUDGET = 128 * 1024;
+        private static final int LIST_BUDGET = (BYTE_BUDGET - 20) / 2;
+        static final StreamCodec<RegistryFriendlyByteBuf, IngredientData> CODEC = StreamCodec.composite(
+                IngredientLine.CODEC.apply(ByteBufCodecs.list()), IngredientData::ingredients,
+                LockedDish.CODEC.apply(ByteBufCodecs.list()), IngredientData::lockedDishes,
+                ByteBufCodecs.VAR_INT, IngredientData::moreIngredients, ByteBufCodecs.VAR_INT, IngredientData::moreLockedDishes,
+                IngredientData::new);
+
+        static IngredientData capped(RegistryAccess registries, List<IngredientLine> ingredients, List<LockedDish> dishes) {
+            var listed = withinBudget(registries, ingredients, IngredientLine.CODEC, LIST_BUDGET);
+            var locked = withinBudget(registries, dishes, LockedDish.CODEC, LIST_BUDGET);
+            return new IngredientData(listed, locked, ingredients.size() - listed.size(), dishes.size() - locked.size());
+        }
     }
 
     /** A combo: its dish ids, its price, and whether customers can order it now. */
@@ -126,12 +159,12 @@ public class Computer extends Block {
             List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message,
             Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
             List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades,
-            List<String> stream) implements CustomPacketPayload {
+            List<String> stream, Optional<IngredientData> ingredientData) implements CustomPacketPayload {
         /** stream: platform, channel, command, "on" or "off", viewers in the pool; empty for the other apps. */
         public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, List<MenuLine> menu, List<ShopLine> shop,
                 List<Component> info, Component message, Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
                 List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades) {
-            this(pos, open, found, apps, currency, balance, menu, shop, info, message, sign, area, spawn, delivery, combos, surfaces, offSurfaces, upgrades, List.of());
+            this(pos, open, found, apps, currency, balance, menu, shop, info, message, sign, area, spawn, delivery, combos, surfaces, offSurfaces, upgrades, List.of(), Optional.empty());
         }
         public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, List<MenuLine> menu, List<ShopLine> shop,
                 List<Component> info, Component message, Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
@@ -166,12 +199,14 @@ public class Computer extends Block {
             POSITIONS.encode(b, s.offSurfaces);
             UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).encode(b, s.upgrades);
             ByteBufCodecs.stringUtf8(256).apply(ByteBufCodecs.list(8)).encode(b, s.stream);
+            ByteBufCodecs.optional(IngredientData.CODEC).encode(b, s.ingredientData);
         }, b -> new State(b.readBlockPos(), b.readBoolean(), b.readBoolean(), b.readVarInt(), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(),
                 MenuLine.CODEC.apply(ByteBufCodecs.list()).decode(b), ShopLine.CODEC.apply(ByteBufCodecs.list()).decode(b),
                 ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(b), ComponentSerialization.STREAM_CODEC.decode(b),
                 OPTIONAL_POS.decode(b), INTS.decode(b), OPTIONAL_POS.decode(b), OPTIONAL_POS.decode(b),
                 ComboLine.CODEC.apply(ByteBufCodecs.list()).decode(b), POSITIONS.decode(b), POSITIONS.decode(b),
-                UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).decode(b), ByteBufCodecs.stringUtf8(256).apply(ByteBufCodecs.list(8)).decode(b)));
+                UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).decode(b), ByteBufCodecs.stringUtf8(256).apply(ByteBufCodecs.list(8)).decode(b),
+                ByteBufCodecs.optional(IngredientData.CODEC).decode(b)));
 
         @Override
         public Type<State> type() { return TYPE; }
@@ -240,7 +275,7 @@ public class Computer extends Block {
             if (!canUse(sp, serverLevel, pos)) return InteractionResult.PASS;
             Restaurant restaurant = Restaurants.get(serverLevel).forComputer(pos);
             SESSIONS.put(sp, new Session(serverLevel, pos.immutable(), restaurant));
-            PacketDistributor.sendToPlayer(sp, state(serverLevel, pos, restaurant, true, false, Component.empty()));
+            PacketDistributor.sendToPlayer(sp, state(serverLevel, pos, restaurant, true, false, false, Component.empty()));
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
@@ -271,7 +306,7 @@ public class Computer extends Block {
     static void playerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) { SESSIONS.remove(event.getEntity()); }
 
     static void registerPayloads(RegisterPayloadHandlersEvent event) {
-        event.registrar("2")
+        event.registrar("3")
                 // The handler runs on the client only, so the client class is not loaded on a dedicated server.
                 .playToClient(State.TYPE, State.CODEC, (state, context) -> com.onemorestudios.onemorecore.client.ComputerCamera.receive(state))
                 .playToClient(CheckoutResult.TYPE, CheckoutResult.CODEC, (result, context) -> com.onemorestudios.onemorecore.client.ComputerCamera.receive(result))
@@ -408,31 +443,32 @@ public class Computer extends Block {
                 }
             }
             message = Component.translatable("onemorecore.computer." + key, Config.MAX_DISH_PRICE.get());
-        } else if (request.action == UNLOCK) {
-            Menu.Entry e = Menu.byId(request.id);
-            if (r == null || e == null || !Config.APP_MENU.get()) return null;
-            message = switch (r.unlock(e)) {
-                case OK -> Component.translatable("onemorecore.cmd.unlocked", e.id());
-                case ALREADY -> Component.translatable("onemorecore.cmd.already", e.id());
-                case DAY -> Component.translatable("onemorecore.cmd.day", e.id(), e.day());
-                case COST -> Component.translatable("onemorecore.cmd.cost", e.id(), e.cost(), r.register());
-            };
+        } else if (request.action == UNLOCK_INGREDIENT) {
+            if (r == null || !Config.APP_MENU.get()) return null;
+            ResourceLocation item = ResourceLocation.tryParse(request.id);
+            message = OneMoreCore.unlockMessage(r, request.id, item, r.unlockIngredient(item));
         } else if (request.action == BUY) {
-            Shop.Entry e = Shop.byId(request.id);
-            if (r == null || e == null || !Config.APP_SHOP.get()) return null;
+            if (r == null || !Config.APP_SHOP.get()) return null;
+            Shop.Entry e = Shop.byId(r, request.id);
+            if (e == null) return null;
             message = switch (r.buy(e)) {
                 case OK -> Component.translatable("onemorecore.computer.ordered", e.stack().getHoverName(), r.deliveryTicks() / 20);
                 case COST -> Component.translatable("onemorecore.cmd.cost", e.id(), e.price(), r.register());
                 case NO_DELIVERY -> Component.translatable("onemorecore.computer.no_delivery");
             };
-        } else if (request.action != REFRESH && request.action != REFRESH_MANAGER) {
+        } else if (request.action != REFRESH && request.action != REFRESH_MANAGER && request.action != REFRESH_MENU) {
             return null;
         }
         boolean manager = Config.APP_MANAGER.get() && switch (request.action) {
             case REFRESH_MANAGER, SET_AREA, SET_SPAWN, SET_DELIVERY, TOGGLE_TABLE, SET_SCREEN -> true;
             default -> false;
         };
-        return state(level, request.pos, r, false, manager, message);
+        boolean menu = Config.APP_MENU.get() && switch (request.action) {
+            case REFRESH_MENU, UNLOCK_INGREDIENT, TOGGLE_DISH, ADD_DISH, REMOVE_DISH, SET_PRICE, SET_KIND,
+                    ADD_COMBO, REMOVE_COMBO, SET_COMBO_PRICE, EDIT_COMBO -> true;
+            default -> false;
+        };
+        return state(level, request.pos, r, false, manager, menu, message);
     }
 
     private static CheckoutResult sessionEnded(Request request) {
@@ -449,7 +485,7 @@ public class Computer extends Block {
         } else if (!Config.APP_SHOP.get()) {
             message = Component.translatableWithFallback("onemorecore.computer.cart_disabled", "The Shop is disabled.");
         } else {
-            Map<Shop.Entry, Integer> cart = readCart(request.id);
+            Map<Shop.Entry, Integer> cart = readCart(r, request.id);
             if (cart == null) {
                 message = Component.translatableWithFallback("onemorecore.computer.cart_invalid", "The cart contains an invalid or unavailable listing.");
             } else {
@@ -470,11 +506,11 @@ public class Computer extends Block {
             }
         }
         return new CheckoutResult(request.pos, request.checkoutId, success, message,
-                Optional.of(state(session.level, request.pos, r, false, false, Component.empty())));
+                Optional.of(state(session.level, request.pos, r, false, false, false, Component.empty())));
     }
 
     /** Reads "id:count;id:count" using the same limits as the Shop screen. */
-    private static Map<Shop.Entry, Integer> readCart(String id) {
+    private static Map<Shop.Entry, Integer> readCart(Restaurant restaurant, String id) {
         if (id.isEmpty() || id.length() > MAX_REQUEST_LENGTH) return null;
         String[] parts = id.split(";", -1);
         if (parts.length > MAX_CART_LINES) return null;
@@ -482,7 +518,7 @@ public class Computer extends Block {
         for (String part : parts) {
             int colon = part.lastIndexOf(':');
             if (colon < 0) return null;
-            Shop.Entry e = Shop.byId(part.substring(0, colon));
+            Shop.Entry e = Shop.byId(restaurant, part.substring(0, colon));
             int count;
             try { count = Integer.parseInt(part.substring(colon + 1)); } catch (NumberFormatException ex) { return null; }
             if (e == null || count < 1 || count > MAX_CART_COUNT || cart.putIfAbsent(e, count) != null) return null;
@@ -516,21 +552,21 @@ public class Computer extends Block {
     }
 
     /** Everything the screen shows. The menu and shop files exist on the server only. */
-    private static State state(ServerLevel level, BlockPos pos, Restaurant r, boolean open, boolean manager, Component message) {
+    private static State state(ServerLevel level, BlockPos pos, Restaurant r, boolean open, boolean manager, boolean menuRequest, Component message) {
         int apps = (Config.APP_MENU.get() ? APP_MENU : 0) | (Config.APP_SHOP.get() ? APP_SHOP : 0) | (Config.APP_MANAGER.get() ? APP_MANAGER : 0)
                 | (Config.APP_UPGRADES.get() ? APP_UPGRADES : 0) | (Config.APP_STREAM.get() ? APP_STREAM : 0);
         ItemStack currency = new ItemStack(Config.currency());
         if (r == null) return new State(pos, open, false, apps, currency, 0, List.of(), List.of(), List.of(), message,
                 Optional.empty(), List.of(), Optional.empty(), Optional.empty());
-        List<MenuLine> menu = new ArrayList<>();
-        for (Menu.Entry e : r.dishes()) {
-            ItemStack icon = e.tag() == null ? e.stack() : BuiltInRegistries.ITEM.getTag(e.tag())
-                    .flatMap(set -> set.stream().findFirst()).map(ItemStack::new).orElse(ItemStack.EMPTY);
-            menu.add(new MenuLine(e.id(), icon, e.price(), e.day(), e.cost(), r.isAvailable(e) ? AVAILABLE : r.day() < e.day() ? LOCKED_DAY : BUYABLE,
-                    r.isOn(e), e.id().startsWith("custom:"), r.kind(e)));
-        }
-        List<ShopLine> shop = new ArrayList<>();
-        for (Shop.Entry e : Shop.entries) shop.add(new ShopLine(e.id(), e.stack(), e.icon(), e.price()));
+        var registries = level.registryAccess();
+        List<Menu.Entry> dishes = r.dishes();
+        List<MenuLine> menu = dishes.stream().map(e -> {
+            boolean available = r.ingredientsAvailable(e);
+            ItemStack icon = available ? r.orderableVariant(e, null) : Ingredients.variants(e).findFirst().orElse(ItemStack.EMPTY);
+            return new MenuLine(e.id(), icon, e.price(), available ? AVAILABLE : LOCKED_INGREDIENTS,
+                    r.isOn(e), e.id().startsWith("custom:"), r.priceEditable(e), r.kind(e));
+        }).toList();
+        List<ShopLine> shop = Shop.catalog(r).stream().map(e -> new ShopLine(e.id(), e.stack(), e.icon(), e.price())).toList();
         BoundingBox a = r.area();
         List<Restaurant.Seat> seats = !manager || a == null ? List.of() : r.scanSeats(level);
         Component none = Component.translatable("onemorecore.computer.info.not_set");
@@ -554,15 +590,74 @@ public class Computer extends Block {
                 for (BlockPos p : all) { surfaces.add(p); if (!on) off.add(p); }
             }
         }
-        return new State(pos, open, true, apps, currency, r.register(), menu, shop, info, message, Optional.of(r.sign),
+        return new State(pos, open, true, apps, currency, r.register(),
+                withinBudget(registries, menu, MenuLine.CODEC, 256 * 1024),
+                withinBudget(registries, shop, ShopLine.CODEC, 256 * 1024), info, message, Optional.of(r.sign),
                 a == null ? List.of() : List.of(a.minX(), a.minY(), a.minZ(), a.maxX(), a.maxY(), a.maxZ()),
-                Optional.ofNullable(r.spawn()), Optional.ofNullable(r.delivery()), combos,
+                Optional.ofNullable(r.spawn()), Optional.ofNullable(r.delivery()), withinBudget(registries, combos, ComboLine.CODEC, 64 * 1024),
                 surfaces.size() > 4096 ? surfaces.subList(0, 4096) : surfaces, off.size() > 4096 ? off.subList(0, 4096) : off,
                 UPGRADES.stream().map(id -> {
                     var costs = Restaurant.upgradeCosts(id);
                     int lv = r.upgrade(id);
                     return new UpgradeLine(id, lv, costs.size(), lv < costs.size() ? costs.get(lv) : 0);
                 }).toList(),
-                stream());
+                stream(), menuRequest ? Optional.of(ingredientData(registries, r, dishes)) : Optional.empty());
+    }
+
+    private static IngredientData ingredientData(RegistryAccess registries, Restaurant r, List<Menu.Entry> dishes) {
+        Ingredients index = Ingredients.current();
+        var availability = r.ingredientAvailability();
+        var unlocked = r.unlockedIngredients();
+        List<Menu.Entry> locked = dishes.stream().filter(e -> !r.ingredientsAvailable(e)).toList();
+        Map<ResourceLocation, List<Menu.Entry>> lockedByItem = new HashMap<>();
+        for (Menu.Entry dish : locked) {
+            if (!r.isOn(dish)) continue;
+            Ingredients.variants(dish).map(Ingredients::id).distinct()
+                    .forEach(id -> lockedByItem.computeIfAbsent(id, key -> new ArrayList<>()).add(dish));
+        }
+        List<IngredientLine> ingredients = new ArrayList<>();
+        for (ResourceLocation item : index.raw) {
+            boolean bought = unlocked.contains(item);
+            if (!bought && availability.item(item)) continue;
+            int newlyOrderable = 0;
+            if (!bought) {
+                var candidates = index.dishesHelped(item).stream().flatMap(id -> lockedByItem.getOrDefault(id, List.of()).stream())
+                        .distinct().toList();
+                if (!candidates.isEmpty()) {
+                    Set<ResourceLocation> withItem = new java.util.HashSet<>(unlocked);
+                    withItem.add(item);
+                    var after = index.availability(withItem);
+                    newlyOrderable = (int) candidates.stream().filter(dish -> Ingredients.variants(dish)
+                            .anyMatch(stack -> after.dish(Ingredients.id(stack)))).count();
+                }
+            }
+            ingredients.add(new IngredientLine(item, index.unlockCost(item), bought, newlyOrderable));
+        }
+        return IngredientData.capped(registries, ingredients,
+                locked.stream().map(dish -> new LockedDish(dish.id(), availability.missing(dish))).toList());
+    }
+
+    private static <T> List<T> withinBudget(RegistryAccess registries, List<T> rows,
+            StreamCodec<RegistryFriendlyByteBuf, T> codec, int remaining) {
+        var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), registries);
+        List<T> kept = new ArrayList<>();
+        try {
+            for (T row : rows) {
+                buffer.clear();
+                try {
+                    codec.encode(buffer, row);
+                } catch (EncoderException e) {
+                    continue;
+                }
+                int size = buffer.readableBytes();
+                if (size > remaining) continue;
+                kept.add(row);
+                remaining -= size;
+                if (remaining == 0) break;
+            }
+        } finally {
+            buffer.release();
+        }
+        return kept;
     }
 }

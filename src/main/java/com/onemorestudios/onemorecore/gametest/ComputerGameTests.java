@@ -129,6 +129,7 @@ public final class ComputerGameTests {
     public static void freeItemsAreNotCurrency(GameTestHelper helper) throws ReflectiveOperationException {
         GameTestSupport.place(helper, SIGN, OneMoreCore.OPEN_SIGN.get(), OpenSignBlockEntity.class);
         Restaurant restaurant = Restaurants.get(helper.getLevel()).at(helper.absolutePos(SIGN));
+        int initialBalance = restaurant.register();
         // A rack with one oak tray in it: trays are taken out, not made.
         helper.setBlock(COMPUTER, OneMoreCore.TRAY_RACK.get().defaultBlockState()
                 .setValue(com.onemorestudios.onemorecore.TrayRackBlock.SLOTS[0], com.onemorestudios.onemorecore.TrayRackBlock.Slot.OAK));
@@ -144,7 +145,7 @@ public final class ComputerGameTests {
             ItemStack tray = player.getInventory().items.stream().filter(s -> s.is(OneMoreCore.TRAY_ITEM.get())).findFirst().orElseThrow();
             GameTestSupport.give(player, tray.copy());
             GameTestSupport.click(helper, player, SIGN);
-            helper.assertValueEqual(restaurant.register(), 0, "the tray did not credit the register");
+            helper.assertValueEqual(restaurant.register(), initialBalance, "the tray did not credit the register");
             helper.assertValueEqual(Config.currency(), OneMoreCore.COIN.get(), "fallback for trays");
 
             currency.set("onemorecore:ticket");
@@ -221,7 +222,7 @@ public final class ComputerGameTests {
         helper.setBlock(COMPUTER, OneMoreCore.COMPUTER.get());
         helper.setBlock(CHEST, Blocks.CHEST);
         Restaurant restaurant = Restaurants.get(helper.getLevel()).at(helper.absolutePos(SIGN));
-        restaurant.addMoney(20);
+        GameTestSupport.setRegister(restaurant, 20);
         var setDelivery = Restaurant.class.getDeclaredMethod("setDelivery", BlockPos.class);
         setDelivery.setAccessible(true);
         setDelivery.invoke(restaurant, helper.absolutePos(CHEST));

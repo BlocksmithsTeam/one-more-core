@@ -276,6 +276,7 @@ public final class MoneyGameTests {
         helper.setBlock(OTHER, Blocks.OAK_SLAB);
         helper.setBlock(SEAT, Blocks.OAK_STAIRS);
         Restaurant r = Restaurants.get(helper.getLevel()).at(helper.absolutePos(SIGN));
+        GameTestSupport.setRegister(r, 0);
         BoundingBox area = BoundingBox.fromCorners(helper.absolutePos(BlockPos.ZERO), helper.absolutePos(new BlockPos(3, 3, 3)));
         call(Restaurant.class, r, "setArea", new Class<?>[] {BoundingBox.class}, area);
         return r;
