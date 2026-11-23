@@ -57,6 +57,13 @@ public final class ScreenRenderer {
     private static final Map<BlockPos, Display> DISPLAYS = new HashMap<>();
     /** What a player at one side of a screen chose there: by anchor and side. */
     private static final Map<Long, View> VIEWS = new HashMap<>();
+    /** Up close: where the window is moved over a long picture (canvas units from its start), and canvas units of a GUI pixel. */
+    static float panX, panY, canvasPerPixel;
+    /** A press up close: a drag farther than DRAG_START GUI pixels moves the window, else its release is a click (pressAction). */
+    private static final double DRAG_START = 4;
+    private static boolean pressed, dragged;
+    private static double pressX, pressY;
+    private static Runnable pressAction;
     /** The side scrolled by the mouse wheel up close: the anchor and side last drawn under the camera's look. */
     private static long scrollTarget = Long.MIN_VALUE;
 
@@ -168,10 +175,31 @@ public final class ScreenRenderer {
             e.setSwingHand(false);
             e.setCanceled(true);
         });
-        // Up close (Diegesis), a mouse click does the same, and the wheel scrolls the side the camera looks at.
+        // Up close (Diegesis), a mouse click does the same; a drag moves the camera over a long picture instead, and the wheel
+        // scrolls the side the camera looks at.
         NeoForge.EVENT_BUS.addListener((ScreenEvent.MouseButtonPressed.Pre e) -> {
-            if (e.getButton() != 0 || action == null || !DiegesisHook.focused()) return;
-            action.run();
+            if (e.getButton() != 0 || !DiegesisHook.focused()) return;
+            pressed = true;
+            dragged = false;
+            pressX = e.getMouseX();
+            pressY = e.getMouseY();
+            pressAction = action;
+            e.setCanceled(true);
+        });
+        NeoForge.EVENT_BUS.addListener((ScreenEvent.MouseDragged.Pre e) -> {
+            if (!pressed || e.getMouseButton() != 0 || !DiegesisHook.focused()) return;
+            if (!dragged && Math.hypot(e.getMouseX() - pressX, e.getMouseY() - pressY) > DRAG_START) dragged = true;
+            if (dragged) {
+                panX -= (float) e.getDragX() * canvasPerPixel;
+                panY -= (float) e.getDragY() * canvasPerPixel;
+            }
+            e.setCanceled(true);
+        });
+        NeoForge.EVENT_BUS.addListener((ScreenEvent.MouseButtonReleased.Pre e) -> {
+            if (e.getButton() != 0 || !pressed) return;
+            pressed = false;
+            if (!dragged && pressAction != null && DiegesisHook.focused()) pressAction.run();
+            pressAction = null;
             e.setCanceled(true);
         });
         NeoForge.EVENT_BUS.addListener((ScreenEvent.MouseScrolled.Pre e) -> {

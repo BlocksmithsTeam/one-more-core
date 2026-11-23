@@ -17,9 +17,10 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * What a screen shows, packed in an int: the mode (bits 0-1: off, menu, orders), the kinds of the menu (bits 2-6, one per kind
- * of MenuBoardBlockEntity order; none set: all), the size (bits 7-8: normal, small, large) and paging (bit 9 set: the first page
- * only; clear: the pages change every 6 seconds). Sneak-click a screen with an empty hand to set it. A Screen (ScreenBlock) has two
- * sides: bits 0-9 are its front; when bit 26 is set, bits 16-25 are its back (else the back shows what the front shows).
+ * of MenuBoardBlockEntity order; none set: all), the size (bits 7-8: normal, small, large) and the scroll (bit 9 set: none, the
+ * start stays; clear: what does not fit scrolls by itself, down, or sideways when bit 10 is set). Sneak-click a screen with an
+ * empty hand to set it. A Screen (ScreenBlock) has two sides: bits 0-10 are its front; when bit 26 is set, bits 16-25 and bit 27
+ * are its back (else the back shows what the front shows).
  */
 public final class ScreenSettings {
     private ScreenSettings() {}
@@ -28,8 +29,18 @@ public final class ScreenSettings {
     /** Text size by the size setting. */
     public static final float[] ZOOM = {1f, 0.75f, 1.35f};
 
-    public static int pack(int mode, int kinds, int size, boolean autoPages) {
-        return (mode & 3) | (kinds & 31) << 2 | (size & 3) << 7 | (autoPages ? 0 : 1) << 9;
+    /** The scroll settings: none (the start stays), down, sideways. */
+    public static final int SCROLL_OFF = 0, SCROLL_DOWN = 1, SCROLL_SIDEWAYS = 2;
+    /** The bits of one side's settings. */
+    public static final int FACE = 0x7FF;
+
+    public static int pack(int mode, int kinds, int size, int scroll) {
+        return (mode & 3) | (kinds & 31) << 2 | (size & 3) << 7 | (scroll == SCROLL_OFF ? 1 : 0) << 9 | (scroll == SCROLL_SIDEWAYS ? 1 : 0) << 10;
+    }
+
+    /** True: scrolls down by itself; false: no scroll. */
+    public static int pack(int mode, int kinds, int size, boolean autoScroll) {
+        return pack(mode, kinds, size, autoScroll ? SCROLL_DOWN : SCROLL_OFF);
     }
 
     public static int mode(int v) { return Math.min(2, v & 3); }
@@ -38,30 +49,36 @@ public final class ScreenSettings {
 
     public static int size(int v) { return Math.min(2, v >> 7 & 3); }
 
-    public static boolean autoPages(int v) { return (v >> 9 & 1) == 0; }
+    /** SCROLL_OFF, SCROLL_DOWN or SCROLL_SIDEWAYS (saves from before the scroll had "pages turn by themselves": down). */
+    public static int scroll(int v) { return (v >> 9 & 1) == 1 ? SCROLL_OFF : (v >> 10 & 1) == 1 ? SCROLL_SIDEWAYS : SCROLL_DOWN; }
 
-    public static int withMode(int v, int mode) { return pack(mode, kinds(v), size(v), autoPages(v)); }
+    public static int withMode(int v, int mode) { return pack(mode, kinds(v), size(v), scroll(v)); }
+
+    private static int clean(int face) {
+        return pack(mode(face), kinds(face), size(face), scroll(face));
+    }
 
     /** A value from a save or a packet, cut to the known fields. */
     public static int valid(int v) {
-        int front = pack(mode(v), kinds(v), size(v), autoPages(v));
+        int front = clean(v);
         if ((v >> 26 & 1) == 0) return front;
-        int b = v >>> 16 & 0x3FF;
-        return front | pack(mode(b), kinds(b), size(b), autoPages(b)) << 16 | 1 << 26;
+        return both(front, clean(face(v, 1)));
     }
 
     /** The settings of one side (0: front, 1: back) of a screen. */
     public static int face(int v, int side) {
-        return side == 0 || (v >> 26 & 1) == 0 ? v & 0x3FF : v >>> 16 & 0x3FF;
+        return side == 0 || (v >> 26 & 1) == 0 ? v & FACE : (v >>> 16 & 0x3FF) | (v >>> 27 & 1) << 10;
+    }
+
+    /** Both sides packed: the back's bits 0-9 at 16-25 and its bit 10 at 27, and bit 26 set. */
+    private static int both(int front, int back) {
+        return front & FACE | (back & 0x3FF) << 16 | 1 << 26 | (back >> 10 & 1) << 27;
     }
 
     /** The settings with one side changed; the other side keeps what it shows. */
     public static int withFace(int v, int side, int settings) {
-        settings &= 0x3FF;
-        int back = face(v, 1);
-        int front = side == 0 ? settings : v & 0x3FF;
-        back = side == 1 ? settings : back;
-        return front | back << 16 | 1 << 26;
+        settings &= FACE;
+        return both(side == 0 ? settings : face(v, 0), side == 1 ? settings : face(v, 1));
     }
 
     /** Whether no side of the screen shows anything. */
@@ -130,7 +147,7 @@ public final class ScreenSettings {
             BlockPos anchor = group.anchor();
             int now = r.screens.getOrDefault(anchor, pack(((MenuBoardBlock) state.getBlock()).defaultMode(), 0, 0, true));
             int face = face(now, s.side);
-            if (s.settings >= 0) face = valid(s.settings) & 0x3FF;
+            if (s.settings >= 0) face = valid(s.settings) & FACE;
             if (s.mode >= 0 && s.mode <= 2) face = withMode(face, s.mode);
             if (s.settings >= 0 || s.mode >= 0) r.setScreen(anchor, ScreenPicture.sides(state) > 1 ? withFace(now, s.side, face) : face);
             if (s.tilt >= 0 && s.tilt <= 2 && MenuBoardBlock.canTilt(state)) {

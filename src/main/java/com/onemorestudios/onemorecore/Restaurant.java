@@ -1246,6 +1246,7 @@ public class Restaurant {
         // A card is a Table Number block on the surface; one that is gone (or an old loose card) is forgotten.
         if (cards.keySet().removeIf(p -> level.isLoaded(p) && (!level.getBlockState(p).is(OneMoreCore.SURFACES)
                 || !level.getBlockState(p.above()).is(OneMoreCore.TABLE_NUMBER_BLOCK.get())))) owner.setDirty();
+        adoptCards(level);
         tableLabels.clear();
         List<BlockPos> marks = new ArrayList<>();
         List<String> texts = new ArrayList<>();
@@ -1263,6 +1264,27 @@ public class Restaurant {
         BoundingBox near = area.inflatedBy(32);
         TableMarks packet = new TableMarks(sign, marks, texts, places, cuts.east(), cuts.south());
         for (ServerPlayer p : level.players()) if (near.isInside(p.blockPosition())) PacketDistributor.sendToPlayer(p, packet);
+    }
+
+    /**
+     * The Table Number blocks in the area that the restaurant does not know: a new sign or a new area forgets the cards, while the
+     * blocks stay on the tables with their text (the orders showed "TABLE ?" until the text was typed again).
+     */
+    private void adoptCards(ServerLevel level) {
+        if (area == null) return;
+        for (int cz = area.minZ() >> 4; cz <= area.maxZ() >> 4; cz++) {
+            for (int cx = area.minX() >> 4; cx <= area.maxX() >> 4; cx++) {
+                var chunk = level.getChunkSource().getChunkNow(cx, cz);
+                if (chunk == null) continue;
+                for (var be : chunk.getBlockEntities().values()) {
+                    BlockPos surface = be.getBlockPos().below();
+                    if (!(be instanceof TableNumberBlockEntity card) || cards.containsKey(surface) || cards.size() >= 256 || !area.isInside(surface)
+                            || !level.getBlockState(surface).is(OneMoreCore.SURFACES)) continue;
+                    cards.put(surface.immutable(), TableNumberBlock.card(card.getBlockState(), card.text()));
+                    owner.setDirty();
+                }
+            }
+        }
     }
 
     /** The card text of the table of a serving surface, "" when it has no card. */

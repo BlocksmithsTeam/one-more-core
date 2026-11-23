@@ -33,10 +33,11 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * What a restaurant screen shows, drawn on a canvas of w x h units with its top left at the origin, x to the right and y down
  * (the caller's pose maps the canvas onto one side of the screen). Both pictures have a header with the title and two tabs (Menu,
  * Orders) that switch what this side shows. The menu is like the boards over a fast food counter: the dishes by kind, each with
- * a picture, the name and a yellow price tag. The orders are like a kitchen order display: a ticket per order in columns (a
+ * a picture, the name and a price tag. The orders are like a kitchen order display: a ticket per order in columns (a
  * coloured head with the table and the patience, a line per dish, the price), and on a wide picture a summary of the dishes to
- * make; a ticket gives its paper ticket when clicked, a summary line marks the tickets with that dish. The pages change by
- * themselves; up close (Diegesis) the content scrolls instead. Screens light themselves (full brightness), as a television does.
+ * make; a ticket gives its paper ticket when clicked, a summary line marks the tickets with that dish. What does not fit scrolls
+ * by itself, smoothly, down or sideways (ScreenSettings); up close (Diegesis) the wheel scrolls it. Screens light themselves (full
+ * brightness), as a television does.
  */
 public final class ScreenPainter {
     private ScreenPainter() {}
@@ -64,6 +65,8 @@ public final class ScreenPainter {
         int side;
         ScreenRenderer.View view = new ScreenRenderer.View();
         boolean scrolling;
+        /** What is drawn outside this box is cut off (rectangles) or left out (text and items that do not fit in whole). */
+        float clipX0 = -Float.MAX_VALUE, clipY0 = -Float.MAX_VALUE, clipX1 = Float.MAX_VALUE, clipY1 = Float.MAX_VALUE;
 
         Canvas(PoseStack pose, MultiBufferSource buffers, float w, float h, float hx, float hy, float u, int settings) {
             this.u = u;
@@ -76,11 +79,28 @@ public final class ScreenPainter {
             this.hy = hy;
         }
 
-        /** A filled rectangle, a little in front of what was drawn before. */
+        void clip(float x0, float y0, float x1, float y1) {
+            clipX0 = x0;
+            clipY0 = y0;
+            clipX1 = x1;
+            clipY1 = y1;
+        }
+
+        void unclip() {
+            clip(-Float.MAX_VALUE, -Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE);
+        }
+
+        /** Whether a box lies in the clip box in whole. */
+        boolean inside(float x, float y, float rw, float rh) {
+            return x >= clipX0 - 0.01f && y >= clipY0 - 0.01f && x + rw <= clipX1 + 0.01f && y + rh <= clipY1 + 0.01f;
+        }
+
+        /** A filled rectangle, a little in front of what was drawn before, cut to the clip box. */
         void rect(float x, float y, float rw, float rh, int argb) {
-            if (rw <= 0 || rh <= 0) return;
+            float x0 = Math.max(x, clipX0), y0 = Math.max(y, clipY0), x1 = Math.min(x + rw, clipX1), y1 = Math.min(y + rh, clipY1);
+            if (x1 <= x0 || y1 <= y0) return;
             z += 0.02f;
-            TrayRenderer.quad(pose, buffers.getBuffer(argb >>> 24 == 0xFF ? WHITE : SHEER), x, y, x + rw, y + rh, z, argb, LIGHT);
+            TrayRenderer.quad(pose, buffers.getBuffer(argb >>> 24 == 0xFF ? WHITE : SHEER), x0, y0, x1, y1, z, argb, LIGHT);
         }
 
         /** A rectangle with its corners cut by r (a pixel-art rounded box). */
@@ -92,6 +112,7 @@ public final class ScreenPainter {
 
         void text(String s, float x, float y, float scale, int color) {
             Font font = Minecraft.getInstance().font;
+            if (!inside(x, y, font.width(s) * scale, 8 * scale)) return;
             pose.pushPose();
             pose.translate(x, y, z + 0.05f);
             pose.scale(scale, scale, scale);
@@ -112,7 +133,7 @@ public final class ScreenPainter {
         }
 
         boolean over(float x, float y, float rw, float rh) {
-            return hx >= x && hx < x + rw && hy >= y && hy < y + rh;
+            return hx >= x && hx < x + rw && hy >= y && hy < y + rh && hx >= clipX0 && hx < clipX1 && hy >= clipY0 && hy < clipY1;
         }
 
         /** A region that a click runs; under the pointer it lights up. */
@@ -124,7 +145,7 @@ public final class ScreenPainter {
 
         /** An item with its middle at (cx, cy), size units across; lit and remembered under the pointer. */
         void item(ItemStack stack, float cx, float cy, float size) {
-            if (stack.isEmpty()) return;
+            if (stack.isEmpty() || !inside(cx - size / 2, cy - size / 2, size, size)) return;
             boolean over = over(cx - size / 2, cy - size / 2, size, size);
             if (over) {
                 rect(cx - size * 0.6f, cy - size * 0.6f, size * 1.2f, size * 1.2f, 0x55FFFFFF);
@@ -137,27 +158,42 @@ public final class ScreenPainter {
             Minecraft.getInstance().getItemRenderer().renderStatic(stack, ItemDisplayContext.GUI, LIGHT, OverlayTexture.NO_OVERLAY, pose, buffers, null, 0);
             pose.popPose();
         }
+    }
 
-        /** Content drawn only between two heights (the scrolled area): true when a band of height bh at y shows. */
-        boolean shows(float y, float bh, float top, float bottom) {
-            return y + bh > top && y < bottom;
+    /** How fast a screen scrolls by itself, layout units a second, and the gap before its start comes round again. */
+    private static final float SPEED = 9, LOOP_GAP = 16;
+
+    /**
+     * Where the content is drawn along its flow (ScreenSettings.SCROLL_*), length long where shown of it shows: up close (Diegesis)
+     * once, scrolled by the wheel; else once at its start when it fits or does not scroll, or twice, moving on smoothly, the start
+     * coming round again after the end (as a ticker).
+     */
+    static float[] offsets(Canvas c, float length, float shown, int flow) {
+        c.view.maxScroll = c.scrolling ? Math.max(0, length - shown) : 0;
+        if (c.scrolling) return new float[] {Math.min(c.view.scroll, c.view.maxScroll)};
+        if (flow == ScreenSettings.SCROLL_OFF || length <= shown) return new float[] {0};
+        float period = length + LOOP_GAP * c.u;
+        float off = (float) (net.minecraft.Util.getMillis() / 1000.0 * SPEED * c.u % period);
+        return new float[] {off, off - period};
+    }
+
+    /** The flow the content is laid out in: the side's scroll setting; up close it scrolls by hand, down unless set sideways. */
+    static int flow(Canvas c) {
+        int set = ScreenSettings.scroll(c.settings);
+        return c.scrolling ? (set == ScreenSettings.SCROLL_SIDEWAYS ? set : ScreenSettings.SCROLL_DOWN) : set;
+    }
+
+    /** A thin scroll bar up close, when the content is longer than its area: at the right (down) or at the bottom (sideways). */
+    static void scrollBar(Canvas c, int flow, float start, float area, float content, int color) {
+        if (!c.scrolling || content <= area) return;
+        float u = c.u, bar = Math.max(8 * u, area * area / content), at = start + (area - bar) * c.view.scroll / (content - area);
+        if (flow == ScreenSettings.SCROLL_SIDEWAYS) {
+            c.rect(start, c.h - 2.2f * u, area, 1.2f * u, 0x22FFFFFF);
+            c.rect(at, c.h - 2.2f * u, bar, 1.2f * u, color);
+        } else {
+            c.rect(c.w - 2.2f * u, start, 1.2f * u, area, 0x22FFFFFF);
+            c.rect(c.w - 2.2f * u, at, 1.2f * u, bar, color);
         }
-    }
-
-    /** Page dots centred at the bottom of the canvas. */
-    static void dots(Canvas c, int page, int pages, int on, int off) {
-        if (pages <= 1) return;
-        float u = c.u, d = 2.4f * u, step = 4.5f * u, x = (c.w - (pages - 1) * step - d) / 2;
-        for (int i = 0; i < pages; i++) c.rect(x + i * step, c.h - 3.6f * u, d, d, i == page ? on : off);
-    }
-
-    /** A thin scroll bar at the right of the area, when the content is higher than it. */
-    static void scrollBar(Canvas c, float top, float areaH, float content, int color) {
-        c.view.maxScroll = Math.max(0, content - areaH);
-        if (!c.scrolling || content <= areaH) return;
-        float u = c.u, barH = Math.max(8 * u, areaH * areaH / content), y = top + (areaH - barH) * c.view.scroll / (content - areaH);
-        c.rect(c.w - 2.2f * u, top, 1.2f * u, areaH, 0x22FFFFFF);
-        c.rect(c.w - 2.2f * u, y, 1.2f * u, barH, color);
     }
 
     /**
@@ -217,19 +253,19 @@ public final class ScreenPainter {
         PacketDistributor.sendToServer(new ScreenSettings.Save(anchor, -1, -1, side, -1, mode));
     }
 
-    private static final int MENU_BG = 0xFF17191E, ROW = 0xFF22252C, ROW_OVER = 0xFF30343D, ICON_BG = 0xFF2C3038, YELLOW = 0xFFFFC72C;
+    private static final int ROW_OVER = 0xFFE3E8EE, ICON_BG = 0xFFE6EAF0;
 
     /** One block of the menu's flow: a kind's heading (line null) or a dish line. */
     private record Cell(String kind, MenuBoardBlockEntity.Line line) {}
 
     /**
-     * The menu: a red header, then the dishes by kind as rows (a big picture, the name, a yellow price tag) flowing down as many
-     * columns as fit; the pages change every 6 seconds when they do not fit, or up close the kinds go into the shortest column
-     * and the menu scrolls.
+     * The menu, in the colours of the orders: a header, then the dishes by kind as rows (a big picture, the name, a price tag)
+     * in as many columns as fit; a column never ends with a heading, and one that starts in a kind repeats its heading. Scrolled
+     * down, the columns share the menu evenly; else they make pages, side by side when scrolled sideways.
      */
     static ItemStack menu(Canvas c, List<MenuBoardBlockEntity.Line> lines) {
         float u = c.u;
-        c.rect(0, 0, c.w, c.h, MENU_BG);
+        c.rect(0, 0, c.w, c.h, KDS_BG);
         float headH = OrderLayout.HEADER * u;
         List<Cell> flow = new ArrayList<>();
         for (String k : KINDS) {
@@ -242,101 +278,93 @@ public final class ScreenPainter {
         float gap = 5 * u, top = headH + 5 * u, bottom = c.h - 6 * u, headingH = 13 * u, rowH = 24 * u, space = 2.5f * u;
         int cols = Math.max(1, (int) ((c.w - gap) / (110 * u)));
         float colW = (c.w - gap * (cols + 1)) / cols;
-        // Each placed cell: its column and its y (on its page; before scrolling).
+        int dir = flow(c);
+        // Each placed cell: its x, its y and its page (before scrolling).
         List<float[]> placed = new ArrayList<>();
-        int pages = 1;
-        if (c.scrolling) {
-            // Whole kinds into the shortest column.
-            float[] colY = new float[cols];
-            java.util.Arrays.fill(colY, top);
-            int i = 0;
-            while (i < flow.size()) {
-                int col = 0;
-                for (int k = 1; k < cols; k++) if (colY[k] < colY[col]) col = k;
-                do {
-                    Cell cell = flow.get(i);
-                    placed.add(new float[] {col, colY[col], 0});
-                    colY[col] += (cell.line() == null ? headingH : rowH) + space;
-                    i++;
-                } while (i < flow.size() && flow.get(i).line() != null);
-            }
-            float content = 0;
-            for (float y : colY) content = Math.max(content, y - top);
-            scrollBar(c, top, bottom - top, content, YELLOW);
-        } else {
-            // Pages of columns; a column never ends with a heading, and one that starts in a kind repeats its heading.
-            int col = 0, page = 0;
-            float y = top;
-            List<Cell> withRepeats = new ArrayList<>();
-            for (int i = 0; i < flow.size(); i++) {
-                Cell cell = flow.get(i);
-                float need = cell.line() == null ? headingH + rowH + space : rowH;
-                if (y + need > bottom && y > top) {
-                    col++;
-                    y = top;
-                    if (col == cols) { col = 0; page++; }
-                    if (cell.line() != null) {
-                        withRepeats.add(new Cell(cell.kind(), null));
-                        placed.add(new float[] {col, y, page});
-                        y += headingH + space;
-                    }
-                }
-                withRepeats.add(cell);
-                placed.add(new float[] {col, y, page});
-                y += (cell.line() == null ? headingH : rowH) + space;
-            }
-            flow = withRepeats;
-            pages = page + 1;
-            c.view.maxScroll = 0;
+        // Down, the columns share the menu evenly and run on below the picture when it does not fit; else the columns make
+        // pages (side by side when sideways).
+        boolean down = dir == ScreenSettings.SCROLL_DOWN, sideways = dir == ScreenSettings.SCROLL_SIDEWAYS;
+        float limit = bottom;
+        if (down) {
+            float total = 0;
+            for (Cell cell : flow) total += (cell.line() == null ? headingH : rowH) + space;
+            limit = top + Math.max(bottom - top, total / cols + headingH + rowH + 2 * space);
         }
-        int shown = !c.scrolling && ScreenSettings.autoPages(c.settings) ? (int) (System.currentTimeMillis() / 6000 % pages) : 0;
-        float scroll = c.scrolling ? Math.min(c.view.scroll, c.view.maxScroll) : 0;
+        int col = 0, page = 0;
+        float fy = top, end = top;
+        List<Cell> withRepeats = new ArrayList<>();
         for (int i = 0; i < flow.size(); i++) {
-            float[] at = placed.get(i);
-            if ((int) at[2] != shown) continue;
             Cell cell = flow.get(i);
-            float x = gap + at[0] * (colW + gap), y = at[1] - scroll;
-            float bh = cell.line() == null ? headingH : rowH;
-            if (!c.shows(y, bh, top, bottom) || y < top - 1) continue;
-            int color = KIND_COLORS[java.util.Arrays.asList(KINDS).indexOf(cell.kind())];
-            if (cell.line() == null) {
-                String head = Component.translatable("onemorecore.board." + cell.kind()).getString().toUpperCase(java.util.Locale.ROOT);
-                float hs = 0.85f * u;
-                c.rect(x, y + 1 * u, 2.4f * u, headingH - 2 * u, color);
-                c.text(c.fit(head, colW - 6 * u, hs), x + 5 * u, y + (headingH - 7 * hs) / 2, hs, color);
-                float after = x + 5 * u + Math.min(c.width(head, hs), colW - 6 * u) + 3 * u;
-                if (after < x + colW) c.rect(after, y + headingH / 2, x + colW - after, 0.6f * u, 0x33FFFFFF);
-                continue;
+            float need = cell.line() == null ? headingH + rowH + space : rowH;
+            if (fy + need > limit && fy > top && !(down && col == cols - 1)) {
+                col++;
+                fy = top;
+                if (col == cols) { col = 0; page++; }
+                if (cell.line() != null) {
+                    withRepeats.add(new Cell(cell.kind(), null));
+                    placed.add(new float[] {gap + col * (colW + gap) + (sideways ? page * (c.w - gap) : 0), fy, sideways ? 0 : page});
+                    fy += headingH + space;
+                }
             }
-            MenuBoardBlockEntity.Line l = cell.line();
-            // The whole row is the pointer's target (the icon alone is small up close): its first dish's tooltip.
-            boolean overRow = c.over(x, y, colW, rowH) && !l.items().isEmpty();
-            c.box(x, y, colW, rowH, 1.2f * u, overRow ? ROW_OVER : ROW);
-            if (overRow && c.hovered.isEmpty()) c.hovered = l.items().get(0);
-            c.rect(x, y + 3 * u, 1.2f * u, rowH - 6 * u, color);
-            float icon = rowH - 6 * u, iconBox = rowH - 3 * u;
-            int n = Math.min(3, l.items().size());
-            float picW = iconBox + (n - 1) * icon * 0.55f;
-            c.box(x + 2.5f * u, y + 1.5f * u, picW, iconBox, 1.2f * u, ICON_BG);
-            for (int j = 0; j < n; j++) c.item(l.items().get(j), x + 2.5f * u + iconBox / 2 + j * icon * 0.55f, y + rowH / 2, icon);
-            String price = String.valueOf(l.price());
-            float ps = 0.85f * u, pw = c.width(price, ps) + 6 * u, ph = 11 * u;
-            c.box(x + colW - pw - 3 * u, y + (rowH - ph) / 2, pw, ph, 1.2f * u, YELLOW);
-            c.text(price, x + colW - pw, y + (rowH - 7 * ps) / 2, ps, 0xFF1A1A1A);
-            String name = l.items().size() == 1 ? l.items().get(0).getHoverName().getString()
-                    : String.join(" + ", l.items().stream().map(st -> st.getHoverName().getString()).toList());
-            float nx = x + 2.5f * u + picW + 3.5f * u, ns = 0.8f * u;
-            c.text(c.fit(name, x + colW - pw - 6 * u - nx, ns), nx, y + (rowH - 7 * ns) / 2, ns, 0xFFF2F2F2);
+            withRepeats.add(cell);
+            placed.add(new float[] {gap + col * (colW + gap) + (sideways ? page * (c.w - gap) : 0), fy, sideways ? 0 : page});
+            fy += (cell.line() == null ? headingH : rowH) + space;
+            end = Math.max(end, fy);
         }
+        flow = withRepeats;
+        float length = down ? end - top : sideways ? (page + 1) * (c.w - gap) + gap : 0, shown = down ? bottom - top : c.w;
+        float[] offsets = offsets(c, length, shown, dir);
+        c.clip(0, top, c.w, bottom);
+        for (float off : offsets) {
+            float dx = dir == ScreenSettings.SCROLL_SIDEWAYS ? off : 0, dy = dir == ScreenSettings.SCROLL_DOWN ? off : 0;
+            for (int i = 0; i < flow.size(); i++) {
+                float[] at = placed.get(i);
+                if ((int) at[2] != 0) continue;
+                Cell cell = flow.get(i);
+                float x = at[0] - dx, y = at[1] - dy;
+                float bh = cell.line() == null ? headingH : rowH;
+                if (y + bh <= top || y >= bottom || x + colW <= 0 || x >= c.w) continue;
+                int color = KIND_COLORS[java.util.Arrays.asList(KINDS).indexOf(cell.kind())];
+                if (cell.line() == null) {
+                    String head = Component.translatable("onemorecore.board." + cell.kind()).getString().toUpperCase(java.util.Locale.ROOT);
+                    float hs = 0.85f * u;
+                    c.rect(x, y + 1 * u, 2.4f * u, headingH - 2 * u, color);
+                    c.text(c.fit(head, colW - 6 * u, hs), x + 5 * u, y + (headingH - 7 * hs) / 2, hs, 0xFFFFFFFF);
+                    float after = x + 5 * u + Math.min(c.width(head, hs), colW - 6 * u) + 3 * u;
+                    if (after < x + colW) c.rect(after, y + headingH / 2, x + colW - after, 0.6f * u, 0x33FFFFFF);
+                    continue;
+                }
+                MenuBoardBlockEntity.Line l = cell.line();
+                // The whole row is the pointer's target (the icon alone is small up close): its first dish's tooltip.
+                boolean overRow = c.over(x, y, colW, rowH) && !l.items().isEmpty();
+                c.rect(x + 1.2f * u, y + 1.5f * u, colW, rowH, 0x55000000);
+                c.box(x, y, colW, rowH, 1.2f * u, overRow ? ROW_OVER : PAPER);
+                if (overRow && c.hovered.isEmpty()) c.hovered = l.items().get(0);
+                c.rect(x, y + 3 * u, 1.2f * u, rowH - 6 * u, color);
+                float icon = rowH - 6 * u, iconBox = rowH - 3 * u;
+                int n = Math.min(3, l.items().size());
+                float picW = iconBox + (n - 1) * icon * 0.55f;
+                c.box(x + 2.5f * u, y + 1.5f * u, picW, iconBox, 1.2f * u, ICON_BG);
+                for (int j = 0; j < n; j++) c.item(l.items().get(j), x + 2.5f * u + iconBox / 2 + j * icon * 0.55f, y + rowH / 2, icon);
+                String price = String.valueOf(l.price());
+                float ps = 0.85f * u, pw = c.width(price, ps) + 6 * u, ph = 11 * u;
+                c.box(x + colW - pw - 3 * u, y + (rowH - ph) / 2, pw, ph, 1.2f * u, BLUE);
+                c.text(price, x + colW - pw, y + (rowH - 7 * ps) / 2, ps, 0xFFFFFFFF);
+                String name = l.items().size() == 1 ? l.items().get(0).getHoverName().getString()
+                        : String.join(" + ", l.items().stream().map(st -> st.getHoverName().getString()).toList());
+                float nx = x + 2.5f * u + picW + 3.5f * u, ns = 0.8f * u;
+                c.text(c.fit(name, x + colW - pw - 6 * u - nx, ns), nx, y + (rowH - 7 * ns) / 2, ns, INK);
+            }
+        }
+        c.unclip();
         if (flow.isEmpty()) {
             String none = Component.translatable("onemorecore.board.empty").getString();
             float ns = 0.9f * u;
-            c.text(c.fit(none, c.w - 8 * u, ns), Math.max(4 * u, (c.w - c.width(none, ns)) / 2), (headH + c.h) / 2 - 4 * u, ns, 0xFF8A919C);
+            c.text(c.fit(none, c.w - 8 * u, ns), Math.max(4 * u, (c.w - c.width(none, ns)) / 2), (headH + c.h) / 2 - 4 * u, ns, 0xFF8A96A6);
         }
-        c.rect(0, bottom, c.w, c.h - bottom, MENU_BG);
+        scrollBar(c, dir, dir == ScreenSettings.SCROLL_SIDEWAYS ? 0 : top, shown, length, 0xFFB8C0CC);
         // The header goes over the scrolled rows.
-        header(c, Component.translatable("onemorecore.screen.menu").getString(), -1, 0xFFB71C1C, YELLOW, YELLOW);
-        dots(c, shown, pages, YELLOW, 0x44FFFFFF);
+        header(c, Component.translatable("onemorecore.screen.menu").getString(), -1, KDS_HEAD, BLUE, 0xFFFFFFFF);
         return c.hovered;
     }
 
@@ -352,70 +380,73 @@ public final class ScreenPainter {
     static ItemStack orders(Canvas c, List<Tickets.Ticket> tickets) {
         float u = c.u;
         c.rect(0, 0, c.w, c.h, KDS_BG);
-        OrderLayout.Layout layout = OrderLayout.layout(c.w, c.h, u, OrderLayout.guests(tickets), c.scrolling);
-        scrollBar(c, layout.areaTop(), layout.areaHeight(), layout.contentHeight(), 0xFFB8C0CC);
-        int page = c.scrolling ? 0 : OrderLayout.page(layout.pages(), ScreenSettings.autoPages(c.settings) && Minecraft.getInstance().level != null
-                ? Minecraft.getInstance().level.getGameTime() : 0);
-        float scroll = c.scrolling ? Math.min(c.view.scroll, layout.maxScroll()) : 0;
+        int dir = flow(c);
+        OrderLayout.Layout layout = OrderLayout.layout(c.w, c.h, u, OrderLayout.guests(tickets), dir);
+        float[] offsets = offsets(c, layout.length(), layout.shown(), dir);
         float top = layout.areaTop(), bottom = top + layout.areaHeight();
         boolean blink = System.currentTimeMillis() / 400 % 2 == 0;
         Item marked = c.view.marked;
-        for (OrderLayout.Card card : layout.cards()) {
-            if (card.page() != page) continue;
-            float x = card.x(), y = card.y() - scroll, cw = card.w(), ch = card.h();
-            if (!c.shows(y, ch, top, bottom)) continue;
-            Tickets.Ticket t = tickets.get(card.index());
-            float p = Math.max(0, Math.min(1, t.patience()));
-            int head = p > 0.5f ? GREEN : p > 0.25f ? AMBER : RED;
-            boolean has = marked == null || t.items().stream().anyMatch(s -> s.is(marked));
-            final int index = card.index();
-            boolean over = t.orderId() != null && c.hit(x, y, cw, ch, () -> PacketDistributor.sendToServer(
-                    new ScreenClick(c.anchor, tickets.get(index).orderId(), c.hx, c.hy, c.side, c.scrolling ? scroll : -1, page)));
-            if (p <= 0.25f && blink) c.rect(x - 1.2f * u, y - 1.2f * u, cw + 2.4f * u, ch + 2.4f * u, RED);
-            if (marked != null && has) c.rect(x - 1.2f * u, y - 1.2f * u, cw + 2.4f * u, ch + 2.4f * u, 0xFFFFD54F);
-            c.rect(x + 1.2f * u, y + 1.5f * u, cw, ch, 0x55000000);
-            c.rect(x, y, cw, ch, PAPER);
-            float hh = OrderLayout.HEAD * u;
-            c.rect(x, y, cw, hh, head);
-            String table = Component.translatable("onemorecore.screen.table", t.table().isEmpty() ? "?" : t.table()).getString();
-            String number = "#" + (card.index() + 1);
-            float ls = 0.82f * u, nsz = 0.62f * u;
-            c.text(number, x + cw - c.width(number, nsz) - 3 * u, y + (hh - 7 * nsz) / 2, nsz, 0xDDFFFFFF);
-            c.text(c.fit(table, cw - c.width(number, nsz) - 9 * u, ls), x + 3.5f * u, y + (hh - 7 * ls) / 2, ls, 0xFFFFFFFF);
-            float by = y + hh;
-            c.rect(x, by, cw, OrderLayout.BAR * u, 0xFFD5D9DF);
-            c.rect(x, by, cw * p, OrderLayout.BAR * u, head);
-            // A line per dish; a rule between guests.
-            float ly = by + OrderLayout.BAR * u + OrderLayout.PAD * u, line = OrderLayout.LINE * u, icon = line - 2.5f * u, text = 0.66f * u;
-            List<List<ItemStack>> rows = t.rows();
-            for (int r = 0; r < rows.size(); r++) {
-                if (r > 0) {
-                    c.rect(x + 3 * u, ly + OrderLayout.GUEST_GAP * u / 2 - 0.3f * u, cw - 6 * u, 0.6f * u, RULE);
-                    ly += OrderLayout.GUEST_GAP * u;
+        c.clip(0, top, layout.areaWidth(), bottom);
+        for (float off : offsets) {
+            float dx = dir == ScreenSettings.SCROLL_SIDEWAYS ? off : 0, dy = dir == ScreenSettings.SCROLL_DOWN ? off : 0;
+            for (OrderLayout.Card card : layout.cards()) {
+                if (card.page() != 0) continue;
+                float x = card.x() - dx, y = card.y() - dy, cw = card.w(), ch = card.h();
+                if (y + ch <= top || y >= bottom || x + cw <= 0 || x >= layout.areaWidth()) continue;
+                Tickets.Ticket t = tickets.get(card.index());
+                float p = Math.max(0, Math.min(1, t.patience()));
+                int head = p > 0.5f ? GREEN : p > 0.25f ? AMBER : RED;
+                boolean has = marked == null || t.items().stream().anyMatch(s -> s.is(marked));
+                final int index = card.index();
+                boolean over = t.orderId() != null && c.hit(x, y, cw, ch, () -> PacketDistributor.sendToServer(
+                        new ScreenClick(c.anchor, tickets.get(index).orderId(), c.hx, c.hy, c.side, off, dir)));
+                if (p <= 0.25f && blink) c.rect(x - 1.2f * u, y - 1.2f * u, cw + 2.4f * u, ch + 2.4f * u, RED);
+                if (marked != null && has) c.rect(x - 1.2f * u, y - 1.2f * u, cw + 2.4f * u, ch + 2.4f * u, 0xFFFFD54F);
+                c.rect(x + 1.2f * u, y + 1.5f * u, cw, ch, 0x55000000);
+                c.rect(x, y, cw, ch, PAPER);
+                float hh = OrderLayout.HEAD * u;
+                c.rect(x, y, cw, hh, head);
+                String table = Component.translatable("onemorecore.screen.table", t.table().isEmpty() ? "?" : t.table()).getString();
+                String number = "#" + (card.index() + 1);
+                float ls = 0.82f * u, nsz = 0.62f * u;
+                c.text(number, x + cw - c.width(number, nsz) - 3 * u, y + (hh - 7 * nsz) / 2, nsz, 0xDDFFFFFF);
+                c.text(c.fit(table, cw - c.width(number, nsz) - 9 * u, ls), x + 3.5f * u, y + (hh - 7 * ls) / 2, ls, 0xFFFFFFFF);
+                float by = y + hh;
+                c.rect(x, by, cw, OrderLayout.BAR * u, 0xFFD5D9DF);
+                c.rect(x, by, cw * p, OrderLayout.BAR * u, head);
+                // A line per dish; a rule between guests.
+                float ly = by + OrderLayout.BAR * u + OrderLayout.PAD * u, line = OrderLayout.LINE * u, icon = line - 2.5f * u, text = 0.66f * u;
+                List<List<ItemStack>> rows = t.rows();
+                for (int r = 0; r < rows.size(); r++) {
+                    if (r > 0) {
+                        c.rect(x + 3 * u, ly + OrderLayout.GUEST_GAP * u / 2 - 0.3f * u, cw - 6 * u, 0.6f * u, RULE);
+                        ly += OrderLayout.GUEST_GAP * u;
+                    }
+                    List<ItemStack> row = rows.get(r);
+                    if (row.isEmpty()) { ly += line; continue; }
+                    for (ItemStack dish : row) {
+                        boolean hit = marked != null && dish.is(marked);
+                        if (hit) c.rect(x + 1.5f * u, ly, cw - 3 * u, line, 0xFFFFF3C4);
+                        c.item(dish, x + 3 * u + icon / 2, ly + line / 2, icon);
+                        c.text(c.fit(dish.getHoverName().getString(), cw - icon - 9 * u, text), x + 5.5f * u + icon, ly + (line - 7 * text) / 2, text, INK);
+                        ly += line;
+                    }
                 }
-                List<ItemStack> row = rows.get(r);
-                if (row.isEmpty()) { ly += line; continue; }
-                for (ItemStack dish : row) {
-                    boolean hit = marked != null && dish.is(marked);
-                    if (hit) c.rect(x + 1.5f * u, ly, cw - 3 * u, line, 0xFFFFF3C4);
-                    c.item(dish, x + 3 * u + icon / 2, ly + line / 2, icon);
-                    c.text(c.fit(dish.getHoverName().getString(), cw - icon - 9 * u, text), x + 5.5f * u + icon, ly + (line - 7 * text) / 2, text, INK);
-                    ly += line;
+                // The foot: the price, and the button that gives the paper ticket.
+                float fy = y + ch - OrderLayout.FOOT * u;
+                c.rect(x + 2 * u, fy, cw - 4 * u, 0.6f * u, RULE);
+                c.item(StatusCurrency.get(), x + 7 * u, fy + OrderLayout.FOOT * u / 2, 7 * u);
+                c.text(String.valueOf(t.price()), x + 12.5f * u, fy + (OrderLayout.FOOT * u - 7 * 0.72f * u) / 2, 0.72f * u, 0xFF2E7D32);
+                String take = Component.translatable("onemorecore.screen.ticket").getString();
+                float bs = 0.6f * u, bw = c.width(take, bs) + 6 * u, bh = 8 * u;
+                if (bw < cw * 0.55f) {
+                    c.box(x + cw - bw - 3 * u, fy + (OrderLayout.FOOT * u - bh) / 2, bw, bh, 1.2f * u, over ? 0xFF1565C0 : BLUE);
+                    c.text(take, x + cw - bw, fy + (OrderLayout.FOOT * u - 7 * bs) / 2, bs, 0xFFFFFFFF);
                 }
+                if (!has) c.rect(x, y, cw, ch, 0x88202832);
             }
-            // The foot: the price, and the button that gives the paper ticket.
-            float fy = y + ch - OrderLayout.FOOT * u;
-            c.rect(x + 2 * u, fy, cw - 4 * u, 0.6f * u, RULE);
-            c.item(StatusCurrency.get(), x + 7 * u, fy + OrderLayout.FOOT * u / 2, 7 * u);
-            c.text(String.valueOf(t.price()), x + 12.5f * u, fy + (OrderLayout.FOOT * u - 7 * 0.72f * u) / 2, 0.72f * u, 0xFF2E7D32);
-            String take = Component.translatable("onemorecore.screen.ticket").getString();
-            float bs = 0.6f * u, bw = c.width(take, bs) + 6 * u, bh = 8 * u;
-            if (bw < cw * 0.55f) {
-                c.box(x + cw - bw - 3 * u, fy + (OrderLayout.FOOT * u - bh) / 2, bw, bh, 1.2f * u, over ? 0xFF1565C0 : BLUE);
-                c.text(take, x + cw - bw, fy + (OrderLayout.FOOT * u - 7 * bs) / 2, bs, 0xFFFFFFFF);
-            }
-            if (!has) c.rect(x, y, cw, ch, 0x88202832);
         }
+        c.unclip();
         if (tickets.isEmpty()) {
             String none = Component.translatable("onemorecore.screen.no_orders").getString();
             float ns = 0.95f * u;
@@ -424,8 +455,8 @@ public final class ScreenPainter {
         // Cards scrolled past the bottom of the area end at its edge.
         c.rect(0, bottom, c.w, c.h - bottom, KDS_BG);
         if (layout.summaryW() > 0) summary(c, tickets, layout);
+        scrollBar(c, dir, dir == ScreenSettings.SCROLL_SIDEWAYS ? 0 : top, layout.shown(), layout.length(), 0xFFB8C0CC);
         header(c, Component.translatable("onemorecore.screen.orders").getString(), tickets.size(), KDS_HEAD, BLUE, 0xFFFFFFFF);
-        if (!c.scrolling) dots(c, page, layout.pages(), 0xFFFFFFFF, 0x44FFFFFF);
         return c.hovered;
     }
 
