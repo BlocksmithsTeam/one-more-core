@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.onemorestudios.onemorecore.KitchenStations;
 import com.onemorestudios.onemorecore.TrayBlockEntity;
 import com.onemorestudios.onemorecore.TrayPose;
+import com.onemorestudios.onemorecore.compat.GrillingSkewers;
 import com.pockyl.diegesis.api.client.DiegesisClient;
 import com.pockyl.diegesis.api.client.StationBehavior;
 import com.pockyl.diegesis.api.client.StationView;
@@ -45,10 +46,14 @@ final class TrayDiegesis implements StationBehavior {
             SlotRef slot = new SlotRef(KitchenStations.TRAY_DISHES, i);
             ItemPose pose = state.getPose(slot);
             ItemStack stack = state.getItem(slot);
-            if (pose == null || pose.lift() != 0 || stack.isEmpty()) continue;
-            // Only the client has the baked model. Complete the server's rest marker before Diegesis lays out its nodes.
+            if (pose == null || stack.isEmpty()) continue;
+            boolean skewer = GrillingSkewers.matches(stack);
+            if (pose.lift() != 0 && !skewer) continue;
+            // Resolve the server's rest marker and correct older skewer poses before Diegesis lays out its nodes.
             PlacedShape shape = shape(stack);
-            Quaternionf turn = restingTurn(shape, pose.rotation());
+            Quaternionf rotation = new Quaternionf(pose.rotation());
+            Quaternionf turn = restingTurn(shape, rotation, skewer);
+            if (pose.lift() != 0 && Math.abs(turn.dot(rotation)) > 0.999999f) continue;
             float lift = shape.extents(turn, TrayPose.ITEM_SIZE * pose.scale()).y;
             state.setPose(slot, new ItemPose(pose.x(), pose.y(), pose.z(), lift, turn, pose.scale(), pose.on(), pose.wanted()));
         }
@@ -57,7 +62,9 @@ final class TrayDiegesis implements StationBehavior {
     static void drawDish(ItemStack stack, TrayPose at, TrayRenderer.Sway sway, PoseStack pose, MultiBufferSource buffers, int light, int seed) {
         PlacedShape shape = shape(stack);
         float size = TrayPose.ITEM_SIZE * at.scale();
-        Quaternionfc rest = at.lift() == 0 ? restingTurn(shape, at.rotation()) : at.rotation();
+        boolean skewer = GrillingSkewers.matches(stack);
+        boolean measureLift = skewer || at.lift() == 0;
+        Quaternionfc rest = measureLift ? restingTurn(shape, at.rotation(), skewer) : at.rotation();
         Quaternionfc turn = sway.turn(rest);
         var extents = shape.extents(turn, size);
         float lift = at.lift();
@@ -69,14 +76,15 @@ final class TrayDiegesis implements StationBehavior {
             }
             lift += extents.y - still.y;
         }
-        if (at.lift() == 0) lift = extents.y;
+        if (measureLift) lift = extents.y;
         pose.pushPose();
         TrayRenderer.moveDish(pose, at, sway, turn, extents, lift, shape.modelScale(size));
         shape.draw(stack, pose, buffers, light, Minecraft.getInstance().level, seed);
         pose.popPose();
     }
 
-    private static Quaternionf restingTurn(PlacedShape shape, Quaternionfc yaw) {
+    private static Quaternionf restingTurn(PlacedShape shape, Quaternionfc yaw, boolean skewer) {
+        if (skewer) return SkewerPose.lyingTurn(yaw, shape.half());
         Quaternionf turn = new Quaternionf(yaw);
         return shape.isFlat() ? turn.rotateX(Mth.HALF_PI) : turn;
     }

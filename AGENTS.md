@@ -44,6 +44,9 @@ change how one of them works, change its lines here in the same commit.
   rest pose up close (optional mixin, `required: false`). Up close the tray has one place more than its dishes: a ticket put
   anywhere on it becomes the label and takes no dish's place (`KitchenStations.TicketSlot`; test
   `TrayPlacementGameTests.diegesisTrayUsesAndPersistsPlacedPoses`).
+- **Grilling skewers** (`compat/GrillingSkewers`): Kaleidoscope Grilling items in `onemorecore:lying_dishes` or with an ID
+  ending in `_skewer` lie horizontally on trays and serving surfaces. `TrayPlacerMixin` sets the close-up hand turn before
+  Diegesis measures the preview. Test: `GrillingSkewerGameTests.grillingSkewersUseOptionalTagsAndScopedIds`.
 - **Customers**: `walkSpeed` 0.26; a customer whose path does not move it steps onto the next free node (`Customer.hopAlong`);
   stuck within 4 blocks of its seat with no free node (behind a sofa's back), it sits down at once.
 - **Stream chat**: the computer's Stream app sets `chatPlatform`, `chatChannel`, `chatCommand` (operators only) and connects
