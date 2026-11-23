@@ -1,7 +1,6 @@
 {
   "replace": false,
   "values": [
-    "#minecraft:stairs",
     {"id": "#handcrafted:chairs", "required": false},
     {"id": "#handcrafted:benches", "required": false},
     {"id": "#handcrafted:dining_benches", "required": false},

@@ -108,7 +108,7 @@ Each client downloads the skins from the Minecraft skin servers.
 
 ## Compatibility
 
-Seats and serving surfaces are block tags: `onemorecore:seats` and `onemorecore:serving_surfaces`.
+Seats and serving surfaces are block tags: `onemorecore:seats` and `onemorecore:serving_surfaces`. No vanilla block is in them (no stairs, slabs, trapdoors or fences); add vanilla tags such as `#minecraft:stairs` with a datapack if you want them.
 Add blocks of other mods with a datapack. Entries for several furniture mods are included.
 
 ## License
