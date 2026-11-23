@@ -33,6 +33,8 @@ public class TrayBlockEntity extends BlockEntity {
         public int getMaxStackSize() { return 1; }
     };
     public String label = "";
+    /** The ticket that made the label, with its dishes; empty for a label from before tickets were kept. */
+    private ItemStack ticket = ItemStack.EMPTY;
     Player placingPlayer;
     private final List<ItemStack> overflow = new ArrayList<>();
 
@@ -71,6 +73,33 @@ public class TrayBlockEntity extends BlockEntity {
         return List.of(getPose(0), getPose(1), getPose(2));
     }
 
+    /** The label as a ticket: the kept one, or for an old label a ticket with only the table text. Empty: no label. */
+    public ItemStack ticket() {
+        if (label.isEmpty()) return ItemStack.EMPTY;
+        if (!ticket.isEmpty() && label.equals(TableCards.clean(ticket.getOrDefault(OneMoreCore.LABEL.get(), "")))) return ticket;
+        ItemStack old = new ItemStack(OneMoreCore.TICKET.get());
+        old.set(OneMoreCore.LABEL.get(), label);
+        return old;
+    }
+
+    /** Sticks a ticket on as the label and returns the ticket it replaces (empty if none). */
+    public ItemStack putTicket(ItemStack stack) {
+        ItemStack old = ticket().copy();
+        ticket = stack.copyWithCount(1);
+        label = TableCards.clean(ticket.getOrDefault(OneMoreCore.LABEL.get(), ""));
+        changed();
+        return old;
+    }
+
+    /** Takes the label off and returns it as a ticket (empty if there was none). */
+    public ItemStack takeTicket() {
+        ItemStack old = ticket().copy();
+        ticket = ItemStack.EMPTY;
+        label = "";
+        changed();
+        return old;
+    }
+
     void changed() {
         setChanged();
         if (level != null && !level.isClientSide) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
@@ -81,6 +110,7 @@ public class TrayBlockEntity extends BlockEntity {
         super.saveAdditional(tag, registries);
         ContainerHelper.saveAllItems(tag, savedDishes(), true, registries);
         tag.putString("label", label);
+        if (!ticket.isEmpty()) tag.put("ticket", ticket.save(registries));
         if (!items.isEmpty()) {
             tag.put("poses", TrayPose.SLOTS_CODEC.encodeStart(NbtOps.INSTANCE, savedPoses()).getOrThrow());
         }
@@ -96,6 +126,7 @@ public class TrayBlockEntity extends BlockEntity {
                 : List.of());
         // Old trays kept a table number.
         label = tag.contains("label", net.minecraft.nbt.Tag.TAG_INT) ? (tag.getInt("label") > 0 ? String.valueOf(tag.getInt("label")) : "") : TableCards.clean(tag.getString("label"));
+        ticket = tag.contains("ticket") ? ItemStack.parseOptional(registries, tag.getCompound("ticket")) : ItemStack.EMPTY;
     }
 
     @Override
@@ -104,6 +135,7 @@ public class TrayBlockEntity extends BlockEntity {
         loadDishes(input.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).stream().toList());
         loadPoses(input.getOrDefault(OneMoreCore.TRAY_POSES.get(), List.of()));
         label = TableCards.clean(input.getOrDefault(OneMoreCore.LABEL.get(), ""));
+        ticket = input.getOrDefault(OneMoreCore.TRAY_TICKET.get(), ItemContainerContents.EMPTY).copyOne();
     }
 
     private void loadDishes(List<ItemStack> dishes) {
@@ -161,6 +193,7 @@ public class TrayBlockEntity extends BlockEntity {
         builder.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(savedDishes()));
         if (!items.isEmpty()) builder.set(OneMoreCore.TRAY_POSES.get(), savedPoses());
         if (!label.isEmpty()) builder.set(OneMoreCore.LABEL.get(), label);
+        if (!label.isEmpty() && !ticket.isEmpty()) builder.set(OneMoreCore.TRAY_TICKET.get(), ItemContainerContents.fromItems(List.of(ticket)));
     }
 
     @Override
@@ -168,6 +201,7 @@ public class TrayBlockEntity extends BlockEntity {
     public void removeComponentsFromTag(CompoundTag tag) {
         tag.remove("Items");
         tag.remove("label");
+        tag.remove("ticket");
         tag.remove("poses");
     }
 

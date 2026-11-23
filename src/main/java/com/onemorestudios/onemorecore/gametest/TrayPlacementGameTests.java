@@ -115,6 +115,87 @@ public final class TrayPlacementGameTests {
         helper.succeed();
     }
 
+    /**
+     * The tray keeps the whole ticket: it survives saving and the tray item, a new ticket hands the old one back, and an
+     * empty-hand click on the label (the middle of the front rim) gives the ticket back, with its dishes, and leaves the
+     * tray's dishes. A label from before tickets were kept comes back as a ticket with the table only.
+     */
+    @GameTest(template = "empty")
+    public static void labelTicketComesBack(GameTestHelper helper) {
+        helper.setBlock(POS.below(), Blocks.STONE);
+        helper.setBlock(POS, OneMoreCore.TRAY.get().defaultBlockState().setValue(TrayBlock.FACING, Direction.EAST));
+        var tray = (TrayBlockEntity) helper.getBlockEntity(POS);
+        tray.items.setItem(0, Items.CARROT.getDefaultInstance());
+        var level = helper.getLevel();
+        var player = GameTestSupport.player(helper);
+        // The east-facing model turns (x, z) into (16 - z, x): the label is at the east edge.
+        BlockPos pos = helper.absolutePos(POS);
+        Vec3 label = Vec3.atLowerCornerOf(pos).add((16 - 2.5) / 16, 2 / 16.0, 8 / 16.0);
+        Vec3 middle = Vec3.atLowerCornerOf(pos).add(0.5, 2 / 16.0, 0.5);
+        helper.assertTrue(TrayBlock.onLabel(tray, label) == false, "No label yet, so nothing is on it");
+
+        GameTestSupport.give(player, ticket("5", Items.BREAD, Items.APPLE));
+        click(helper, player, label);
+        helper.assertValueEqual(tray.label, "5", "The ticket is the label");
+        helper.assertTrue(TrayBlock.onLabel(tray, label) && !TrayBlock.onLabel(tray, middle), "Only the front rim is the label");
+        helper.assertTrue(tray.items.getItem(0).is(Items.CARROT) && tray.items.getItem(1).isEmpty(), "The ticket takes no dish's place");
+        helper.assertValueEqual(dishes(tray.ticket()), 2L, "The tray keeps the ticket's dishes");
+
+        // Saved, loaded and carried as an item, the ticket stays whole.
+        var loaded = (TrayBlockEntity) BlockEntity.loadStatic(tray.getBlockPos(), tray.getBlockState(),
+                tray.saveWithFullMetadata(level.registryAccess()), level.registryAccess());
+        helper.assertValueEqual(dishes(loaded.ticket()), 2L, "The ticket after NBT load");
+        var item = new net.minecraft.world.item.ItemStack(OneMoreCore.TRAY_ITEM.get());
+        item.applyComponents(tray.collectComponents());
+        helper.assertValueEqual(dishes(item.getOrDefault(OneMoreCore.TRAY_TICKET.get(), net.minecraft.world.item.component.ItemContainerContents.EMPTY).copyOne()), 2L,
+                "The ticket on the tray item");
+
+        // A new ticket hands the old one back.
+        GameTestSupport.give(player, ticket("6", Items.BREAD));
+        click(helper, player, label);
+        helper.assertValueEqual(tray.label, "6", "The new ticket is the label");
+        var back = player.getMainHandItem();
+        helper.assertTrue(back.is(OneMoreCore.TICKET.get()) && "5".equals(back.get(OneMoreCore.LABEL.get())) && dishes(back) == 2,
+                "The old ticket came back with its dishes: " + back);
+
+        // An empty hand on the label takes the ticket off, aimed as a player would (the close-up must not open).
+        player.setItemInHand(InteractionHand.MAIN_HAND, net.minecraft.world.item.ItemStack.EMPTY);
+        player.setPos(pos.getX() + 2.5, pos.getY(), pos.getZ() + 0.5);
+        player.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, label);
+        helper.assertTrue(TrayBlock.looksAtLabel(player, pos), "The player looks at the label");
+        click(helper, player, label);
+        var taken = player.getMainHandItem();
+        helper.assertTrue(taken.is(OneMoreCore.TICKET.get()) && "6".equals(taken.get(OneMoreCore.LABEL.get())) && dishes(taken) == 1,
+                "The ticket came off into the hand: " + taken);
+        helper.assertTrue(tray.label.isEmpty() && tray.ticket().isEmpty(), "The tray has no label");
+        helper.assertTrue(tray.items.getItem(0).is(Items.CARROT), "The dish stays on the tray");
+
+        // An old label, kept as text only, comes back as a ticket with the table.
+        tray.label = "9";
+        var old = tray.takeTicket();
+        helper.assertTrue(old.is(OneMoreCore.TICKET.get()) && "9".equals(old.get(OneMoreCore.LABEL.get())), "The old label as a ticket");
+        helper.succeed();
+    }
+
+    private static net.minecraft.world.item.ItemStack ticket(String table, net.minecraft.world.item.Item... dishes) {
+        var ticket = new net.minecraft.world.item.ItemStack(OneMoreCore.TICKET.get());
+        ticket.set(OneMoreCore.LABEL.get(), table);
+        ticket.set(net.minecraft.core.component.DataComponents.CONTAINER, net.minecraft.world.item.component.ItemContainerContents.fromItems(
+                java.util.Arrays.stream(dishes).map(net.minecraft.world.item.Item::getDefaultInstance).toList()));
+        return ticket;
+    }
+
+    private static long dishes(net.minecraft.world.item.ItemStack ticket) {
+        return ticket.getOrDefault(net.minecraft.core.component.DataComponents.CONTAINER,
+                net.minecraft.world.item.component.ItemContainerContents.EMPTY).nonEmptyStream().count();
+    }
+
+    private static void click(GameTestHelper helper, GameTestSupport.TestPlayer player, Vec3 at) {
+        var hit = new BlockHitResult(at, Direction.UP, helper.absolutePos(POS), false);
+        helper.assertTrue(player.gameMode.useItemOn(player, helper.getLevel(), player.getMainHandItem(),
+                InteractionHand.MAIN_HAND, hit).consumesAction(), "The click was accepted");
+    }
+
     private static void clickEast(GameTestHelper helper, GameTestSupport.TestPlayer player, float x, float z) {
         BlockPos pos = helper.absolutePos(POS);
         Vec3 spot = Vec3.atLowerCornerOf(pos).add((16 - z) / 16, 2 / 16.0, x / 16);
