@@ -1,9 +1,5 @@
 # Third-party notices
 
-## Game-icons.net
-
-The Restaurant Computer uses hot-meal, shopping-cart, checklist and upgrade by Delapouite from [game-icons.net](https://game-icons.net), licensed under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). The symbols are drawn on the mod's own tiles.
-
 ## Yuushya Townscape
 
 - Files: `src/main/resources/assets/onemorecore/models/block/screen.json`, `screen_tilt1.json`, `screen_tilt2.json`, `src/main/resources/assets/onemorecore/textures/block/screen.png` (the wall television of the Menu Screen and the Order Screen)
