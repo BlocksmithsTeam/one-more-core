@@ -41,8 +41,9 @@ import org.joml.Vector3fc;
 public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     static final RenderType PAPER = RenderType.entityCutout(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/block/ticket_paper.png"));
 
-    record Sway(float x, float z, float pitch, float roll) {
-        static final Sway NONE = new Sway(0, 0, 0, 0);
+    /** How the carried dishes move off their place: slide (px), tilt (radians) and lift off the bed (px). */
+    record Sway(float x, float z, float pitch, float roll, float lift) {
+        static final Sway NONE = new Sway(0, 0, 0, 0, 0);
 
         Quaternionfc turn(Quaternionfc rest) {
             return this == NONE ? rest : new Quaternionf().rotationXYZ(pitch, 0, roll).mul(rest);
@@ -133,7 +134,7 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
     static void moveDish(PoseStack pose, TrayPose at, Sway sway, Quaternionfc turn, Vector3fc extents, float lift, float scale) {
         float x = at.x() + slide(sway.x(), at.x(), extents.x(), TrayPose.MIN_X, TrayPose.MAX_X);
         float z = at.z() + slide(sway.z(), at.z(), extents.z(), TrayPose.MIN_Z, TrayPose.MAX_Z);
-        pose.translate(x / 16, (at.y() + lift) / 16, z / 16);
+        pose.translate(x / 16, (at.y() + lift + sway.lift()) / 16, z / 16);
         pose.mulPose(new Quaternionf(turn));
         pose.scale(scale / 16, scale / 16, scale / 16);
     }

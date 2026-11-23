@@ -48,6 +48,10 @@ public final class TrayCarryRenderer {
     private static final float MAX_TRAY_ROLL = 3 * Mth.DEG_TO_RAD;
     private static final float MAX_DISH_SLIDE = 0.35f;
     private static final float MAX_DISH_TILT = 2.5f * Mth.DEG_TO_RAD;
+    /** Pixels the dishes float up off the tray at most while the carrier falls. */
+    private static final float MAX_DISH_LIFT = 1.2f;
+    /** Pixels of lift per block per tick of falling speed: a plain jump lands at about 0.4 blocks a tick. */
+    private static final float LIFT_PER_FALL = 2.5f;
     private static final Map<AbstractClientPlayer, CarrySway> CARRY_SWAY = new WeakHashMap<>();
 
     public static final EnumProxy<HumanoidModel.ArmPose> TRAY_POSE = new EnumProxy<>(HumanoidModel.ArmPose.class,
@@ -184,6 +188,8 @@ public final class TrayCarryRenderer {
         private final Spring fore = new Spring(14, 0.22f);
         private final HandSway right = new HandSway(20, 0.38f);
         private final HandSway left = new HandSway(21.5f, 0.40f);
+        /** The dishes float a little off the tray in a fall and come down on it with a small bounce on landing. */
+        private final Spring hop = new Spring(16, 0.3f);
         private long lastFrame;
         private float lastYaw, lastPitch, yawSpeed, pitchSpeed;
 
@@ -199,6 +205,7 @@ public final class TrayCarryRenderer {
                     fore.reset();
                     right.reset();
                     left.reset();
+                    hop.reset();
                     yawSpeed = pitchSpeed = 0;
                 } else {
                     float stride = player.walkAnimation.position(partialTick) * 0.6662f;
@@ -219,6 +226,15 @@ public final class TrayCarryRenderer {
                     float turn = Mth.clamp(newYawSpeed / 90, -1, 1);
                     right.step(walkUp, walkForward, yawAccel, pitchAccel, 1 - 0.25f * turn, dt);
                     left.step(-walkUp, -walkForward, -yawAccel, pitchAccel, 1 + 0.25f * turn, dt);
+                    // Falling (a jump past its top, or a drop off an edge): the dishes are nearly weightless and drift up.
+                    float fall = (float) (player.yo - player.getY());
+                    float lift = player.onGround() ? 0 : Mth.clamp(fall * LIFT_PER_FALL, 0, MAX_DISH_LIFT);
+                    hop.step(lift, 0, dt);
+                    if (hop.position < 0) {
+                        // The tray is under them: they land on it and bounce a little.
+                        hop.position = 0;
+                        hop.velocity = -hop.velocity * 0.3f;
+                    }
                 }
                 lastYaw = yaw;
                 lastPitch = pitch;
@@ -228,10 +244,11 @@ public final class TrayCarryRenderer {
 
         private TrayRenderer.Sway dishes() {
             float amount = Mth.sqrt(side.position * side.position + fore.position * fore.position);
-            if (amount < 0.001f) return TrayRenderer.Sway.NONE;
+            float lift = Math.max(0, hop.position);
+            if (amount < 0.001f && lift < 0.001f) return TrayRenderer.Sway.NONE;
             float x = side.position / Math.max(1, amount);
             float z = fore.position / Math.max(1, amount);
-            return new TrayRenderer.Sway(x * MAX_DISH_SLIDE, z * MAX_DISH_SLIDE, z * MAX_DISH_TILT, -x * MAX_DISH_TILT);
+            return new TrayRenderer.Sway(x * MAX_DISH_SLIDE, z * MAX_DISH_SLIDE, z * MAX_DISH_TILT, -x * MAX_DISH_TILT, lift);
         }
     }
 
