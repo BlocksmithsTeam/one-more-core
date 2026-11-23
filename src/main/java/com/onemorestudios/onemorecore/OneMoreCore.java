@@ -170,6 +170,14 @@ public class OneMoreCore {
         COMPONENTS.register(bus);
         BLOCK_ENTITIES.register(bus);
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        // The GameTests build restaurants of vanilla stairs (seats) and slabs (tables); players' worlds do not get this pack.
+        if (net.neoforged.neoforge.gametest.GameTestHooks.isGametestServer())
+            bus.addListener((net.neoforged.neoforge.event.AddPackFindersEvent e) -> {
+                if (e.getPackType() == net.minecraft.server.packs.PackType.SERVER_DATA)
+                    e.addPackFinders(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(MODID, "gametest_pack"),
+                            net.minecraft.server.packs.PackType.SERVER_DATA, net.minecraft.network.chat.Component.literal("One More Core GameTests"),
+                            net.minecraft.server.packs.repository.PackSource.BUILT_IN, true, net.minecraft.server.packs.repository.Pack.Position.TOP);
+            });
         bus.addListener((EntityAttributeCreationEvent e) -> e.put(CUSTOMER.get(), Customer.createAttributes().build()));
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> Menu.load(e.getServer().registryAccess()));
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> SkinPool.start(e.getServer()));

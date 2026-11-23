@@ -1,9 +1,6 @@
 {
   "replace": false,
   "values": [
-    "#minecraft:slabs",
-    "#minecraft:trapdoors",
-    "#minecraft:fences",
     {"id": "#handcrafted:tables", "required": false},
     {"id": "#handcrafted:counters", "required": false},
     {"id": "#another_furniture:tables", "required": false},

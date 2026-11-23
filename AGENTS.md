@@ -8,6 +8,9 @@ change how one of them works, change its lines here in the same commit.
 - Pull before you start (`main`). Commit small, one topic per commit, with a clear message (what and why).
 - Run the GameTests before you push: `./gradlew runGameTestServer` must end with "All N required tests passed". A test that
   fails after your change shows a behaviour someone relies on: fix the cause, do not delete or loosen the test.
+- No vanilla block is a seat or table (`onemorecore:seats`, `onemorecore:serving_surfaces`). The GameTests still
+  build with them: `src/main/resources/gametest_pack` adds them back, loaded only on the GameTest server (`OneMoreCore`,
+  `GameTestHooks.isGametestServer`). Test: `FixesGameTests.vanillaBlocksAreNoFurniture`.
 - When you change a behaviour on purpose, change its test in the same commit and say so in the message.
 
 ## Systems and what must keep working

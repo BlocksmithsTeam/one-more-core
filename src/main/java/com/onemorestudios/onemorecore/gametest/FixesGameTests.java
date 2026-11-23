@@ -30,6 +30,24 @@ public final class FixesGameTests {
     }
 
     /** Two restaurants that set the same screen: the last one owns it; before, both drew a picture on it (menu and orders mixed). */
+    /**
+     * The mod's own tags have no vanilla blocks (only the GameTest pack adds stairs and slabs, for these tests): in a world,
+     * no vanilla stair, slab, trapdoor or fence is a seat or a table.
+     */
+    @GameTest(template = "empty")
+    public static void vanillaBlocksAreNoFurniture(GameTestHelper helper) {
+        var file = net.neoforged.fml.ModList.get().getModFileById(OneMoreCore.MODID).getFile();
+        try {
+            String seats = java.nio.file.Files.readString(file.findResource("data/onemorecore/tags/block/seats.json"));
+            String tables = java.nio.file.Files.readString(file.findResource("data/onemorecore/tags/block/serving_surfaces.json"));
+            helper.assertFalse(seats.contains("minecraft:"), "seats name vanilla blocks");
+            helper.assertFalse(tables.contains("minecraft:"), "serving surfaces name vanilla blocks");
+        } catch (java.io.IOException ex) {
+            helper.fail("tag file: " + ex);
+        }
+        helper.succeed();
+    }
+
     @GameTest(template = "empty")
     public static void screenBelongsToOneRestaurant(GameTestHelper helper) throws ReflectiveOperationException {
         Restaurants all = Restaurants.get(helper.getLevel());
