@@ -11,6 +11,7 @@ import com.mojang.math.Axis;
 import com.onemorestudios.onemorecore.Config;
 import com.onemorestudios.onemorecore.Customer;
 import com.onemorestudios.onemorecore.OneMoreCore;
+import com.onemorestudios.onemorecore.TrayPose;
 import com.onemorestudios.onemorecore.compat.GrillingSkewers;
 
 import net.minecraft.client.Minecraft;
@@ -293,6 +294,9 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         vc.addVertex(m, x0, y1, z).setColor(argb).setUv(a0, b0).setLight(light);
     }
 
+    /** How far the middle of a served tray's layout lies from the surface centre towards the guest, in blocks. */
+    private static final double TRAY_IN = 0.12;
+
     /** Draws the delivered items on top of the serving surface, between the customer and the surface centre. */
     private void renderServed(Customer customer, float partialTick, PoseStack pose, MultiBufferSource buffers) {
         List<ItemStack> served = customer.getServed();
@@ -309,10 +313,23 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         float facing = (float) (Mth.atan2(dx, dz) * Mth.RAD_TO_DEG);
         int light = LevelRenderer.getLightColor(customer.level(), surface.above());
         float scale = Config.FOOD_SCALE.get().floatValue();
-        // The first item (the main dish, as the server puts it first) stands big right in front of the guest; the others are
-        // smaller, to the left and right of it and a little further in.
+        // Food served on a tray stays as it was put on the tray: the tray's bed lies on the table in front of the guest, its
+        // front (the label's side, where the player stood to fill it) towards the guest.
         for (int i = 0; i < served.size(); i++) {
-            ItemStack stack = served.get(i);
+            List<TrayPose> at = served.get(i).get(OneMoreCore.TRAY_POSES.get());
+            if (at == null || at.isEmpty()) continue;
+            pose.pushPose();
+            pose.translate(x - dx * TRAY_IN, y - TrayPose.BED / 16f, z - dz * TRAY_IN);
+            pose.mulPose(Axis.YP.rotationDegrees(facing));
+            pose.translate(-0.5, 0, -0.5);
+            TrayRenderer.drawDish(served.get(i), at.get(0), pose, buffers, light, customer.getId() + i);
+            pose.popPose();
+        }
+        // Food from the hand: the first item (the main dish, as the server puts it first) stands big right in front of the
+        // guest; the others are smaller, to the left and right of it and a little further in.
+        List<ItemStack> loose = served.stream().filter(s -> !s.has(OneMoreCore.TRAY_POSES.get())).toList();
+        for (int i = 0; i < loose.size(); i++) {
+            ItemStack stack = loose.get(i);
             int k = i == 0 ? 0 : (i + 1) / 2 * (i % 2 == 1 ? 1 : -1);
             double side = k * 0.27, in = i == 0 ? 0.22 : 0.08;
             pose.pushPose();

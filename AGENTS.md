@@ -51,6 +51,9 @@ change how one of them works, change its lines here in the same commit.
   at the label shows the ticket's tooltip (table and dishes, `ClientSetup.renderOrderTooltip`), an empty-hand click on the label
   (`TrayBlock.onLabel`: middle of the front rim) gives the ticket back and does not open the close-up, and a new ticket hands
   the old one back (dropped on the tray up close). Test: `TrayPlacementGameTests.labelTicketComesBack`.
+  Served from a tray, each dish keeps its tray pose on the table (`TrayItem.serveDishes` passes it, `Customer.serve` puts it
+  on the served copy as `tray_poses`, `CustomerRenderer.renderServed` draws it as the tray does, the tray's front towards
+  the guest). Food served from the hand keeps the old row. Test: `MoneyGameTests` (serveBread).
   The carried tray's hands and dishes move on springs (`TrayCarryRenderer.CarrySway`), stepped once per frame so a second
   render of the player in the same frame (the inventory's player picture) does not push them.
 - **Grilling skewers** (`compat/GrillingSkewers`): Kaleidoscope Grilling items in `onemorecore:lying_dishes` or with an ID
