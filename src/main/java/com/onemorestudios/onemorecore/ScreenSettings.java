@@ -18,9 +18,10 @@ import net.neoforged.neoforge.network.PacketDistributor;
 /**
  * What a screen shows, packed in an int: the mode (bits 0-1: off, menu, orders), the kinds of the menu (bits 2-6, one per kind
  * of MenuBoardBlockEntity order; none set: all), the size (bits 7-8: normal, small, large) and the scroll (bit 9 set: none, the
- * start stays; clear: what does not fit scrolls by itself, down, or sideways when bit 10 is set). Sneak-click a screen with an
- * empty hand to set it. A Screen (ScreenBlock) has two sides: bits 0-10 are its front; when bit 26 is set, bits 16-25 and bit 27
- * are its back (else the back shows what the front shows).
+ * start stays; clear: what does not fit scrolls by itself, down, or sideways when bit 10 is set) and the menu's style (bit 11:
+ * rows, or a board of big pictures). A screwdriver click (or a sneak-click with an empty hand) opens the settings. A Screen
+ * (ScreenBlock) has two sides: bits 0-11 are its front; when bit 26 is set, bits 16-25, 27 and 28 are its back (else the back
+ * shows what the front shows).
  */
 public final class ScreenSettings {
     private ScreenSettings() {}
@@ -31,11 +32,18 @@ public final class ScreenSettings {
 
     /** The scroll settings: none (the start stays), down, sideways. */
     public static final int SCROLL_OFF = 0, SCROLL_DOWN = 1, SCROLL_SIDEWAYS = 2;
+    /** The menu's styles: rows (the dishes as lines, kinds as columns), a board (a panel per kind, a big picture per dish). */
+    public static final int STYLE_ROWS = 0, STYLE_BOARD = 1;
     /** The bits of one side's settings. */
-    public static final int FACE = 0x7FF;
+    public static final int FACE = 0xFFF;
+
+    public static int pack(int mode, int kinds, int size, int scroll, int style) {
+        return (mode & 3) | (kinds & 31) << 2 | (size & 3) << 7 | (scroll == SCROLL_OFF ? 1 : 0) << 9 | (scroll == SCROLL_SIDEWAYS ? 1 : 0) << 10
+                | (style == STYLE_BOARD ? 1 : 0) << 11;
+    }
 
     public static int pack(int mode, int kinds, int size, int scroll) {
-        return (mode & 3) | (kinds & 31) << 2 | (size & 3) << 7 | (scroll == SCROLL_OFF ? 1 : 0) << 9 | (scroll == SCROLL_SIDEWAYS ? 1 : 0) << 10;
+        return pack(mode, kinds, size, scroll, STYLE_ROWS);
     }
 
     /** True: scrolls down by itself; false: no scroll. */
@@ -52,10 +60,12 @@ public final class ScreenSettings {
     /** SCROLL_OFF, SCROLL_DOWN or SCROLL_SIDEWAYS (saves from before the scroll had "pages turn by themselves": down). */
     public static int scroll(int v) { return (v >> 9 & 1) == 1 ? SCROLL_OFF : (v >> 10 & 1) == 1 ? SCROLL_SIDEWAYS : SCROLL_DOWN; }
 
-    public static int withMode(int v, int mode) { return pack(mode, kinds(v), size(v), scroll(v)); }
+    public static int style(int v) { return v >> 11 & 1; }
+
+    public static int withMode(int v, int mode) { return pack(mode, kinds(v), size(v), scroll(v), style(v)); }
 
     private static int clean(int face) {
-        return pack(mode(face), kinds(face), size(face), scroll(face));
+        return pack(mode(face), kinds(face), size(face), scroll(face), style(face));
     }
 
     /** A value from a save or a packet, cut to the known fields. */
@@ -67,12 +77,12 @@ public final class ScreenSettings {
 
     /** The settings of one side (0: front, 1: back) of a screen. */
     public static int face(int v, int side) {
-        return side == 0 || (v >> 26 & 1) == 0 ? v & FACE : (v >>> 16 & 0x3FF) | (v >>> 27 & 1) << 10;
+        return side == 0 || (v >> 26 & 1) == 0 ? v & FACE : (v >>> 16 & 0x3FF) | (v >>> 27 & 1) << 10 | (v >>> 28 & 1) << 11;
     }
 
-    /** Both sides packed: the back's bits 0-9 at 16-25 and its bit 10 at 27, and bit 26 set. */
+    /** Both sides packed: the back's bits 0-9 at 16-25, its bits 10 and 11 at 27 and 28, and bit 26 set. */
     private static int both(int front, int back) {
-        return front & FACE | (back & 0x3FF) << 16 | 1 << 26 | (back >> 10 & 1) << 27;
+        return front & FACE | (back & 0x3FF) << 16 | 1 << 26 | (back >> 10 & 1) << 27 | (back >> 11 & 1) << 28;
     }
 
     /** The settings with one side changed; the other side keeps what it shows. */
@@ -179,8 +189,8 @@ public final class ScreenSettings {
     }
 
     /**
-     * Sneak-click with an empty hand (or a screwdriver) on a screen or its part: its settings open at the side the player looks
-     * at. A click with a screwdriver on a Screen changes that side: off, menu, orders. True when it was a screen.
+     * A click with a screwdriver, or a sneak-click with an empty hand, on a screen or its part: its settings open at the side the
+     * player looks at. True when it was a screen.
      */
     static boolean onUse(PlayerInteractEvent.RightClickBlock e) {
         if (e.getHand() != InteractionHand.MAIN_HAND) return false;
@@ -192,7 +202,6 @@ public final class ScreenSettings {
         BlockPos clicked = pos;
         pos = group.anchor();
         BlockState state = e.getLevel().getBlockState(pos);
-        if (tool && !e.getEntity().isShiftKeyDown() && !(state.getBlock() instanceof ScreenBlock)) return false;
         int side = ScreenPicture.sideFacing(pos, state, group.rect(), e.getEntity().getEyePosition());
         if (e.getLevel() instanceof ServerLevel level && e.getEntity() instanceof ServerPlayer player) {
             Restaurant r = owner(level, pos);
@@ -200,16 +209,8 @@ public final class ScreenSettings {
                 player.displayClientMessage(net.minecraft.network.chat.Component.translatable("onemorecore.screen.no_restaurant"), true);
             } else {
                 int v = r.screens.getOrDefault(pos, pack(state.getBlock() instanceof MenuBoardBlock b ? b.defaultMode() : Restaurant.SCREEN_MENU, 0, 0, true));
-                if (tool && !player.isShiftKeyDown()) {
-                    // The screwdriver: the side the player looks at shows the next thing.
-                    int face = face(v, side), mode = (mode(face) + 1) % 3;
-                    r.setScreen(pos, withFace(v, side, withMode(face, mode)));
-                    player.displayClientMessage(net.minecraft.network.chat.Component.translatable("onemorecore.screen.side_" + side + "_" + mode), true);
-                    level.playSound(null, clicked, net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), net.minecraft.sounds.SoundSource.BLOCKS, 0.4f, 1.6f);
-                } else {
-                    PacketDistributor.sendToPlayer(player, new Open(clicked, v, MenuBoardBlock.canTilt(state) ? state.getValue(MenuBoardBlock.TILT) : -1, side,
-                            state.getBlock() instanceof ScreenBlock ? (state.getValue(ScreenBlock.LANDSCAPE) ? 1 : 0) : -1, ScreenPicture.sides(state)));
-                }
+                PacketDistributor.sendToPlayer(player, new Open(clicked, v, MenuBoardBlock.canTilt(state) ? state.getValue(MenuBoardBlock.TILT) : -1, side,
+                        state.getBlock() instanceof ScreenBlock ? (state.getValue(ScreenBlock.LANDSCAPE) ? 1 : 0) : -1, ScreenPicture.sides(state)));
             }
         }
         e.setCanceled(true);

@@ -28,6 +28,12 @@ public final class ScrollGameTests {
         int sidewaysBack = ScreenSettings.withFace(both, 1, ScreenSettings.pack(Restaurant.SCREEN_ORDERS, 0, 0, ScreenSettings.SCROLL_SIDEWAYS));
         helper.assertValueEqual(ScreenSettings.scroll(ScreenSettings.face(sidewaysBack, 1)), ScreenSettings.SCROLL_SIDEWAYS, "back sideways");
         helper.assertValueEqual(ScreenSettings.scroll(ScreenSettings.face(sidewaysBack, 0)), ScreenSettings.SCROLL_SIDEWAYS, "front kept");
+        // The menu's look is kept per side too.
+        int board = ScreenSettings.pack(Restaurant.SCREEN_MENU, 0, 0, ScreenSettings.SCROLL_DOWN, ScreenSettings.STYLE_BOARD);
+        int mixed = ScreenSettings.withFace(sidewaysBack, 1, board);
+        helper.assertValueEqual(ScreenSettings.style(ScreenSettings.face(mixed, 1)), ScreenSettings.STYLE_BOARD, "back board");
+        helper.assertValueEqual(ScreenSettings.style(ScreenSettings.face(mixed, 0)), ScreenSettings.STYLE_ROWS, "front rows");
+        helper.assertValueEqual(ScreenSettings.valid(mixed), mixed, "a valid value with a board stays");
         // Old values: bit 9 clear (the pages turned) is down; set (the first page only) is off.
         helper.assertValueEqual(ScreenSettings.scroll(Restaurant.SCREEN_MENU), ScreenSettings.SCROLL_DOWN, "old turning pages");
         helper.assertValueEqual(ScreenSettings.scroll(Restaurant.SCREEN_MENU | 1 << 9), ScreenSettings.SCROLL_OFF, "old first page");

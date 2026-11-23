@@ -289,6 +289,7 @@ public final class ScreenPainter {
      * down, the columns share the menu evenly; else they make pages, side by side when scrolled sideways.
      */
     static ItemStack menu(Canvas c, List<MenuBoardBlockEntity.Line> lines) {
+        if (ScreenSettings.style(c.settings) == ScreenSettings.STYLE_BOARD) return board(c, lines);
         float u = c.u;
         c.rect(0, 0, c.w, c.h, KDS_BG);
         float headH = OrderLayout.HEADER * u;
@@ -389,6 +390,105 @@ public final class ScreenPainter {
         }
         scrollBar(c, dir, dir == ScreenSettings.SCROLL_SIDEWAYS ? 0 : top, shown, length, 0xFFB8C0CC);
         // The header goes over the scrolled rows.
+        header(c, Component.translatable("onemorecore.screen.menu").getString(), -1, KDS_HEAD, BLUE, 0xFFFFFFFF);
+        return c.hovered;
+    }
+
+    /** A panel of the board: a kind's dishes from first (its number in the kind) on, at x, y, w wide. */
+    private record Panel(String kind, List<MenuBoardBlockEntity.Line> lines, int first, float x, float y, float w) {}
+
+    private static final int PANEL_BG = 0xFF354253, PRICE = 0xFFD93A35;
+
+    /**
+     * The menu as a fast food board: a panel per kind with its name on a dark band, and in it a card per dish (its number, a big
+     * picture, the name, a big price). The panels stand in a row; down (or without scroll) a row that is full goes on below, and a
+     * kind wider than the picture is cut into panels; sideways they all stand in one row.
+     */
+    static ItemStack board(Canvas c, List<MenuBoardBlockEntity.Line> lines) {
+        float u = c.u;
+        c.rect(0, 0, c.w, c.h, KDS_BG);
+        float headH = OrderLayout.HEADER * u, gap = 5 * u, pad = 3 * u, bandH = 14 * u;
+        float top = headH + gap, bottom = c.h - gap;
+        int dir = flow(c);
+        boolean sideways = dir == ScreenSettings.SCROLL_SIDEWAYS;
+        float rowH = sideways ? bottom - top : Math.min(bottom - top, 150 * u);
+        float cardH = rowH - bandH - 2 * pad, cardW = Math.max(50 * u, cardH * 0.78f);
+        int fit = Math.max(1, (int) ((c.w - 2 * gap - pad) / (cardW + pad)));
+        List<Panel> panels = new ArrayList<>();
+        float x = gap, y = top, end = top + rowH;
+        for (String k : KINDS) {
+            if (!ScreenSettings.showsKind(c.settings, k)) continue;
+            List<MenuBoardBlockEntity.Line> of = lines.stream().filter(l -> l.kind().equals(k) && !l.items().isEmpty()).toList();
+            for (int i = 0; i < of.size(); ) {
+                int n = sideways ? of.size() - i : Math.min(of.size() - i, fit);
+                float w = n * cardW + (n + 1) * pad;
+                if (!sideways && x > gap && x + w > c.w - gap) {
+                    // The rest of this row may still take some of the kind's dishes.
+                    int room = (int) ((c.w - gap - x - pad) / (cardW + pad));
+                    if (room >= 2) {
+                        n = Math.min(n, room);
+                        w = n * cardW + (n + 1) * pad;
+                    } else {
+                        x = gap;
+                        y += rowH + gap;
+                        end = y + rowH;
+                    }
+                }
+                panels.add(new Panel(k, of.subList(i, i + n), i, x, y, w));
+                x += w + gap;
+                i += n;
+            }
+        }
+        float length = sideways ? x : end - top, shown = sideways ? c.w : bottom - top;
+        float[] offsets = offsets(c, length, shown, dir);
+        c.clip(0, top, c.w, bottom);
+        for (float off : offsets) {
+            float dx = sideways ? off : 0, dy = dir == ScreenSettings.SCROLL_DOWN ? off : 0;
+            for (Panel p : panels) {
+                float px = p.x() - dx, py = p.y() - dy;
+                if (px + p.w() <= 0 || px >= c.w || py + rowH <= top || py >= bottom) continue;
+                int color = KIND_COLORS[java.util.Arrays.asList(KINDS).indexOf(p.kind())];
+                c.rect(px + 1.2f * u, py + 1.5f * u, p.w(), rowH, 0x55000000);
+                c.rect(px, py, p.w(), rowH, PANEL_BG);
+                c.rect(px, py, p.w(), bandH, KDS_HEAD);
+                c.rect(px, py + bandH - 1.2f * u, p.w(), 1.2f * u, color);
+                String head = Component.translatable("onemorecore.board." + p.kind()).getString().toUpperCase(java.util.Locale.ROOT);
+                float hs = 1.0f * u;
+                c.text(c.fit(head, p.w() - 8 * u, hs), px + 4 * u, py + (bandH - 1.2f * u - 7 * hs) / 2, hs, 0xFFFFFFFF);
+                for (int j = 0; j < p.lines().size(); j++) {
+                    MenuBoardBlockEntity.Line l = p.lines().get(j);
+                    float cx = px + pad + j * (cardW + pad), cy = py + bandH + pad;
+                    boolean over = c.over(cx, cy, cardW, cardH);
+                    c.box(cx, cy, cardW, cardH, 1.5f * u, over ? ROW_OVER : PAPER);
+                    if (over && c.hovered.isEmpty()) c.hovered = l.items().get(0);
+                    // The number in the kind, in its colour.
+                    String num = String.valueOf(p.first() + j + 1);
+                    float ns = 0.9f * u, nb = 10 * u;
+                    c.box(cx + 2 * u, cy + 2 * u, Math.max(nb, c.width(num, ns) + 4 * u), nb, 1.5f * u, color);
+                    c.text(num, cx + 2 * u + (Math.max(nb, c.width(num, ns) + 4 * u) - c.width(num, ns)) / 2, cy + 2 * u + (nb - 7 * ns) / 2, ns, 0xFFFFFFFF);
+                    // The picture: the dish, or the dishes of a combo side by side.
+                    int n = Math.min(3, l.items().size());
+                    float big = Math.min(cardW * 0.62f, cardH * 0.5f) / (n == 1 ? 1 : 1.35f), iy = cy + cardH * 0.36f;
+                    for (int k = 0; k < n; k++) c.item(l.items().get(k), cx + cardW / 2 + (k - (n - 1) / 2f) * big * 0.6f, iy, big);
+                    String name = l.items().size() == 1 ? l.items().get(0).getHoverName().getString()
+                            : String.join(" + ", l.items().stream().map(st -> st.getHoverName().getString()).toList());
+                    float ts = 0.72f * u;
+                    String fitted = c.fit(name, cardW - 4 * u, ts);
+                    c.text(fitted, cx + (cardW - c.width(fitted, ts)) / 2, cy + cardH * 0.68f, ts, INK);
+                    String price = String.valueOf(l.price());
+                    float ps = 1.5f * u;
+                    c.item(StatusCurrency.get(), cx + (cardW - c.width(price, ps)) / 2 - 5 * u, cy + cardH * 0.86f, 8 * u);
+                    c.text(price, cx + (cardW - c.width(price, ps)) / 2 + 1 * u, cy + cardH * 0.86f - 3.5f * ps, ps, PRICE);
+                }
+            }
+        }
+        c.unclip();
+        if (panels.isEmpty()) {
+            String none = Component.translatable("onemorecore.board.empty").getString();
+            float ns = 0.9f * u;
+            c.text(c.fit(none, c.w - 8 * u, ns), Math.max(4 * u, (c.w - c.width(none, ns)) / 2), (headH + c.h) / 2 - 4 * u, ns, 0xFF8A96A6);
+        }
+        scrollBar(c, dir, sideways ? 0 : top, shown, length, 0xFFB8C0CC);
         header(c, Component.translatable("onemorecore.screen.menu").getString(), -1, KDS_HEAD, BLUE, 0xFFFFFFFF);
         return c.hovered;
     }

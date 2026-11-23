@@ -17,7 +17,7 @@ change how one of them works, change its lines here in the same commit.
   turn down (TILT). Same-kind neighbours join (`connect_*` state, `ScreenGroups`): one picture over all, drawn by the top-left
   one (the anchor). Each side has its own settings (`ScreenSettings.face`/`withFace`: bits 0-10 front; back in bits 16-25 and
   27, bit 26 back set). What does not fit scrolls by itself, smoothly, as a ticker: off, down or sideways (`ScreenSettings.scroll`,
-  `ScreenPainter.offsets`); no pages turn. The menu uses the orders' colours. Test: `ScrollGameTests`. A screwdriver click cycles the side it hits (off, menu, orders); sneak-click opens the settings window.
+  `ScreenPainter.offsets`); no pages turn. The menu uses the orders' colours, as rows or as a fast food board (`ScreenSettings.style`, bit 11 front / 28 back; `ScreenPainter.board`: a panel per kind, a card per dish). Test: `ScrollGameTests`. A screwdriver click (or a sneak-click with an empty hand) opens the settings window at the side it hits.
   Tests: `ScreenGameTests.screensJoinAndShowBothSides`, the order card tests.
 - **Pictures** (`ScreenPicture`): the only map from canvas units to the world. The renderer, the pointer and the server's
   click check (`ScreenClick`) all use it; do not add a second one. Keep world points in double (a float loses the position far
