@@ -57,14 +57,14 @@ public class Computer extends Block {
             new double[] {5, 2, 13, 11, 7, 15},
             new double[] {5, 0, 8, 11, 1, 12},
             new double[] {2, 0, 1, 12, 1, 5},
-            new double[] {13, 0, 2, 15, 1, 4},
-            new double[] {7, 0, 5, 8, 1, 7},
-            new double[] {8, 0, 6, 10, 1, 7},
-            new double[] {9, 0, 7, 10, 1, 8},
-            new double[] {14, 0, 4, 15, 1, 12},
-            new double[] {11, 0, 11, 14, 1, 12},
-            new double[] {8, 0, 15, 9, 3, 16},
-            new double[] {9, 0, 15, 13, 1, 16});
+            new double[] {13, 0, 2, 15, 1, 5},
+            new double[] {7.25, 0, 5, 7.75, 0.5, 6.75},
+            new double[] {7.75, 0, 6.25, 9.25, 0.5, 6.75},
+            new double[] {9.25, 0, 6.25, 9.75, 0.5, 8},
+            new double[] {13.75, 0, 5, 14.25, 0.5, 11.75},
+            new double[] {11, 0, 11.25, 13.75, 0.5, 11.75},
+            new double[] {8.25, 0.5, 15, 8.75, 3, 15.5},
+            new double[] {8.25, 0, 15, 13, 0.5, 15.5});
     public static final int REFRESH = 0, UNLOCK = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
             TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9, SET_KIND = 10, ADD_COMBO = 11, REMOVE_COMBO = 12,
             SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17, REFRESH_MANAGER = 18, CLOSE = 19, EDIT_COMBO = 20, SET_STREAM = 21;

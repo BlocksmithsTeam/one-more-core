@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """The app icons of the Restaurant Computer's desktop, as 32 x 32 pixel art.
 
-Each icon is a rounded tile in one solid colour with a 1-px darker border (2 px at the bottom) and a white glyph with a
-1-px drop shadow in the border colour: hard pixels, four colours per icon. The glyphs are the hand-written maps below
-('#' is white, '.' shows the tile); edit a map and run this script again:
+Each icon is a flat rounded tile in the app's one colour with a bold white glyph: hard pixels, two colours per icon. The
+glyphs are the hand-written maps below ('#' is white, '.' shows the tile); edit a map and run this script again:
 
     python3 art/computer/make_icons.py
 
@@ -18,105 +17,90 @@ SIZE = 32
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src", "main", "resources", "assets",
                    "onemorecore", "textures", "gui", "sprites", "computer")
 
-# Menu: a cloche (serving dome) on a plate.
+# Menu: a cloche dome on a plate.
 CLOCHE = [
-    "..........##..........",
-    ".........####.........",
-    "..........##..........",
-    ".......########.......",
-    ".....############.....",
-    "....####..########....",
-    "...###..###########...",
-    "..###.##############..",
-    "..##.###############..",
-    ".##.#################.",
-    ".####################.",
-    ".####################.",
-    "......................",
-    "######################",
-    "######################",
-    "..##################..",
+    ".........##.........",
+    "........####........",
+    "....############....",
+    "...##############...",
+    "..################..",
+    ".##################.",
+    ".##################.",
+    ".##################.",
+    "....................",
+    "####################",
+    "####################",
 ]
 
-# Shop: a shopping cart.
+# Shop: a cart outline with two wheels.
 CART = [
-    "###...................",
-    ".###..................",
-    "..####################",
-    "...##..##..##..##..##.",
-    "...##..##..##..##..##.",
-    "...##################.",
-    "....#..##..##..##..#..",
-    "....#..##..##..##..#..",
-    "....################..",
-    ".....##...............",
-    ".....################.",
-    "......................",
-    "......##........##....",
-    ".....####......####...",
-    ".....####......####...",
-    "......##........##....",
+    "####................",
+    "####................",
+    "..##################",
+    "..##################",
+    "...##............##.",
+    "...##............##.",
+    "....##..........##..",
+    "....##..........##..",
+    ".....############...",
+    ".....############...",
+    "....................",
+    "......##......##....",
+    ".....####....####...",
+    ".....####....####...",
+    "......##......##....",
 ]
 
-# Upgrades: an up arrow over two bars.
+# Upgrades: one up arrow.
 UPGRADES = [
-    "..........##..........",
-    ".........####.........",
-    "........######........",
-    ".......########.......",
-    "......##########......",
-    ".....############.....",
-    "....##############....",
-    "...################...",
-    "........######........",
-    "........######........",
-    "........######........",
-    "......................",
-    "...################...",
-    "...################...",
-    "......................",
-    "...################...",
-    "...################...",
+    "........##........",
+    ".......####.......",
+    "......######......",
+    ".....########.....",
+    "....##########....",
+    "...############...",
+    "..##############..",
+    ".################.",
+    "......######......",
+    "......######......",
+    "......######......",
+    "......######......",
+    "......######......",
+    "......######......",
+    "......######......",
+    "......######......",
 ]
 
-# Manager: a shop front with an awning, a window and a door.
+# Manager: a shop front with an awning and a door.
 SHOP_FRONT = [
-    ".####################.",
-    "######################",
-    "##..##..##..##..##..##",
-    "##..##..##..##..##..##",
-    ".##..##..##..##..##..#",
-    "..##################..",
-    "..##..............##..",
-    "..##.#######.####.##..",
-    "..##.#..#..#.#..#.##..",
-    "..##.#..#..#.#..#.##..",
-    "..##.#######.#..#.##..",
-    "..##.#..#..#.#.##.##..",
-    "..##.#######.#..#.##..",
-    "..##.........#..#.##..",
-    "######################",
-    "######################",
+    ".##################.",
+    "####################",
+    "####################",
+    "####################",
+    ".##..##..##..##..##.",
+    "....................",
+    "..################..",
+    "..################..",
+    "..######....######..",
+    "..######....######..",
+    "..######....######..",
+    "..######....######..",
+    "..######....######..",
+    "..######....######..",
 ]
 
-# Stream: a broadcast mast sending signal waves.
+# Stream: a dot with two arcs on each side.
 BROADCAST = [
-    "...##............##...",
     "..##..............##..",
     ".##....##....##....##.",
-    ".##...##......##...##.",
+    "##....##......##....##",
     "##...##...##...##...##",
     "##...##..####..##...##",
     "##...##..####..##...##",
     "##...##...##...##...##",
-    ".##...##..##..##...##.",
-    ".##....#..##..#....##.",
-    "..##......##......##..",
-    "...##....####....##...",
-    ".........####.........",
-    "........##..##........",
-    "........##..##........",
-    ".......##....##.......",
+    "##....##......##....##",
+    ".##....##....##....##.",
+    "..##..............##..",
 ]
 
 # name: (tile colour, glyph)
@@ -128,44 +112,41 @@ ICONS = {
     "stream": (0x7F77DD, BROADCAST),
 }
 
-# Pixels cut from each end of the tile's first rows (the rounded corners); the bottom rows mirror them.
-CORNER = [3, 1, 1]
+# The radius of the tile's rounded corners; ComputerScreen cuts its hover outline and dim overlay the same way.
+RADIUS = 7
 WHITE = (255, 255, 255, 255)
-
-
-def darker(rgb, f=0.66):
-    return tuple(int(((rgb >> s) & 0xFF) * f) for s in (16, 8, 0)) + (255,)
 
 
 def solid(rgb):
     return ((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, 255)
 
 
+def corner_cuts(r):
+    """Pixels cut from each end of the first r rows: a pixel stays if its centre is inside the corner's circle."""
+    cuts = []
+    for i in range(r):
+        dy = r - i - 0.5
+        j = 0
+        while (r - j - 0.5) ** 2 + dy * dy > r * r:
+            j += 1
+        cuts.append(j)
+    return cuts
+
+
+CUTS = corner_cuts(RADIUS)
+
+
 def in_tile(x, y):
-    if not (0 <= x < SIZE and 0 <= y < SIZE):
-        return False
     row = min(y, SIZE - 1 - y)
-    cut = CORNER[row] if row < len(CORNER) else 0
+    cut = CUTS[row] if row < len(CUTS) else 0
     return cut <= x < SIZE - cut
 
 
 def icon(color, glyph):
     width = len(glyph[0])
     assert all(len(r) == width for r in glyph), "every row of a glyph must have the same width"
-    fill, edge = solid(color), darker(color)
-    px = [[(0, 0, 0, 0)] * SIZE for _ in range(SIZE)]
-    for y in range(SIZE):
-        for x in range(SIZE):
-            if not in_tile(x, y):
-                continue
-            border = any(not in_tile(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))) or not in_tile(x, y + 2)
-            px[y][x] = edge if border else fill
-    # The glyph centred a pixel above the middle, so that its shadow and the thicker bottom border balance it.
-    ox, oy = (SIZE - width) // 2, (SIZE - len(glyph)) // 2 - 1
-    for y, row in enumerate(glyph):
-        for x, c in enumerate(row):
-            if c == "#" and px[oy + y + 1][ox + x] == fill:
-                px[oy + y + 1][ox + x] = edge
+    px = [[solid(color) if in_tile(x, y) else (0, 0, 0, 0) for x in range(SIZE)] for y in range(SIZE)]
+    ox, oy = (SIZE - width) // 2, (SIZE - len(glyph)) // 2
     for y, row in enumerate(glyph):
         for x, c in enumerate(row):
             if c == "#":
