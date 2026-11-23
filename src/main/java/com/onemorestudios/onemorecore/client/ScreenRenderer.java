@@ -11,7 +11,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Transformation;
 import com.onemorestudios.onemorecore.MenuBoardBlockEntity;
 import com.onemorestudios.onemorecore.OneMoreCore;
-import com.onemorestudios.onemorecore.OrderBoardBlockEntity;
+import com.onemorestudios.onemorecore.Tickets;
 import com.onemorestudios.onemorecore.Restaurant;
 import com.onemorestudios.onemorecore.ScreenData;
 import com.onemorestudios.onemorecore.ScreenGroups;
@@ -60,7 +60,7 @@ public final class ScreenRenderer {
     /** The side scrolled by the mouse wheel up close: the anchor and side last drawn under the camera's look. */
     private static long scrollTarget = Long.MIN_VALUE;
 
-    private record Display(ScreenData data, List<MenuBoardBlockEntity.Line> lines, List<OrderBoardBlockEntity.Ticket> tickets) {}
+    private record Display(ScreenData data, List<MenuBoardBlockEntity.Line> lines, List<Tickets.Ticket> tickets) {}
 
     /** Scrolled canvas units, the highest scroll the content allows, and the dish whose tickets are marked. */
     static final class View {
@@ -74,7 +74,7 @@ public final class ScreenRenderer {
 
     /** Draws one side of a screen (or group) with the pose at the anchor block's origin. */
     static void draw(PoseStack pose, MultiBufferSource buffers, BlockPos pos, BlockState state, ScreenGroups.Group g, int side, int settings, float unit,
-            List<MenuBoardBlockEntity.Line> lines, List<OrderBoardBlockEntity.Ticket> tickets) {
+            List<MenuBoardBlockEntity.Line> lines, List<Tickets.Ticket> tickets) {
         int mode = ScreenSettings.mode(settings);
         if (mode == Restaurant.SCREEN_OFF) return;
         ScreenPicture picture = ScreenPicture.of(pos, state, g.rect(), side);
@@ -189,7 +189,7 @@ public final class ScreenRenderer {
 
     /** The blocks of the Diegesis screen stations (KitchenStations). */
     private static boolean isStation(BlockState state) {
-        return state.is(OneMoreCore.MENU_BOARD.get()) || state.is(OneMoreCore.ORDER_BOARD.get()) || state.is(OneMoreCore.MONITOR.get());
+        return state.is(OneMoreCore.MENU_BOARD.get());
     }
 
     /** Keeps the view for the pointer, and draws every screen that a restaurant sent. */
@@ -226,7 +226,7 @@ public final class ScreenRenderer {
                     if (display == null || display.data() != d) {
                         var registries = mc.level.registryAccess();
                         display = new Display(d, MenuBoardBlockEntity.parse(d.data().getCompound("menu"), registries),
-                                OrderBoardBlockEntity.decode(d.data().getCompound("tickets"), registries));
+                                Tickets.decode(d.data().getCompound("tickets"), registries));
                         DISPLAYS.put(d.sign(), display);
                     }
                 }
@@ -242,5 +242,31 @@ public final class ScreenRenderer {
             }
         }
         buffers.endBatch();
+    }
+
+    /**
+     * Draws a Screen turned between the four directions (ScreenBlock.TURN): the blockstate shows only straight screens, so this
+     * draws the straight model turned about the block's middle.
+     */
+    static final class Turned implements net.minecraft.client.renderer.blockentity.BlockEntityRenderer<MenuBoardBlockEntity> {
+        Turned(net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider.Context context) {}
+
+        @Override
+        public void render(MenuBoardBlockEntity be, float partialTick, PoseStack pose, MultiBufferSource buffers, int light, int overlay) {
+            BlockState state = be.getBlockState();
+            if (!(state.getBlock() instanceof com.onemorestudios.onemorecore.ScreenBlock) || state.getValue(com.onemorestudios.onemorecore.ScreenBlock.TURN) == 0) return;
+            pose.pushPose();
+            pose.translate(0.5, 0, 0.5);
+            pose.mulPose(com.mojang.math.Axis.YP.rotationDegrees(-com.onemorestudios.onemorecore.ScreenBlock.turnDegrees(state)));
+            pose.translate(-0.5, 0, -0.5);
+            Minecraft.getInstance().getBlockRenderer().renderSingleBlock(state.setValue(com.onemorestudios.onemorecore.ScreenBlock.TURN, 0), pose, buffers, light, overlay);
+            pose.popPose();
+        }
+
+        /** The panel reaches into the blocks around (above, below or beside). */
+        @Override
+        public net.minecraft.world.phys.AABB getRenderBoundingBox(MenuBoardBlockEntity be) {
+            return new net.minecraft.world.phys.AABB(be.getBlockPos()).inflate(1.5);
+        }
     }
 }

@@ -124,15 +124,6 @@ public final class KitchenStations {
     }
 
     /**
-     * The menu screen and the order screen up close: the camera in front of the television, the mouse as the pointer
-     * (tooltips of the dishes), and on the order screen a click on a card gives its ticket.
-     */
-    public static final StationType SCREEN = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "screen"))
-            .block(OneMoreCore.ORDER_BOARD).block(OneMoreCore.MONITOR)
-            .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown())
-            .build();
-
-    /**
      * The Screen up close, one station for each tilt (its scene looks at the glass square on): the camera goes to the side the
      * player stands on (each side has its own close-up), and the client moves it to the middle of the picture of the screen or
      * of its joined group, as far as the picture needs (ScreenStationBehavior).
@@ -161,7 +152,6 @@ public final class KitchenStations {
     public static void register() {
         Diegesis.register(BOOK);
         Diegesis.register(TRAY);
-        Diegesis.register(SCREEN);
         for (StationType t : SCREEN_BOARD) Diegesis.register(t);
     }
 }

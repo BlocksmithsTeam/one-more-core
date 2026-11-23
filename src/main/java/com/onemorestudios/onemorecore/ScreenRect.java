@@ -22,20 +22,12 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * The mod's own screens use their own models; other mods' televisions come from the config (screenBlocks).
  */
 public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolean flip) {
-    /** The Order Screen: a kitchen display 3 x 2 blocks (x -16..32, y 0..32), its picture inside the bezel (art/order_screen.py). */
-    public static final ScreenRect OWN = new ScreenRect(-15f, 6f, 31f, 30f, 1.0f, false);
-    /** The Menu Screen: the billboard (1 x 2 blocks), its picture inside the frame; the back shows it too (turned half round). */
-    public static final ScreenRect BILLBOARD = new ScreenRect(1f, 8f, 15f, 30f, 9.0f, false);
-    /** The Monitor: the Yuushya wall TV made thin, one block. */
-    public static final ScreenRect MONITOR = new ScreenRect(0.4f, 0.7273f, 15.6f, 15.2727f, 1.0f, false);
     /** The bottom back edge of the mod's own screens, model pixels: a tilted screen turns about it, its top coming out. */
     static final float PIVOT_Y = 0, PIVOT_Z = 0;
 
     /** The rectangle of a block, or null when it is no screen. */
     public static ScreenRect of(BlockState state) {
         if (state.getBlock() instanceof ScreenBlock) return ScreenLayout.of(state).rect();
-        if (state.is(OneMoreCore.ORDER_BOARD.get())) return OWN;
-        if (state.is(OneMoreCore.MONITOR.get())) return MONITOR;
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
         var key = net.minecraft.resources.ResourceLocation.parse(id);
         String value = Config.lookup(Config.SCREEN_BLOCKS.get(), key);
@@ -61,7 +53,7 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
 
     /** Degrees the south-facing model is turned (clockwise from above, as a blockstate "y"). */
     public float turn(BlockState state) {
-        return normal(state).toYRot();
+        return normal(state).toYRot() + ScreenBlock.turnDegrees(state);
     }
 
     /** Degrees the screen is turned down about its top back edge (the mod's own screens only). */
@@ -90,9 +82,9 @@ public record ScreenRect(float x0, float y0, float x1, float y1, float z, boolea
         }
         double dx = x - 8, dz = z - 8;
         // Clockwise turns: south (+z) goes to west (-x) for 90 degrees.
-        int turns = Math.round(turn(state) / 90) & 3;
-        for (int i = 0; i < turns; i++) { double t = dx; dx = -dz; dz = t; }
-        return new Vec3(pos.getX() + (dx + 8) / 16, pos.getY() + y / 16, pos.getZ() + (dz + 8) / 16);
+        double a = Math.toRadians(turn(state)), c = Math.cos(a), s = Math.sin(a);
+        double rx = dx * c - dz * s, rz = dx * s + dz * c;
+        return new Vec3(pos.getX() + (rx + 8) / 16, pos.getY() + y / 16, pos.getZ() + (rz + 8) / 16);
     }
 
     /** A point of the screen plane in canvas units {x, y} (x right, y down), or null when it is off the picture. */

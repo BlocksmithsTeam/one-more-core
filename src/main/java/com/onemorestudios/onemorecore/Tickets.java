@@ -6,21 +6,18 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.WeakHashMap;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientGamePacketListener;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.state.BlockState;
 
-/** The tickets of the order rail. The server builds them twice a second and sends them when they changed; not saved. */
-public class OrderBoardBlockEntity extends BlockEntity {
+/** The taken orders as tickets: built from the restaurant's customers, sent to the screens with the restaurant's ScreenData. */
+public final class Tickets {
+    private Tickets() {}
+
+    /** Tickets sent at most. */
+    public static final int MAX = 16;
     private static final int MAX_TICKET_BYTES = 256 * 1024;
 
     /**
@@ -36,18 +33,6 @@ public class OrderBoardBlockEntity extends BlockEntity {
 
     /** Order IDs live as long as their parties, including when part of an order has been served. */
     private static final WeakHashMap<Customer.Party, UUID> ORDER_IDS = new WeakHashMap<>();
-
-    private CompoundTag sent = new CompoundTag();
-    /** Client: the tickets of the last update. */
-    public List<Ticket> tickets = List.of();
-
-    public OrderBoardBlockEntity(BlockPos pos, BlockState state) {
-        super(OneMoreCore.ORDER_BOARD_ENTITY.get(), pos, state);
-    }
-
-    List<Ticket> tickets(ServerLevel level) {
-        return tickets(Restaurants.get(level).forComputer(worldPosition));
-    }
 
     /** The taken orders, oldest first: one ticket per party that waits for its food. */
     static List<Ticket> tickets(Restaurant restaurant) {
@@ -71,20 +56,13 @@ public class OrderBoardBlockEntity extends BlockEntity {
         return out;
     }
 
-    void serverTick(ServerLevel level) {
-        if (level.getGameTime() % 40 != Math.floorMod(worldPosition.asLong(), 40)) return;
-        // The Order Screen joins the restaurant it stands in (or the nearest one), showing the orders at first.
-        Restaurant r = ScreenSettings.owner(level, worldPosition);
-        if (r != null) r.ensureScreen(worldPosition, Restaurant.SCREEN_ORDERS);
-    }
-
-    /** The tickets as a tag, at most OrderBoardBlock.TICKETS. */
+    /** The tickets as a tag, at most MAX. */
     public static CompoundTag encode(List<Ticket> tickets, HolderLookup.Provider registries) {
         CompoundTag now = new CompoundTag();
         ListTag list = new ListTag();
         int remaining = MAX_TICKET_BYTES;
         for (Ticket t : tickets) {
-            if (list.size() >= OrderBoardBlock.TICKETS) break;
+            if (list.size() >= MAX) break;
             CompoundTag c = new CompoundTag();
             if (t.orderId() != null) c.putUUID("order", t.orderId());
             c.putString("table", t.table());
@@ -119,30 +97,10 @@ public class OrderBoardBlockEntity extends BlockEntity {
                 for (Tag i : (ListTag) r) if (items.size() < 8) ItemStack.parse(registries, i).ifPresent(items::add);
                 rows.add(items);
             }
-            if (out.size() < OrderBoardBlock.TICKETS)
+            if (out.size() < MAX)
                 out.add(new Ticket(c.hasUUID("order") ? c.getUUID("order") : null, TableCards.clean(c.getString("table")), rows,
                         Math.max(0, Math.min(20, c.getInt("patience"))) / 20f, Math.max(0, c.getInt("price"))));
         }
         return out;
-    }
-
-    @Override
-    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
-        return sent.copy();
-    }
-
-    @Override
-    public Packet<ClientGamePacketListener> getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
-    }
-
-    @Override
-    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
-        tickets = decode(tag, registries);
-    }
-
-    @Override
-    public void onDataPacket(net.minecraft.network.Connection net, ClientboundBlockEntityDataPacket packet, HolderLookup.Provider registries) {
-        handleUpdateTag(packet.getTag(), registries);
     }
 }

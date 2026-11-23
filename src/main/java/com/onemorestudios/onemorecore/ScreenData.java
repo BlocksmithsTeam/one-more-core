@@ -18,7 +18,7 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * Server to client: the televisions of other mods that a restaurant (by its sign) uses, their modes, and what they show:
- * the menu (MenuBoardBlockEntity.build) and the tickets (OrderBoardBlockEntity.encode). An empty tag: no television.
+ * the menu (MenuBoardBlockEntity.build) and the tickets (Tickets.encode). An empty tag: no television.
  */
 public record ScreenData(BlockPos sign, CompoundTag data) implements CustomPacketPayload {
     // At 12 bytes per television this leaves room for the menu and ticket byte budgets and packet framing.

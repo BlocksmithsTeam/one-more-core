@@ -8,7 +8,7 @@ import java.util.Map;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.onemorestudios.onemorecore.MenuBoardBlockEntity;
 import com.onemorestudios.onemorecore.OneMoreCore;
-import com.onemorestudios.onemorecore.OrderBoardBlockEntity;
+import com.onemorestudios.onemorecore.Tickets;
 import com.onemorestudios.onemorecore.OrderLayout;
 import com.onemorestudios.onemorecore.Restaurant;
 import com.onemorestudios.onemorecore.ScreenClick;
@@ -338,7 +338,7 @@ public final class ScreenPainter {
      * (picture and name) with a rule between guests, and the price with a Ticket button. A click on a ticket gives its paper
      * ticket. On a wide picture, a summary of the dishes to make: a click on a dish marks the tickets that have it.
      */
-    static ItemStack orders(Canvas c, List<OrderBoardBlockEntity.Ticket> tickets) {
+    static ItemStack orders(Canvas c, List<Tickets.Ticket> tickets) {
         float u = c.u;
         c.rect(0, 0, c.w, c.h, KDS_BG);
         OrderLayout.Layout layout = OrderLayout.layout(c.w, c.h, u, OrderLayout.guests(tickets), c.scrolling);
@@ -353,7 +353,7 @@ public final class ScreenPainter {
             if (card.page() != page) continue;
             float x = card.x(), y = card.y() - scroll, cw = card.w(), ch = card.h();
             if (!c.shows(y, ch, top, bottom)) continue;
-            OrderBoardBlockEntity.Ticket t = tickets.get(card.index());
+            Tickets.Ticket t = tickets.get(card.index());
             float p = Math.max(0, Math.min(1, t.patience()));
             int head = p > 0.5f ? GREEN : p > 0.25f ? AMBER : RED;
             boolean has = marked == null || t.items().stream().anyMatch(s -> s.is(marked));
@@ -419,7 +419,7 @@ public final class ScreenPainter {
     }
 
     /** The dishes of all tickets with their counts; a click on one marks the tickets with it (again: all). */
-    private static void summary(Canvas c, List<OrderBoardBlockEntity.Ticket> tickets, OrderLayout.Layout layout) {
+    private static void summary(Canvas c, List<Tickets.Ticket> tickets, OrderLayout.Layout layout) {
         float u = c.u, x = layout.summaryX(), y = layout.areaTop(), w = layout.summaryW(), h = layout.areaHeight();
         Map<Item, int[]> counts = new LinkedHashMap<>();
         Map<Item, ItemStack> stacks = new LinkedHashMap<>();

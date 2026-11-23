@@ -73,7 +73,7 @@ public final class OrderLayout {
     }
 
     /** The guests of each ticket, each the number of its dishes. */
-    public static List<List<Integer>> guests(List<OrderBoardBlockEntity.Ticket> tickets) {
+    public static List<List<Integer>> guests(List<Tickets.Ticket> tickets) {
         List<List<Integer>> out = new ArrayList<>();
         for (var t : tickets) out.add(t.rows().stream().map(List::size).toList());
         return out;
