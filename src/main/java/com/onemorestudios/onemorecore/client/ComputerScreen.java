@@ -30,8 +30,8 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
- * The desktop of the Restaurant Computer, drawn on the monitor after the camera flew to it: a wallpaper, app icons and a
- * task bar. An app opens in a window with a close button. Once per opening of the computer the monitor boots first (a CRT
+ * The desktop of the Restaurant Computer, drawn on the monitor after the camera flew to it: a flat background, a row of
+ * app icons and a task bar. An app opens in a window with a close button. Once per opening of the computer the monitor boots first (a CRT
  * power-on line, boot text, the logo with a loading bar; a click or a key skips it), and Escape on the desktop turns the
  * picture off like a CRT (a line, then a dot) before the camera flies back.
  * Menu: a searchable catalog of the restaurant's dishes (on and off, unlock, price and removal of added dishes) and a
@@ -56,10 +56,14 @@ public class ComputerScreen extends Screen {
     private static final float BOOT_REFERENCE = 320;
     /** The advance of a boot text character, so that the text looks monospace. */
     private static final int CELL = 6;
-    /** Rows cut from the ends of the app tile's first rows (its rounded corners), and of the tile grown by a pixel. */
-    private static final int[] TILE = {3, 1, 1}, TILE_OUTLINE = {4, 2, 1, 1};
-
-    private static final ResourceLocation WALLPAPER = ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/gui/wallpaper.png");
+    /** The desktop's flat background. */
+    private static final int DESKTOP = 0xFF4B3A6B;
+    /**
+     * The desktop's layout in px of a 560 px wide picture, scaled to the monitor: padding, an icon's cell and the gap
+     * between cells, the tile, the gap to the label. The sprites' corners have a radius of 7 of 32 px (make_icons.py).
+     */
+    private static final float DESKTOP_REFERENCE = 560, PAD = 16, ICON_CELL = 72, ICON_GAP = 6, ICON_TILE = 44, LABEL_GAP = 4,
+            TILE_RADIUS = 7 / 32f;
     private Computer.State state;
     /** 0: no window; otherwise one of Computer.APP_*. */
     private int app;
@@ -242,8 +246,7 @@ public class ComputerScreen extends Screen {
     }
 
     private void drawDesktop(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // The wallpaper: an evening diner, pixel art (art/wallpaper.py).
-        g.blit(WALLPAPER, dx, dy, dw, dh, 0, 0, 160, 120, 160, 120);
+        g.fill(dx, dy, dx + dw, dy + dh, DESKTOP);
         if (app == 0) drawIcons(g, mouseX, mouseY);
         drawTaskbar(g);
         if (!state.found()) {
@@ -443,39 +446,55 @@ public class ComputerScreen extends Screen {
         }
     }
 
-    /** Fills the app tile's rounded shape: rows cut by cut[i] pixels at both ends from the top and the bottom. */
-    private static void tileShape(GuiGraphics g, int x, int y, int size, int[] cut, int color) {
-        for (int i = 0; i < cut.length; i++) {
-            g.fill(x + cut[i], y + i, x + size - cut[i], y + i + 1, color);
-            g.fill(x + cut[i], y + size - 1 - i, x + size - cut[i], y + size - i, color);
+    /** Fills a square with rounded corners of radius r, cut like the app sprites: a pixel stays if its centre is in the circle. */
+    private static void tileShape(GuiGraphics g, int x, int y, int size, int r, int color) {
+        r = Math.min(r, size / 2);
+        for (int i = 0; i < r; i++) {
+            double d = r - i - 0.5;
+            int cut = 0;
+            while ((r - cut - 0.5) * (r - cut - 0.5) + d * d > r * r) cut++;
+            g.fill(x + cut, y + i, x + size - cut, y + i + 1, color);
+            g.fill(x + cut, y + size - 1 - i, x + size - cut, y + size - i, color);
         }
-        g.fill(x, y + cut.length, x + size, y + size - cut.length, color);
+        g.fill(x, y + r, x + size, y + size - r, color);
     }
 
-    /** The app icons in a column from the top-left: a tile and the name under it; a white outline and a gold name under the pointer. */
+    /**
+     * The app icons in a row from the top-left that wraps: a tile and the name under it; a white outline and a gold name
+     * under the pointer. The sizes are those of a 560 px wide desktop, scaled to the monitor.
+     */
     private void drawIcons(GuiGraphics g, int mouseX, int mouseY) {
-        int x = dx + 5, y = dy + 6;
+        float f = dw / DESKTOP_REFERENCE;
+        int pad = Math.round(PAD * f), cell = Math.round(ICON_CELL * f), gap = Math.round(ICON_GAP * f);
+        int tile = Math.round(ICON_TILE * f), labelGap = Math.max(2, Math.round(LABEL_GAP * f)), r = Math.round(tile * TILE_RADIUS);
+        int labelScale = 11 * f / 8 >= 1.75f ? 2 : 1, rowH = tile + labelGap + 9 * labelScale;
+        int x = dx + pad, y = dy + pad;
         for (int i = 0; i < APPS.length; i++) {
             int bit = APPS[i];
             boolean on = state.found() && (state.apps() & bit) != 0;
-            boolean hover = on && mouseX >= x && mouseX < x + 36 && mouseY >= y && mouseY < y + 44;
+            boolean hover = on && mouseX >= x && mouseX < x + cell && mouseY >= y && mouseY < y + rowH;
+            int tx = x + (cell - tile) / 2;
             // The outline: the tile grown by a pixel, in white, under the tile.
-            if (hover) tileShape(g, x + 1, y + 1, 34, TILE_OUTLINE, WHITE);
-            g.blitSprite(sprite("app_" + KEYS[i]), x + 2, y + 2, 32, 32);
-            if (!on) tileShape(g, x + 2, y + 2, 32, TILE, 0xB00D2430);
-            Component name = text("app." + KEYS[i]);
-            g.drawString(font, name, x + 18 - font.width(name) / 2, y + 36, hover ? ACCENT : on ? WHITE : GREY, true);
-            if (on) hits.add(new Hit(x, y, 36, 44, () -> open(bit)));
-            y += 48;
-            // A column that reaches the task bar continues to the right.
-            if (y + 44 > dy + dh - TASKBAR) { y = dy + 6; x += 40; }
+            if (hover) tileShape(g, tx - 1, y - 1, tile + 2, r + 1, WHITE);
+            g.blitSprite(sprite("app_" + KEYS[i]), tx, y, tile, tile);
+            if (!on) tileShape(g, tx, y, tile, r, 0xB00D2430);
+            String name = font.plainSubstrByWidth(text("app." + KEYS[i]).getString(), (cell + gap) / labelScale);
+            g.pose().pushPose();
+            g.pose().translate(x + cell / 2f - font.width(name) * labelScale / 2f, y + tile + labelGap, 0);
+            g.pose().scale(labelScale, labelScale, 1);
+            g.drawString(font, name, 0, 0, hover ? ACCENT : on ? WHITE : GREY, true);
+            g.pose().popPose();
+            if (on) hits.add(new Hit(x, y, cell, rowH, () -> open(bit)));
+            x += cell + gap;
+            // A row that reaches the right edge continues under it.
+            if (x + cell > dx + dw - pad) { x = dx + pad; y += rowH + gap; }
         }
     }
 
     /** Left: the logo, "One More OS" and the open app's chip. Right: the register with the coin, the day and the clock. */
     private void drawTaskbar(GuiGraphics g) {
         int y = dy + dh - TASKBAR;
-        g.fill(dx, y, dx + dw, dy + dh, 0xD90A0D11);
+        g.fill(dx, y, dx + dw, dy + dh, 0x8C000000);
         // The right side, from the right edge: clock · day · register.
         long time = minecraft.level == null ? 0 : (minecraft.level.getDayTime() + 6000) % 24000;
         String clock = String.format("%02d:%02d", time / 1000, time % 1000 * 60 / 1000);
