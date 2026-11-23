@@ -60,7 +60,7 @@ final class ScreenSettingsScreen extends Screen {
         Ui.label(g, font, left, cy, t("shows"));
         cy += 10;
         ui.segments(g, font, left, cy, colW, 14, new Component[] {t("off"), t("menu"), t("orders")}, ScreenSettings.mode(v), mx, my,
-                k -> set(ScreenSettings.pack(k, ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]), ScreenSettings.autoPages(faces[side]))));
+                k -> set(ScreenSettings.pack(k, ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]), ScreenSettings.scroll(faces[side]))));
         cy += 20;
         Ui.label(g, font, left, cy, t("kinds"));
         cy += 10;
@@ -73,7 +73,7 @@ final class ScreenSettingsScreen extends Screen {
             ui.pill(g, font, left + col * (chipW + 3), cy + row * 17, chipW, 14, Component.translatable("onemorecore.board." + kind), on, 0xFF2F80ED, mx, my, () -> {
                 int kinds = ScreenSettings.kinds(faces[side]);
                 set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), (kinds == 0 ? 31 : kinds) ^ bit, ScreenSettings.size(faces[side]),
-                        ScreenSettings.autoPages(faces[side])));
+                        ScreenSettings.scroll(faces[side])));
             });
         }
         cy = top;
@@ -84,13 +84,12 @@ final class ScreenSettingsScreen extends Screen {
         int[] order = {1, 0, 2};
         int shownSize = size == 1 ? 0 : size == 0 ? 1 : 2;
         ui.segments(g, font, right, cy, colW, 14, new Component[] {t("small"), t("normal"), t("large")}, shownSize, mx, my,
-                k -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), order[k], ScreenSettings.autoPages(faces[side]))));
+                k -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), order[k], ScreenSettings.scroll(faces[side]))));
         cy += 20;
-        Ui.label(g, font, right, cy, t("pages"));
+        Ui.label(g, font, right, cy, t("scroll"));
         cy += 10;
-        boolean auto = ScreenSettings.autoPages(v);
-        ui.pill(g, font, right, cy, colW, 14, t(auto ? "pages_auto" : "pages_first"), auto, 0xFF2E9E4F, mx, my,
-                () -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]), !auto)));
+        ui.segments(g, font, right, cy, colW, 14, new Component[] {t("scroll_off"), t("scroll_down"), t("scroll_sideways")}, ScreenSettings.scroll(v), mx, my,
+                k -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]), k)));
         cy += 20;
         if (landscape >= 0 || tilt >= 0) {
             Ui.label(g, font, right, cy, t("placement"));

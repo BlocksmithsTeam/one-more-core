@@ -94,4 +94,38 @@ public final class FixesGameTests {
         }
         helper.succeed();
     }
+    /**
+     * A new sign (or a new area) forgets the cards while the Table Number blocks stay on the tables: the restaurant finds them
+     * again, so the orders name the table (they showed "TABLE ?" until the number was typed again).
+     */
+    @GameTest(template = "empty")
+    public static void forgottenCardIsFoundAgain(GameTestHelper helper) throws ReflectiveOperationException {
+        var level = helper.getLevel();
+        Restaurants all = Restaurants.get(level);
+        Method create = Restaurants.class.getDeclaredMethod("create", BlockPos.class);
+        create.setAccessible(true);
+        Restaurant r = (Restaurant) create.invoke(all, helper.absolutePos(new BlockPos(0, 1, 0)));
+        Method setArea = Restaurant.class.getDeclaredMethod("setArea", net.minecraft.world.level.levelgen.structure.BoundingBox.class);
+        setArea.setAccessible(true);
+        setArea.invoke(r, net.minecraft.world.level.levelgen.structure.BoundingBox.fromCorners(helper.absolutePos(new BlockPos(0, 1, 0)), helper.absolutePos(new BlockPos(4, 3, 4))));
+        BlockPos table = helper.absolutePos(new BlockPos(2, 1, 2));
+        level.setBlockAndUpdate(table, net.minecraft.world.level.block.Blocks.OAK_SLAB.defaultBlockState());
+        level.setBlockAndUpdate(table.east(), net.minecraft.world.level.block.Blocks.OAK_SLAB.defaultBlockState());
+        level.setBlockAndUpdate(table.above(), OneMoreCore.TABLE_NUMBER_BLOCK.get().defaultBlockState());
+        var be = level.getBlockEntity(table.above());
+        Method setText = be.getClass().getDeclaredMethod("setText", String.class);
+        setText.setAccessible(true);
+        setText.invoke(be, "12");
+        ((Map<?, ?>) get(r, Restaurant.class, "cards")).clear();
+        Method number = Restaurant.class.getDeclaredMethod("numberTables", net.minecraft.server.level.ServerLevel.class);
+        number.setAccessible(true);
+        number.invoke(r, level);
+        Method label = Restaurant.class.getDeclaredMethod("tableLabel", BlockPos.class);
+        label.setAccessible(true);
+        helper.assertValueEqual(label.invoke(r, table.east()), "12", "the table's name");
+        Method remove = Restaurants.class.getDeclaredMethod("remove", BlockPos.class);
+        remove.setAccessible(true);
+        remove.invoke(all, r.sign);
+        helper.succeed();
+    }
 }

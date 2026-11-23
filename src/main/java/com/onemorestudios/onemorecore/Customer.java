@@ -69,6 +69,8 @@ public class Customer extends PathfinderMob {
 
     // A customer that stands still this long, or walks longer than the timeout, is moved to its target.
     private static final int WALK_TIMEOUT = 600, STUCK_TICKS = 40;
+    /** A customer stuck this close to its target (blocks) goes there. */
+    private static final double NEAR = 4;
 
     // Server only.
     private Restaurant restaurant;
@@ -328,10 +330,12 @@ public class Customer extends PathfinderMob {
             // A path that does not move the customer: a block in the way that the path finder took as free (a furniture
             // block with a partial shape, a carpet edge, a fence post). The first time a new path is made (below); when the
             // new path is stuck too, the customer steps over to the next node of its path, as a player would climb over.
+            // Near the target (behind a sofa's back, beside a table) with no free node to step to, or still stuck after the
+            // steps, the customer goes to the target as a player would climb over.
             if (timer % 20 == 0) {
                 if (lastProgress != null && lastProgress.distanceToSqr(position()) < 0.04) {
-                    if (++noProgress >= 2) hopAlong();
-                    else getNavigation().stop();
+                    if (++noProgress >= 2 && (!hopAlong() || noProgress >= 4) && position().distanceToSqr(target) < NEAR * NEAR) return true;
+                    if (noProgress == 1) getNavigation().stop();
                 } else noProgress = 0;
                 lastProgress = position();
             }
@@ -343,21 +347,21 @@ public class Customer extends PathfinderMob {
         return false;
     }
 
-    /** Moves the customer onto the next node of its path (at most two blocks away) that has room for it. */
-    private void hopAlong() {
-        noProgress = 0;
+    /** Moves the customer onto the next node of its path (at most two blocks away) that has room for it; false when none has. */
+    private boolean hopAlong() {
         var path = getNavigation().getPath();
-        if (path == null || path.isDone()) return;
+        if (path == null || path.isDone()) return false;
         for (int i = path.getNextNodeIndex(); i < path.getNodeCount() && i <= path.getNextNodeIndex() + 1; i++) {
             BlockPos node = path.getNodePos(i);
             Vec3 at = Vec3.atBottomCenterOf(node);
-            if (at.distanceToSqr(position()) > 4 * 4) return;
+            if (at.distanceToSqr(position()) > 4 * 4) return false;
             if (level().noCollision(this, getDimensions(getPose()).makeBoundingBox(at))) {
                 setPos(at.x, at.y, at.z);
                 path.setNextNodeIndex(i + 1);
-                return;
+                return true;
             }
         }
+        return false;
     }
 
     private Vec3 seatPos() {

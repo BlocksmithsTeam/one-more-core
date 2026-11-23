@@ -55,10 +55,9 @@ import java.util.Set;
 
 /**
  * The pot's recipes in a book hanging in the air beside it: a green cookbook ({@link RecipeBookModel}), opened out, with the recipes on
- * its pages, so the player reads and stirs at once. The page on the left lists the dishes, what can be cooked now first; the page on the
- * right shows the dish under the cursor, the one pointed at last, or the one picked. Pages are measured in units of about a GUI pixel.
- * The pages turn by the wheel, the page keys and the list's foot (held, it leafs on); over the right page a switch shows only what
- * can be made now and a magnifier searches; a "made lately" tab keeps the dishes made from the book.
+ * its pages. The menu runs over both pages, the left one first, a heading over each kind; the dish under the cursor is named in its
+ * tooltip. The kinds are bookmarks along the head of both pages, the search last. Pages are measured in units of about a GUI pixel.
+ * The pages turn by the wheel, the page keys and the feet of the pages (back on the left, on on the right; held, it leafs on).
  */
 final class RecipeBook implements NodePainter {
     /** The page's paper, a unit to a texel, and the ribbon beside it. */
@@ -128,7 +127,6 @@ final class RecipeBook implements NodePainter {
     private static final float NUMBER_ROOM = 27.0F;
     /** The list's grid across, and its middle: the page number stands there, the two halves of the foot meet there. */
     private static final float LIST_WIDE = COLUMNS * PITCH - (PITCH - WELL_SIZE);
-    private static final float FOOT_MIDDLE = GRID_X + LIST_WIDE / 2.0F;
     private static final int INK = 0xFF4A3418;
     private static final int WELL = 0x1E5A3C18;
     private static final int WELL_READY = 0x70E0A83C;
@@ -186,10 +184,6 @@ final class RecipeBook implements NodePainter {
     private static final float NUDGE_TIME = 1.5F;
     private static final float NUDGE_EVERY = 0.5F;
     private static final float NUDGE_FAR = 1.5F;
-    /** The "only what can be made now" switch: a tab over the right page, just clear of the fold's shade. */
-    private static final float FILTER_X = 6.0F;
-    /** The search: a tab beside the switch; typing, the row of tabs over the list becomes one slip of paper with the text on it. */
-    private static final float SEARCH_X = 24.0F;
     private static final float SLIP_HIGH = 11.0F;
     private static final float SLIP_TEXT_X = 11.0F;
     private static final int QUERY_MOST = 50;
@@ -597,7 +591,7 @@ final class RecipeBook implements NodePainter {
         Object current = source.current(view);
         boolean making = current != null && picked != null && picked.page().key().equals(current);
         Integer keptPage = PAGES.get(memoryKey());
-        int at = picked == null ? 0 : MenuRows.of(entries).pageOf(Math.max(0, entries.indexOf(picked)));
+        int at = picked == null ? 0 : MenuRows.of(entries).pageOf(Math.max(0, entries.indexOf(picked))) / 2;
         page = Mth.clamp(keptPage != null && !making ? keptPage : at, 0, pages() - 1);
     }
 
@@ -887,9 +881,6 @@ final class RecipeBook implements NodePainter {
         if (offered.stream().filter(it -> it.kind() != null).count() == 1) {
             offered.removeIf(it -> it.kind() != null);
         }
-        if (anyRecent) {
-            offered.add(1, new Tab(RECENT, new ItemStack(Items.CLOCK), Component.translatable("onemorecore.book.tab.recent")));
-        }
         return offered.size() >= 2 ? offered : List.of();
     }
 
@@ -897,18 +888,6 @@ final class RecipeBook implements NodePainter {
     private List<String> recent() {
         String kept = BookTabs.get(bookId() + ".recent");
         return kept == null || kept.isEmpty() ? List.of() : List.of(kept.split(","));
-    }
-
-    /** A dish was made from the book: it goes to the head of the dishes made lately. */
-    private void made(Page page) {
-        List<String> recent = new ArrayList<>(recent());
-        String key = page.key().toString();
-        recent.remove(key);
-        recent.add(0, key);
-        while (recent.size() > RECENT_MOST) {
-            recent.remove(recent.size() - 1);
-        }
-        BookTabs.put(bookId() + ".recent", String.join(",", recent));
     }
 
     /** What the player has to cook with: the inventory, the stack in the hand (a knife taken to cut), and what lies in the station. */
@@ -945,8 +924,9 @@ final class RecipeBook implements NodePainter {
         return new Entry(page, found, missing, made);
     }
 
+    /** Spreads: the list runs on from the left page to the right one. */
     private int pages() {
-        return MenuRows.of(entries).pages();
+        return (MenuRows.of(entries).pages() + 1) / 2;
     }
 
     /** Every frame: opens or closes, hangs in the air, follows the cursor. */
@@ -1649,11 +1629,11 @@ final class RecipeBook implements NodePainter {
         // Along the page from the fold; the left page runs from its edge at +x to the fold at 0, the right one on from there.
         float along = Math.abs(point.x) / Mth.cos(tilt);
         float x = point.x > 0.0F ? (PAGE_WIDTH - along) / UNIT : UNITS_WIDE + along / UNIT;
-        boolean overRow = x >= 0.0F && x < UNITS_WIDE && y >= -TAB_HIGH && y < 0.0F;
-        boolean onSlip = searching() && overRow && x >= TAB_MARGIN && x < UNITS_WIDE - TAB_MARGIN && y >= -SLIP_HIGH;
-        boolean overTabs = !searching() && !tabs.isEmpty() && overRow;
-        boolean onSearch = x >= UNITS_WIDE + SEARCH_X && x < UNITS_WIDE + SEARCH_X + TAB_WIDE && y >= -TAB_HIGH && y < 0.0F;
-        boolean onFilter = x >= UNITS_WIDE + FILTER_X && x < UNITS_WIDE + FILTER_X + TAB_WIDE && y >= -TAB_HIGH && y < 0.0F;
+        boolean overRow = x >= 0.0F && x < UNITS_WIDE * 2 && y >= -TAB_HIGH && y < 0.0F;
+        boolean onSearch = overRow && onSlot(tabs.size(), x);
+        boolean onSlip = searching() && overRow && !onSearch && x >= TAB_MARGIN && x < UNITS_WIDE - TAB_MARGIN && y >= -SLIP_HIGH;
+        boolean overTabs = !searching() && !tabs.isEmpty() && overRow && !onSlot(tabs.size(), x);
+        boolean onFilter = false;
         // The ribbon stands a little over the head of the page, and takes the cursor a little round it.
         boolean nearRibbon = x >= UNITS_WIDE + RIBBON_X - RIBBON_REACH && x < UNITS_WIDE + RIBBON_X + RIBBON_WIDTH + RIBBON_REACH
                 && y >= -RIBBON_REACH && y < 0.0F;
@@ -1676,10 +1656,10 @@ final class RecipeBook implements NodePainter {
      * it or with one page only. The whole foot turns pages, not only the arrows drawn on it.
      */
     private int footSide() {
-        if (pages() <= 1 || cursorY < FOOT_TOP || cursorY >= UNITS_HIGH || cursorX < 0.0F || cursorX >= UNITS_WIDE) {
+        if (pages() <= 1 || cursorY < FOOT_TOP || cursorY >= UNITS_HIGH || cursorX < 0.0F || cursorX >= UNITS_WIDE * 2) {
             return 0;
         }
-        return cursorX < FOOT_MIDDLE ? -1 : 1;
+        return cursorX < UNITS_WIDE ? -1 : 1;
     }
 
     /**
@@ -1695,65 +1675,63 @@ final class RecipeBook implements NodePainter {
     }
 
     private Entry entryAt(float x, float y) {
-        if (x < GRID_X || x >= GRID_X + LIST_WIDE) return null;
-        for (MenuRows.Row r : MenuRows.of(entries).rows(page))
+        boolean right = x >= UNITS_WIDE;
+        float gridX = right ? UNITS_WIDE + RIGHT_GRID_X : GRID_X;
+        if (x < gridX || x >= gridX + LIST_WIDE) return null;
+        for (MenuRows.Row r : MenuRows.of(entries).rows(page * 2 + (right ? 1 : 0)))
             if (r.entry() >= 0 && y >= r.y() && y < r.y() + MenuRows.ENTRY) return entries.get(r.entry());
         return null;
     }
 
+    /** Where the right page's tabs start, clear of the fold's shade. */
+    private static final float RIGHT_TABS_X = 6.0F;
+    /** Where the right page's list stands: its grid ends a unit before the ribbon. */
+    private static final float RIGHT_GRID_X = RIBBON_X - 1.0F - LIST_WIDE;
+
+    /**
+     * The row of tabs runs over both pages, as bookmarks along the head of the book: the tabs fill the left page first, then the
+     * right one, and the search stands last on the right page. {x, 0 left page or 1 right page} of the tab {@code index} (the
+     * search: tabs.size()), x in that page's units.
+     */
+    private float[] tabSlot(int index) {
+        boolean tight = tabs.size() + 1 > 6;
+        float pitch = tight ? TAB_PITCH_TIGHT : TAB_PITCH;
+        int leftHolds = Math.min(tabs.size(), tight ? 4 : TABS_AT_EASE);
+        if (index < leftHolds) return new float[] {TABS_X + index * pitch, 0};
+        return new float[] {RIGHT_TABS_X + (index - leftHolds) * pitch, 1};
+    }
+
+    /** Whether x (over both pages: the right page from UNITS_WIDE on) is on the tab {@code index}. */
+    private boolean onSlot(int index, float x) {
+        float[] slot = tabSlot(index);
+        float at = x - slot[1] * UNITS_WIDE;
+        return at >= slot[0] && at < slot[0] + TAB_WIDE;
+    }
+
     private Tab tabAt(float x) {
-        float start = tabsX();
-        float pitch = tabPitch();
-        int shown = tabsShown();
-        // A tab drawn later lies over the one before it: each shows from its own left edge to the next one's.
-        int slot = Math.min(Mth.floor((x - start) / pitch), shown - 1);
-        float into = x - start - slot * pitch;
-        int index = tabFirst + slot;
-        return slot >= 0 && into < TAB_WIDE && index < tabs.size() ? tabs.get(index) : null;
+        // A tab drawn later lies over the one before it.
+        Tab found = null;
+        for (int i = 0; i < tabs.size(); i++) if (onSlot(i, x)) found = tabs.get(i);
+        return found;
     }
 
-    /** Whether there are more tabs than the row shows at once: then it scrolls, between its arrow tabs. */
+    /** The row never scrolls: it has the room of both pages. */
     private boolean tabsScroll() {
-        return tabs.size() > TABS_IN_VIEW;
+        return false;
     }
 
-    /** Where the row of tabs starts: its usual place, or right of the arrow back of a row that scrolls. */
-    private float tabsX() {
-        return tabsScroll() ? TAB_MARGIN + ARROW_TAB_WIDE + 1.0F : TABS_X;
-    }
-
-    /** How far apart the tabs stand: as usual while they fit, a little over each other when just more, side by side scrolling. */
-    private float tabPitch() {
-        if (tabsScroll()) {
-            return TAB_PITCH_SCROLLING;
-        }
-        return tabs.size() <= TABS_AT_EASE ? TAB_PITCH : TAB_PITCH_TIGHT;
-    }
-
-    /** How many tabs are in view: all of them, or as many as fit between the arrows when the row scrolls. */
     private int tabsShown() {
-        return tabsScroll() ? TABS_SCROLLING : tabs.size();
+        return tabs.size();
     }
 
-    /** Where the arrow tab on of a row that scrolls stands. */
+    /** Where the arrow tab on of a row that scrolls stands (no row scrolls). */
     private float arrowOnX() {
-        return tabsEnd() + 1.0F;
+        return UNITS_WIDE;
     }
 
-    /** Where the tabs in view end: the arrow on stands right of it. */
-    private float tabsEnd() {
-        return tabsX() + (tabsShown() - 1) * tabPitch() + TAB_WIDE;
-    }
-
-    /** The arrow tab of a row that scrolls under {@code x}: -1 back, 1 on, 0 none (also at an end, where it stands faded). */
+    /** The arrow tab of a row that scrolls under {@code x}: none, no row scrolls. */
     private int tabArrowAt(float x) {
-        if (!tabsScroll()) {
-            return 0;
-        }
-        if (x >= TAB_MARGIN && x < TAB_MARGIN + ARROW_TAB_WIDE) {
-            return -1;
-        }
-        return x >= arrowOnX() && x < arrowOnX() + ARROW_TAB_WIDE ? 1 : 0;
+        return 0;
     }
 
     /** Whether the row can scroll that way: tabs before the first in view (-1), after the last (1). */
@@ -1903,7 +1881,6 @@ final class RecipeBook implements NodePainter {
         PICKED.put(kindMemory(), picked.page().key());
         if (again) {
             source.picked(view, picked.page());
-            made(picked.page());
         } else {
             Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.4F, 0.3F));
         }
@@ -1925,7 +1902,7 @@ final class RecipeBook implements NodePainter {
         }
         if (listed.isPresent()) {
             picked = listed.get();
-            int at = MenuRows.of(entries).pageOf(entries.indexOf(picked));
+            int at = MenuRows.of(entries).pageOf(entries.indexOf(picked)) / 2;
             if (at != page) {
                 flipFrom = leafNow();
                 int way = at > page ? 1 : -1;
@@ -2027,13 +2004,13 @@ final class RecipeBook implements NodePainter {
         // Forward the old list stays on the left until the sheet covers it with the new one; back the old list itself lifts off.
         boolean forward = flipWay > 0;
         side(poseStack, buffers, true, tilt, height, forward ? from : now, true);
-        side(poseStack, buffers, false, -tilt, height, now, true);
+        side(poseStack, buffers, false, -tilt, height, forward ? now : from, true);
         float right = -tilt;
         float left = tilt - Mth.PI;
         float turn = forward ? Mth.lerp(over, right, left) : Mth.lerp(over, left, right);
         float lifted = height + SHEET_LIFT;
         if (turn > -Mth.HALF_PI) {
-            side(poseStack, buffers, false, turn, lifted, now, false);
+            side(poseStack, buffers, false, turn, lifted, forward ? from : now, false);
         } else {
             side(poseStack, buffers, true, turn + Mth.PI, lifted, forward ? now : from, false);
         }
@@ -2053,33 +2030,13 @@ final class RecipeBook implements NodePainter {
         canvas.paper(left);
         canvas.rect(left ? UNITS_WIDE - FOLD_WIDTH : 0.0F, 0.0F, FOLD_WIDTH, UNITS_HIGH, 0.1F, FOLD);
         canvas.rect(left ? UNITS_WIDE - 2.0F : 0.0F, 0.0F, 2.0F, UNITS_HIGH, 0.15F, FOLD);
-        boolean live = resting && (flip >= 1.0F || !left || leaf.page() == page);
-        if (left) {
-            if (resting) {
-                drawTabs(canvas);
-            }
-            drawList(canvas, leaf, live);
-        } else {
-            if (resting) {
-                // On, it is washed with the colour of what can be made, so it reads as a switch, not as one more kind of dish.
-                float since = time - switchNodFrom;
-                float nod = since >= 0.0F && since < NOD_TIME ? Math.abs(Mth.sin(since / NOD_TIME * Mth.TWO_PI)) * NOD_HEIGHT : 0.0F;
-                boolean on = filtering();
-                canvas.tab(FILTER_X, on, overFilter, filterIcon, nod, on);
-                canvas.tab(SEARCH_X, searching(), overSearch, ItemStack.EMPTY, 0.0F, false);
-                canvas.magnifier(SEARCH_X + (TAB_WIDE - 7.0F) / 2.0F, -(searching() ? TAB_HIGH : TAB_HIGH - TAB_DROP) + 3.0F);
-                // The ribbon closes the book: it is there also while no dish is shown.
-                canvas.ribbon(onRibbon());
-            }
-            Entry shown = rightShown();
-            if (shown != null) {
-                drawDish(canvas, shown, resting);
-            } else if (resting) {
-                drawn.clear();
-                drawnFor = null;
-                bar = null;
-            }
+        boolean live = resting && (flip >= 1.0F || leaf.page() == page);
+        if (resting) {
+            drawTabs(canvas, left);
+            // The ribbon closes the book.
+            if (!left) canvas.ribbon(onRibbon());
         }
+        drawList(canvas, leaf, live, left);
         poseStack.popPose();
     }
 
@@ -2101,29 +2058,33 @@ final class RecipeBook implements NodePainter {
         }
     }
 
-    private void drawTabs(Sheet canvas) {
-        if (searching()) {
+    /** The tabs of one page; typing a search, the left page's become its slip. The search tab stands last on the right page. */
+    private void drawTabs(Sheet canvas, boolean left) {
+        int side = left ? 0 : 1;
+        if (searching() && left) {
             drawSlip(canvas);
-            return;
-        }
-        int shown = tabsShown();
-        int chosenSlot = -1;
-        for (int i = 0; i < shown && tabFirst + i < tabs.size(); i++) {
-            Tab one = tabs.get(tabFirst + i);
-            if (Objects.equals(one.kind(), tab)) {
-                // The chosen one is drawn last, over its neighbours: it runs on into the page.
-                chosenSlot = i;
-                continue;
+        } else if (!searching()) {
+            int chosenSlot = -1;
+            for (int i = 0; i < tabs.size(); i++) {
+                float[] slot = tabSlot(i);
+                if (slot[1] != side) continue;
+                Tab one = tabs.get(i);
+                if (Objects.equals(one.kind(), tab)) {
+                    // The chosen one is drawn last, over its neighbours: it runs on into the page.
+                    chosenSlot = i;
+                    continue;
+                }
+                canvas.tab(slot[0], false, one == hoveredTab, one.icon(), 0.0F, false);
             }
-            canvas.tab(tabsX() + i * tabPitch(), false, one == hoveredTab, one.icon(), 0.0F, false);
+            if (chosenSlot >= 0) {
+                Tab one = tabs.get(chosenSlot);
+                canvas.tab(tabSlot(chosenSlot)[0], true, one == hoveredTab, one.icon(), 0.0F, false);
+            }
         }
-        if (chosenSlot >= 0) {
-            Tab one = tabs.get(tabFirst + chosenSlot);
-            canvas.tab(tabsX() + chosenSlot * tabPitch(), true, one == hoveredTab, one.icon(), 0.0F, false);
-        }
-        if (tabsScroll()) {
-            canvas.arrowTab(TAB_MARGIN, false, tabsBeyond(-1), overTabArrow < 0, 0.0F);
-            canvas.arrowTab(arrowOnX(), true, tabsBeyond(1), overTabArrow > 0, arrowNudge());
+        float[] search = tabSlot(tabs.size());
+        if (search[1] == side) {
+            canvas.tab(search[0], searching(), overSearch, ItemStack.EMPTY, 0.0F, false);
+            canvas.magnifier(search[0] + (TAB_WIDE - 7.0F) / 2.0F, -(searching() ? TAB_HIGH : TAB_HIGH - TAB_DROP) + 3.0F);
         }
     }
 
@@ -2131,23 +2092,24 @@ final class RecipeBook implements NodePainter {
      * The list's page of {@code leaf}, like a restaurant's menu: the kind of the dishes as a heading over them, then a line for each
      * dish (a small picture, the name, dots to the price on the right). {@code live}: the resting page, which answers the cursor.
      */
-    private void drawList(Sheet canvas, Leaf leaf, boolean live) {
+    private void drawList(Sheet canvas, Leaf leaf, boolean live, boolean leftPage) {
         List<Entry> list = leaf.list();
         Font font = Minecraft.getInstance().font;
         MenuRows rows = MenuRows.of(list);
         Entry pointed = hovered != null ? hovered : previewed;
-        float right = GRID_X + LIST_WIDE;
-        for (MenuRows.Row r : rows.rows(leaf.page())) {
+        float gridX = leftPage ? GRID_X : RIGHT_GRID_X;
+        float right = gridX + LIST_WIDE;
+        for (MenuRows.Row r : rows.rows(leaf.page() * 2 + (leftPage ? 0 : 1))) {
             if (r.entry() < 0) {
                 String head = Component.translatable("onemorecore.board." + r.kind()).getString().toUpperCase(java.util.Locale.ROOT);
                 float scale = Math.min(0.62F, (LIST_WIDE - 2.0F) / Math.max(1, font.width(head)));
-                canvas.text(head, GRID_X, r.y() + 1.0F, scale);
-                canvas.rect(GRID_X, r.y() + MenuRows.HEAD - 2.0F, LIST_WIDE, 0.6F, WELL_LIFT, RULE);
+                canvas.text(head, gridX, r.y() + 1.0F, scale);
+                canvas.rect(gridX, r.y() + MenuRows.HEAD - 2.0F, LIST_WIDE, 0.6F, WELL_LIFT, RULE);
                 continue;
             }
             Entry entry = list.get(r.entry());
-            if (entry == picked || entry == pointed) canvas.rect(GRID_X - 1.0F, r.y(), LIST_WIDE + 2.0F, MenuRows.ENTRY, WELL_LIFT, WELL_READY);
-            canvas.item(entry.dish(), GRID_X, r.y() + 0.5F, 10.0F, false);
+            if (entry == picked || entry == pointed) canvas.rect(gridX - 1.0F, r.y(), LIST_WIDE + 2.0F, MenuRows.ENTRY, WELL_LIFT, WELL_READY);
+            canvas.item(entry.dish(), gridX, r.y() + 0.5F, 10.0F, false);
             String price = entry.page().note() == null ? "" : entry.page().note().getString();
             float small = 0.55F;
             float priceWide = font.width(price) * small;
@@ -2155,23 +2117,23 @@ final class RecipeBook implements NodePainter {
             float room = LIST_WIDE - 12.0F - priceWide - 3.0F;
             while (!name.isEmpty() && font.width(name) * small > room) name = name.substring(0, name.length() - 1);
             float textY = r.y() + (MenuRows.ENTRY - 7.0F * small) / 2.0F;
-            canvas.text(name, GRID_X + 12.0F, textY, small);
+            canvas.text(name, gridX + 12.0F, textY, small);
             canvas.text(price, right - priceWide, textY, small);
             // Dots from the name to the price, as on a printed menu.
-            float from = GRID_X + 12.0F + font.width(name) * small + 1.5F, to = right - priceWide - 1.5F;
+            float from = gridX + 12.0F + font.width(name) * small + 1.5F, to = right - priceWide - 1.5F;
             for (float d = from; d + 0.6F < to; d += 2.0F) canvas.rect(d, textY + 7.0F * small - 0.8F, 0.6F, 0.6F, WELL_LIFT, RULE);
         }
-        int leafPages = rows.pages();
-        if (leafPages > 1) {
-            // "7/52" between the arrows, smaller when it would not fit; the arrow of the half under the cursor is lit.
-            String number = (leaf.page() + 1) + "/" + leafPages;
+        int spreads = (rows.pages() + 1) / 2;
+        if (spreads > 1) {
+            // The arrow back on the left page, the arrow on on the right one, each with its page's number; lit under the cursor.
+            String number = String.valueOf(leaf.page() * 2 + (leftPage ? 1 : 2));
             float wide = font.width(number) - 1.0F;
             float scale = Math.min(1.0F, NUMBER_ROOM / wide);
             float high = (font.lineHeight - 2.0F) * scale;
-            canvas.text(number, FOOT_MIDDLE - wide * scale / 2.0F, ARROW_Y + (ARROW_HEIGHT - high) / 2.0F, scale);
+            canvas.text(number, gridX + LIST_WIDE / 2.0F - wide * scale / 2.0F, ARROW_Y + (ARROW_HEIGHT - high) / 2.0F, scale);
             int under = live ? footSide() : 0;
-            canvas.arrow(GRID_X, ARROW_Y, false, under < 0);
-            canvas.arrow(GRID_X + LIST_WIDE - ARROW_WIDTH, ARROW_Y, true, under > 0);
+            if (leftPage) canvas.arrow(gridX, ARROW_Y, false, under < 0);
+            else canvas.arrow(gridX + LIST_WIDE - ARROW_WIDTH, ARROW_Y, true, under > 0);
         }
     }
 
@@ -2221,113 +2183,6 @@ final class RecipeBook implements NodePainter {
 
         List<Row> rows(int page) {
             return page >= 0 && page < pagesRows.size() ? pagesRows.get(page) : List.of();
-        }
-    }
-
-    /**
-     * The dish, its name, its stars, what goes in, how long it takes and what it is served in. {@code live}: the resting page, which
-     * answers the cursor and is kept for it.
-     */
-    private void drawDish(Sheet canvas, Entry entry, boolean live) {
-        Font font = Minecraft.getInstance().font;
-        float middle = RIGHT_MIDDLE;
-        List<Drawn> laid = new ArrayList<>();
-        canvas.item(entry.dish(), middle - DISH_SIZE / 2.0F, DISH_Y, DISH_SIZE);
-        laid.add(new Drawn(middle - DISH_SIZE / 2.0F, DISH_Y, DISH_SIZE, entry.dish(), -1));
-        if (live && overDish) {
-            // The dish is picked and made at a click, as on the list.
-            canvas.frame(middle - DISH_SIZE / 2.0F - 0.5F, DISH_Y - 0.5F, DISH_SIZE + 1.0F);
-        }
-        float line = 25.0F;
-        if (entry.page().kind() != null) {
-            String kind = Component.translatable("onemorecore.board." + entry.page().kind()).getString().toUpperCase(java.util.Locale.ROOT);
-            canvas.text(kind, middle - font.width(kind) * 0.5F / 2.0F, DISH_Y - 6.0F, 0.5F);
-        }
-        // Two lines at most: a long modded name must leave room for what goes in.
-        if (nameFor != entry) {
-            nameFor = entry;
-            nameLines = font.split(entry.dish().getHoverName(), Math.round(2.0F * (UNITS_WIDE - middle) - 6.0F));
-        }
-        List<FormattedCharSequence> name = nameLines;
-        for (FormattedCharSequence text : name.subList(0, Math.min(2, name.size()))) {
-            canvas.text(text, middle - font.width(text) / 2.0F, line);
-            line += font.lineHeight;
-        }
-        float rowWide = COLUMNS * PITCH - (PITCH - WELL_SIZE);
-        canvas.rect(middle - rowWide / 2.0F, line + 0.5F, rowWide, 0.6F, WELL_LIFT, RULE);
-        int count = entry.ingredients().size();
-        long second = Util.getMillis() / 1000L;
-        float top = line + 3.0F;
-        // The small print goes where there is room left, in the middle, on the line of the list's arrows.
-        float footMiddle = ARROW_Y + ARROW_HEIGHT / 2.0F;
-        float bottom = footMiddle - FOOT_SIZE / 2.0F;
-        int rows = (count + 2) / 3;
-        // As many rows as fit over the small print; with fewer than two there, the small print gives way to the ingredients. Rows
-        // that still do not fit are reached by the bar beside them, a whole row at a time.
-        int overFoot = Math.max(0, Mth.floor((bottom - top + PITCH - WELL_SIZE) / PITCH));
-        boolean withFoot = rows <= overFoot || overFoot >= 2;
-        int shown = withFoot ? Math.min(rows, overFoot) : Math.max(1, Math.min(rows, Mth.floor((PAGE_FOOT - top + PITCH - WELL_SIZE) / PITCH)));
-        if (!Objects.equals(rowsFor, entry.page().key())) {
-            if (picked != null && Objects.equals(rowsFor, picked.page().key())) {
-                pickedRowFor = rowsFor;
-                pickedRow = firstRow;
-            }
-            rowsFor = entry.page().key();
-            firstRow = Objects.equals(pickedRowFor, rowsFor) ? pickedRow : 0;
-        }
-        firstRow = Mth.clamp(firstRow, 0, rows - shown);
-        if (shown < rows) {
-            float high = shown * PITCH - (PITCH - WELL_SIZE);
-            float gripHigh = Math.max(BAR_LEAST, high * shown / rows);
-            float gripTop = top + (high - gripHigh) * firstRow / (rows - shown);
-            Bar shownBar = new Bar(rows, shown, firstRow, top, high, gripTop, gripHigh);
-            if (live) {
-                bar = shownBar;
-            }
-            canvas.rect(BAR_X, top, BAR_WIDE, high, WELL_LIFT, BAR_TRACK);
-            boolean lit = live && (gripHeld >= 0.0F || cursorX >= UNITS_WIDE && shownBar.onGrip(cursorX - UNITS_WIDE, cursorY));
-            canvas.rect(BAR_X, gripTop, BAR_WIDE, gripHigh, WELL_LIFT + 0.05F, lit ? WELL_PICKED : BAR_GRIP);
-        } else if (live) {
-            bar = null;
-        }
-        for (int i = firstRow * 3; i < Math.min(count, (firstRow + shown) * 3); i++) {
-            int inRow = Math.min(3, count - i / 3 * 3);
-            float x = middle - (inRow * PITCH - (PITCH - WELL_SIZE)) / 2.0F + i % 3 * PITCH;
-            float y = top + (i / 3 - firstRow) * PITCH;
-            ItemStack[] choices = entry.ingredients().get(i).getItems();
-            if (choices.length > 0) {
-                canvas.rect(x, y, WELL_SIZE, WELL_SIZE, WELL_LIFT, entry.found()[i] ? WELL_READY : WELL);
-                // Under the cursor it keeps the choice it showed when the cursor came; what the book makes lights, a click shows it.
-                boolean pointed = live && hoveredDrawn != null && hoveredDrawn.ingredient() == i && drawnOf == entry;
-                ItemStack choice = pointed ? drawnShown : choices[(int) (second % choices.length)];
-                canvas.item(choice, x + 0.5F, y + 0.5F, 16.0F, !entry.found()[i]);
-                if (pointed && drawnTarget != null) {
-                    canvas.frame(x, y, WELL_SIZE);
-                }
-                laid.add(new Drawn(x, y, WELL_SIZE, choice, i));
-            }
-        }
-        if (withFoot) {
-            List<ItemStack> foot = entry.page().foot();
-            FormattedCharSequence note = entry.page().note() == null ? null : entry.page().note().getVisualOrderText();
-            // The note stands close after the last thing, as a time after its clock.
-            float noteWide = note == null ? 0.0F : font.width(note) + 1.0F;
-            float wide = foot.isEmpty() ? noteWide : (foot.size() - 1) * FOOT_PITCH + FOOT_SIZE + noteWide;
-            float x = middle - wide / 2.0F;
-            for (ItemStack small : foot) {
-                canvas.item(small, x, bottom, FOOT_SIZE);
-                laid.add(new Drawn(x, bottom, FOOT_SIZE, small, -1));
-                x += FOOT_PITCH;
-            }
-            if (note != null) {
-                float noteX = foot.isEmpty() ? x : x - FOOT_PITCH + FOOT_SIZE + 1.0F;
-                canvas.text(note, noteX, footMiddle - font.lineHeight / 2.0F + 1.0F);
-            }
-        }
-        if (live) {
-            drawn.clear();
-            drawn.addAll(laid);
-            drawnFor = entry;
         }
     }
 

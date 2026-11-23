@@ -23,12 +23,13 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Client to server: the player clicked an order card at canvas coordinates x and y of one side of a screen (possibly outside the
- * block of a wide screen), on a page (-1: the page the server shows now) or scrolled down (scroll >= 0, a player at the screen
- * with Diegesis). The server lays the tickets out again (OrderLayout), checks the point and finds the order by its ID.
+ * block of a wide screen), with the tickets laid out by a flow (OrderLayout: the first page, down, sideways; below 0: the first
+ * page) and scrolled by offset canvas units along it (as drawn; it can be negative where the scroll goes round to the start). The
+ * server lays the tickets out again (OrderLayout), checks the point and finds the order by its ID.
  */
-public record ScreenClick(BlockPos pos, UUID orderId, float x, float y, int side, float scroll, int page) implements CustomPacketPayload {
+public record ScreenClick(BlockPos pos, UUID orderId, float x, float y, int side, float offset, int flow) implements CustomPacketPayload {
     public ScreenClick(BlockPos pos, UUID orderId, float x, float y) {
-        this(pos, orderId, x, y, 0, -1, -1);
+        this(pos, orderId, x, y, 0, 0, OrderLayout.FIRST_PAGE);
     }
 
     public static final Type<ScreenClick> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "screen_click"));
@@ -38,8 +39,8 @@ public record ScreenClick(BlockPos pos, UUID orderId, float x, float y, int side
         b.writeFloat(c.x);
         b.writeFloat(c.y);
         b.writeByte(c.side);
-        b.writeFloat(c.scroll);
-        net.minecraft.network.VarInt.write(b, c.page + 1);
+        b.writeFloat(c.offset);
+        net.minecraft.network.VarInt.write(b, c.flow + 1);
     }, b -> new ScreenClick(BlockPos.STREAM_CODEC.decode(b), UUIDUtil.STREAM_CODEC.decode(b), b.readFloat(), b.readFloat(), b.readByte(),
             b.readFloat(), net.minecraft.network.VarInt.read(b) - 1));
     /** The client points at screens up to 8 blocks away; the server allows a little more for movement. */
@@ -48,7 +49,7 @@ public record ScreenClick(BlockPos pos, UUID orderId, float x, float y, int side
     static void handle(ScreenClick click, ServerPlayer player) {
         var level = player.serverLevel();
         if (player.isSpectator() || !level.isLoaded(click.pos) || !level.mayInteract(player, click.pos)) return;
-        if (!Float.isFinite(click.x) || !Float.isFinite(click.y) || !Float.isFinite(click.scroll)) return;
+        if (!Float.isFinite(click.x) || !Float.isFinite(click.y) || !Float.isFinite(click.offset)) return;
         // Screens that join are one picture, drawn and clicked at their anchor.
         ScreenGroups.Group group = ScreenGroups.of(level, click.pos);
         if (group == null || !group.anchor().equals(click.pos)) return;
@@ -61,10 +62,11 @@ public record ScreenClick(BlockPos pos, UUID orderId, float x, float y, int side
         ScreenRect rect = group.rect();
         int settings = ScreenSettings.face(r.screens.getOrDefault(click.pos, Restaurant.SCREEN_OFF), click.side);
         float unit = ScreenRect.unit(ScreenRect.of(state), settings);
-        boolean scrolling = click.scroll >= 0;
-        OrderLayout.Layout layout = OrderLayout.layout(rect.width(), rect.height(), unit, OrderLayout.guests(tickets), scrolling);
-        int page = scrolling ? 0 : click.page >= 0 ? click.page : OrderLayout.page(layout.pages(), ScreenSettings.autoPages(settings) ? level.getGameTime() : 0);
-        OrderLayout.Card card = layout.at(page, scrolling ? Math.min(click.scroll, layout.maxScroll()) : 0, click.x, click.y);
+        int flow = click.flow == OrderLayout.DOWN || click.flow == OrderLayout.SIDEWAYS ? click.flow : OrderLayout.FIRST_PAGE;
+        OrderLayout.Layout layout = OrderLayout.layout(rect.width(), rect.height(), unit, OrderLayout.guests(tickets), flow);
+        // Drawn, the scroll goes round: one length of the content and its gap back at most.
+        float offset = flow == OrderLayout.FIRST_PAGE ? 0 : Math.max(-layout.length(), Math.min(click.offset, layout.length()));
+        OrderLayout.Card card = layout.at(flow == OrderLayout.SIDEWAYS ? offset : 0, flow == OrderLayout.DOWN ? offset : 0, click.x, click.y);
         if (card == null || !click.orderId.equals(tickets.get(card.index()).orderId())) return;
         ScreenPicture picture = ScreenPicture.of(click.pos, state, rect, click.side);
         Vec3 point = picture.world(click.x, click.y), eye = player.getEyePosition();
