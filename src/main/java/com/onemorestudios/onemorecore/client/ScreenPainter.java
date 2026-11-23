@@ -74,8 +74,11 @@ public final class ScreenPainter {
         int side;
         ScreenRenderer.View view = new ScreenRenderer.View();
         boolean scrolling;
-        /** What is drawn outside this box is cut off (rectangles) or left out (text and items that do not fit in whole). */
+        /** What is drawn outside this box is cut off: rectangles here, text and items by the clipped buffers. */
         float clipX0 = -Float.MAX_VALUE, clipY0 = -Float.MAX_VALUE, clipX1 = Float.MAX_VALUE, clipY1 = Float.MAX_VALUE;
+        private ClipBuffers clipped;
+        /** The canvas's own pose: canvas units to the world. */
+        private final org.joml.Matrix4f root;
 
         Canvas(PoseStack pose, MultiBufferSource buffers, float w, float h, float hx, float hy, float u, int settings) {
             this.u = u;
@@ -86,6 +89,7 @@ public final class ScreenPainter {
             this.h = h;
             this.hx = hx;
             this.hy = hy;
+            this.root = new org.joml.Matrix4f(pose.last().pose());
         }
 
         void clip(float x0, float y0, float x1, float y1) {
@@ -93,15 +97,26 @@ public final class ScreenPainter {
             clipY0 = y0;
             clipX1 = x1;
             clipY1 = y1;
+            clipped = new ClipBuffers(buffers, root, x0, y0, x1, y1);
         }
 
         void unclip() {
             clip(-Float.MAX_VALUE, -Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE);
+            clipped = null;
         }
 
-        /** Whether a box lies in the clip box in whole. */
-        boolean inside(float x, float y, float rw, float rh) {
-            return x >= clipX0 - 0.01f && y >= clipY0 - 0.01f && x + rw <= clipX1 + 0.01f && y + rh <= clipY1 + 0.01f;
+        /** Whether a box lies outside the clip box in whole. */
+        boolean outside(float x, float y, float rw, float rh) {
+            return x + rw <= clipX0 || y + rh <= clipY0 || x >= clipX1 || y >= clipY1;
+        }
+
+        /** The buffers for text and items: cut to the clip box while there is one. */
+        private MultiBufferSource cut() {
+            return clipped != null ? clipped : buffers;
+        }
+
+        private void done() {
+            if (clipped != null) clipped.flush();
         }
 
         /** A filled rectangle over what was drawn before, cut to the clip box. */
@@ -120,11 +135,12 @@ public final class ScreenPainter {
 
         void text(String s, float x, float y, float scale, int color) {
             Font font = Minecraft.getInstance().font;
-            if (!inside(x, y, font.width(s) * scale, 8 * scale)) return;
+            if (outside(x, y, font.width(s) * scale, 8 * scale)) return;
             pose.pushPose();
             pose.translate(x, y, z + 0.05f);
             pose.scale(scale, scale, scale);
-            font.drawInBatch(s, 0, 0, color, false, pose.last().pose(), buffers, Font.DisplayMode.POLYGON_OFFSET, 0, LIGHT);
+            font.drawInBatch(s, 0, 0, color, false, pose.last().pose(), cut(), Font.DisplayMode.POLYGON_OFFSET, 0, LIGHT);
+            done();
             pose.popPose();
         }
 
@@ -153,7 +169,7 @@ public final class ScreenPainter {
 
         /** An item with its middle at (cx, cy), size units across; lit and remembered under the pointer. */
         void item(ItemStack stack, float cx, float cy, float size) {
-            if (stack.isEmpty() || !inside(cx - size / 2, cy - size / 2, size, size)) return;
+            if (stack.isEmpty() || outside(cx - size / 2, cy - size / 2, size, size)) return;
             boolean over = over(cx - size / 2, cy - size / 2, size, size);
             if (over) {
                 rect(cx - size * 0.6f, cy - size * 0.6f, size * 1.2f, size * 1.2f, 0x55FFFFFF);
@@ -163,7 +179,8 @@ public final class ScreenPainter {
             pose.pushPose();
             pose.translate(cx, cy, z + 0.3f);
             pose.scale(s, -s, 0.01f);
-            Minecraft.getInstance().getItemRenderer().renderStatic(stack, ItemDisplayContext.GUI, LIGHT, OverlayTexture.NO_OVERLAY, pose, buffers, null, 0);
+            Minecraft.getInstance().getItemRenderer().renderStatic(stack, ItemDisplayContext.GUI, LIGHT, OverlayTexture.NO_OVERLAY, pose, cut(), null, 0);
+            done();
             pose.popPose();
         }
     }

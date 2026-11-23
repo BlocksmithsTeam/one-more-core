@@ -34,7 +34,8 @@ public final class KitchenStations {
 
     public static final StationType TRAY = Diegesis.station(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "tray"))
             .block(OneMoreCore.TRAY).block(OneMoreCore.IRON_TRAY)
-            .schema(StationSchema.builder().slots(TRAY_DISHES, TrayBlockEntity.SIZE, SlotRules.DEFAULT.maxStack(1).placed().kept()).build())
+            // One place more than the dishes: an order ticket put on the tray becomes its label and takes no dish's place (TicketSlot).
+            .schema(StationSchema.builder().slots(TRAY_DISHES, TrayBlockEntity.SIZE + 1, SlotRules.DEFAULT.maxStack(1).placed().kept()).build())
             // An empty hand opens it; with an item the tray takes the dish or the ticket as without Diegesis; sneaking picks it up.
             .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown()
                     && mayUseTray(player, pos))
@@ -45,7 +46,7 @@ public final class KitchenStations {
 
                 {
                     if (tray != null) {
-                        context.state().bindSlots(TRAY_DISHES, SlotStorage.of(tray.items, 0, TrayBlockEntity.SIZE));
+                        context.state().bindSlots(TRAY_DISHES, new TicketSlot(tray));
                         readTray();
                         // Observe all writes, including Place (pose before item), physics settling, and direct setPose.
                         context.state().setChangeListener(this::writeTray);
@@ -62,6 +63,8 @@ public final class KitchenStations {
                         stationPoses[slot] = pose;
                         context.state().setPose(new SlotRef(TRAY_DISHES, slot), pose);
                     }
+                    SlotRef extra = new SlotRef(TRAY_DISHES, TrayBlockEntity.SIZE);
+                    if (context.state().getPose(extra) != null) context.state().setPose(extra, null);
                 }
 
                 private void writeTray() {
@@ -85,7 +88,9 @@ public final class KitchenStations {
 
                 @Override
                 public boolean mayPlace(StationContext station, Player player, SlotRef slot, ItemStack stack) {
-                    return !(stack.getItem() instanceof TrayItem) && bound(station) && mayUseTray(player, station.pos());
+                    if (stack.getItem() instanceof TrayItem || !bound(station) || !mayUseTray(player, station.pos())) return false;
+                    // A ticket goes on in any free place (it becomes the label); a dish only into a dish's place.
+                    return stack.is(OneMoreCore.TICKET.get()) || slot.index() < TrayBlockEntity.SIZE;
                 }
 
                 @Override
@@ -107,6 +112,35 @@ public final class KitchenStations {
                 }
             })
             .build();
+
+    /**
+     * The tray's dishes as the station's places, and one place more that is always empty: an order ticket put into any place
+     * becomes the tray's label (as a click with the ticket does) and the place stays free, so the ticket never takes a dish's
+     * place and can go on a full tray.
+     */
+    private record TicketSlot(TrayBlockEntity tray) implements SlotStorage {
+        @Override
+        public int size() {
+            return TrayBlockEntity.SIZE + 1;
+        }
+
+        @Override
+        public ItemStack get(int index) {
+            return index < TrayBlockEntity.SIZE ? tray.items.getItem(index) : ItemStack.EMPTY;
+        }
+
+        @Override
+        public void set(int index, ItemStack stack) {
+            if (stack.is(OneMoreCore.TICKET.get())) {
+                tray.label = TableCards.clean(stack.getOrDefault(OneMoreCore.LABEL.get(), ""));
+                tray.changed();
+                if (tray.getLevel() != null) tray.getLevel().playSound(null, tray.getBlockPos(), net.minecraft.sounds.SoundEvents.BOOK_PAGE_TURN,
+                        net.minecraft.sounds.SoundSource.BLOCKS, 0.8f, 1.3f);
+                return;
+            }
+            if (index < TrayBlockEntity.SIZE) tray.items.setItem(index, stack);
+        }
+    }
 
     private static ItemPose stationPose(TrayPose pose) {
         return new ItemPose(pose.x(), pose.y(), pose.z(), pose.lift(), pose.rotation(), pose.scale(), pose.on(), pose.wanted());
