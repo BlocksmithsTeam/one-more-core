@@ -116,7 +116,7 @@ public class Config {
             .comment("Highest price that a player can give a dish of their own on the Restaurant Computer.")
             .defineInRange("maxDishPrice", 100, 1, 1_000_000);
     static final ModConfigSpec.IntValue SHOP_DELIVERY = B
-            .comment("Ticks between a shop order on the Restaurant Computer and its delivery.")
+            .comment("Ticks between a shop order on the Restaurant Computer and courier dispatch.")
             .defineInRange("shopDeliveryTicks", 600, 0, 72000);
     static final ModConfigSpec.BooleanValue APP_MENU = B
             .comment("Apps of the Restaurant Computer. A disabled app is shown as inactive.")

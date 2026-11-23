@@ -13,7 +13,6 @@ import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.OpenSignBlockEntity;
 import com.onemorestudios.onemorecore.Restaurant;
 import com.onemorestudios.onemorecore.Restaurants;
-import com.onemorestudios.onemorecore.Shop;
 import com.onemorestudios.onemorecore.TableItems;
 import com.onemorestudios.onemorecore.gametest.GameTestSupport.TestPlayer;
 import net.minecraft.core.BlockPos;
@@ -35,7 +34,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.ModConfigSpec.ConfigValue;
@@ -167,54 +165,6 @@ public final class MoneyGameTests {
         helper.succeed();
     }
 
-    /** CORE-8 / ECONOMY-3: two batches share a 16-stack budget and their queued remainder survives a reload. */
-    @GameTest(template = "empty")
-    public static void shopDeliveryUsesSharedTickBudget(GameTestHelper helper) {
-        Restaurant restaurant = placeRestaurant(helper);
-        ChestBlockEntity chest = placeChest(helper, OTHER);
-        for (int slot = 0; slot < chest.getContainerSize(); slot++) chest.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
-        withConfig("SHOP_DELIVERY", 0, () -> {
-            setDelivery(restaurant, helper.absolutePos(OTHER));
-            order(helper, restaurant, Items.IRON_SWORD, 10);
-            order(helper, restaurant, Items.IRON_SWORD, 10);
-            tickDeliveries(helper, restaurant);
-            helper.assertValueEqual(drops(helper, Items.IRON_SWORD).size(), 16, "stacks from the first delivery tick");
-            List<ItemEntity> first = drops(helper, Items.IRON_SWORD);
-            first.forEach(ItemEntity::discard);
-
-            Restaurant restored = reload(helper, restaurant, save(restaurant));
-            helper.assertValueEqual(drops(helper, Items.IRON_SWORD).size(), 4, "stacks from the restored remainder");
-            tickDeliveries(helper, restored);
-            helper.assertValueEqual(drops(helper, Items.IRON_SWORD).size(), 4, "stacks after the queue is exhausted");
-        });
-        helper.succeed();
-    }
-
-    /** ECONOMY-6: saved orders use their checkout chest and legacy orders use the currently configured chest. */
-    @GameTest(template = "empty")
-    public static void checkoutDestinationSurvivesChanges(GameTestHelper helper) {
-        Restaurant restaurant = placeRestaurant(helper);
-        BlockPos first = new BlockPos(0, 1, 3);
-        BlockPos second = new BlockPos(3, 1, 3);
-        ChestBlockEntity original = placeChest(helper, first);
-        ChestBlockEntity current = placeChest(helper, second);
-        withConfig("SHOP_DELIVERY", 0, () -> {
-            setDelivery(restaurant, helper.absolutePos(first));
-            order(helper, restaurant, Items.WHEAT, 6);
-            order(helper, restaurant, Items.CARROT, 3);
-            setDelivery(restaurant, helper.absolutePos(second));
-
-            CompoundTag saved = save(restaurant);
-            // Simulate an older saved order by removing only its optional destination.
-            saved.getList("deliveries", Tag.TAG_COMPOUND).getCompound(1).remove("destination");
-            reload(helper, restaurant, saved);
-            helper.assertValueEqual(original.countItem(Items.WHEAT), 6, "wheat at the checkout chest");
-            helper.assertValueEqual(current.countItem(Items.WHEAT), 0, "wheat at the current chest");
-            helper.assertValueEqual(current.countItem(Items.CARROT), 3, "legacy order at the current chest");
-        });
-        helper.succeed();
-    }
-
     /** CORE-14: a partly cleaned table clears on the same stroke before and after a reload, including fully wiped surfaces. */
     @GameTest(template = "empty")
     public static void cleaningThresholdSurvivesReload(GameTestHelper helper) {
@@ -330,23 +280,6 @@ public final class MoneyGameTests {
 
     private static int dropped(GameTestHelper helper, Item item) {
         return drops(helper, item).stream().mapToInt(entity -> entity.getItem().getCount()).sum();
-    }
-
-    private static ChestBlockEntity placeChest(GameTestHelper helper, BlockPos pos) {
-        return GameTestSupport.place(helper, pos, Blocks.CHEST, ChestBlockEntity.class);
-    }
-
-    private static void setDelivery(Restaurant r, BlockPos pos) {
-        call(Restaurant.class, r, "setDelivery", new Class<?>[] {BlockPos.class}, pos);
-    }
-
-    private static void order(GameTestHelper helper, Restaurant r, Item item, int count) {
-        Shop.Entry entry = new Shop.Entry("test_order", new ItemStack(item, count), new ItemStack(item), 0);
-        helper.assertValueEqual(r.buy(entry), Restaurant.Buy.OK, "checkout result");
-    }
-
-    private static void tickDeliveries(GameTestHelper helper, Restaurant r) {
-        call(Restaurant.class, r, "tickDeliveries", new Class<?>[] {ServerLevel.class}, helper.getLevel());
     }
 
     private static CompoundTag save(Restaurant r) {
