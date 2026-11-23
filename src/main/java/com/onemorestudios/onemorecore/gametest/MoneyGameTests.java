@@ -244,6 +244,26 @@ public final class MoneyGameTests {
         helper.succeed();
     }
 
+    /**
+     * One stroke of the cloth cleans every cell it passes over at once: a stroke across the middle row of a fully dirty surface
+     * leaves only the rows more than one cell away from it, with no need to rest the cloth on each spot.
+     */
+    @GameTest(template = "empty")
+    public static void strokeWipesEveryCellOnItsWay(GameTestHelper helper) {
+        Restaurant restaurant = placeRestaurant(helper);
+        BlockPos a = helper.absolutePos(TABLE);
+        withConfig("DIRT_CLEAN_FRACTION", 1.0, () -> {
+            dirt(helper, restaurant, a, -1L);
+            int row = a.getZ() * 8 + 4;
+            call(Restaurant.class, restaurant, "wipeCells", new Class<?>[] {ServerLevel.class, Set.class, int.class, int.class, int.class, int.class, Vec3.class},
+                    helper.getLevel(), Set.of(a), a.getX() * 8, row, a.getX() * 8 + 7, row, Vec3.atCenterOf(a));
+            long left = (Long) dirt(restaurant).get(a);
+            // Rows 3, 4 and 5 (the stroke and its neighbours) are clean in all 8 columns; the other 5 rows stay.
+            helper.assertValueEqual(left, -1L & ~(0xFFFFFFL << 24), "cells left after the stroke");
+        });
+        helper.succeed();
+    }
+
     /** CORE-15: removing the sign sends exactly one zero-coin update per bill to a tracking player. */
     @GameTest(template = "empty")
     public static void removingSignClearsTrackedBills(GameTestHelper helper) {
