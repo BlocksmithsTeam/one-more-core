@@ -34,19 +34,33 @@ public class ScreenBlock extends MenuBoardBlock {
     public static final BooleanProperty LANDSCAPE = BooleanProperty.create("landscape");
     public static final BooleanProperty CONNECT_LEFT = BooleanProperty.create("connect_left"), CONNECT_RIGHT = BooleanProperty.create("connect_right"),
             CONNECT_UP = BooleanProperty.create("connect_up"), CONNECT_DOWN = BooleanProperty.create("connect_down");
+    /**
+     * A screen on a floor or under a ceiling can stand between the four directions, like a sign: turn 1 is 22.5 degrees
+     * clockwise (seen from above) from FACING, 2 is 45, 3 is -22.5. A turned screen joins no other; ScreenRenderer.Turned draws
+     * its model.
+     */
+    public static final net.minecraft.world.level.block.state.properties.IntegerProperty TURN =
+            net.minecraft.world.level.block.state.properties.IntegerProperty.create("turn", 0, 3);
     private static final Map<String, VoxelShape> SHAPES = new ConcurrentHashMap<>();
+
+    /** The extra turn of a screen, degrees (clockwise from above, like a blockstate's y). */
+    public static float turnDegrees(BlockState state) {
+        if (!state.hasProperty(TURN)) return 0;
+        int t = state.getValue(TURN);
+        return t == 3 ? -22.5f : t * 22.5f;
+    }
 
     public ScreenBlock(Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(TILT, 0).setValue(ATTACH, AttachFace.FLOOR)
                 .setValue(LANDSCAPE, false).setValue(CONNECT_LEFT, false).setValue(CONNECT_RIGHT, false).setValue(CONNECT_UP, false)
-                .setValue(CONNECT_DOWN, false));
+                .setValue(CONNECT_DOWN, false).setValue(TURN, 0));
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         super.createBlockStateDefinition(builder);
-        builder.add(ATTACH, LANDSCAPE, CONNECT_LEFT, CONNECT_RIGHT, CONNECT_UP, CONNECT_DOWN);
+        builder.add(ATTACH, LANDSCAPE, CONNECT_LEFT, CONNECT_RIGHT, CONNECT_UP, CONNECT_DOWN, TURN);
     }
 
     /**
@@ -58,12 +72,20 @@ public class ScreenBlock extends MenuBoardBlock {
         Direction face = context.getClickedFace();
         float pitch = context.getPlayer() == null ? 0 : context.getPlayer().getXRot();
         BlockState state = defaultBlockState();
-        if (face == Direction.UP) state = state.setValue(ATTACH, AttachFace.FLOOR).setValue(FACING, context.getHorizontalDirection().getOpposite());
-        else if (face == Direction.DOWN) state = state.setValue(ATTACH, AttachFace.CEILING).setValue(FACING, context.getHorizontalDirection().getOpposite())
+        if (face == Direction.UP) state = turned(state.setValue(ATTACH, AttachFace.FLOOR), context.getRotation());
+        else if (face == Direction.DOWN) state = turned(state.setValue(ATTACH, AttachFace.CEILING), context.getRotation())
                 .setValue(LANDSCAPE, true).setValue(TILT, tiltFor(pitch));
         else state = state.setValue(ATTACH, AttachFace.WALL).setValue(FACING, face).setValue(TILT, tiltFor(pitch));
         if (!roomFor(context, state)) return null;
         return connected(context.getLevel(), context.getClickedPos(), state);
+    }
+
+    /** Faces a player who looks along yaw, in sixteen directions as a sign: the nearest of the four, and the turn from it. */
+    static BlockState turned(BlockState state, float yaw) {
+        int segment = net.minecraft.world.level.block.state.properties.RotationSegment.convertToSegment(yaw + 180);
+        int quarter = segment / 4, rest = segment % 4;
+        if (rest == 3) quarter = (quarter + 1) % 4;
+        return state.setValue(FACING, Direction.from2DDataValue(quarter)).setValue(TURN, rest);
     }
 
     @Override
@@ -85,7 +107,8 @@ public class ScreenBlock extends MenuBoardBlock {
     /** Whether two screens are of one kind (they join). */
     static boolean sameKind(BlockState a, BlockState b) {
         return a.getBlock() instanceof ScreenBlock && b.getBlock() instanceof ScreenBlock && a.getValue(FACING) == b.getValue(FACING)
-                && a.getValue(ATTACH) == b.getValue(ATTACH) && a.getValue(LANDSCAPE).equals(b.getValue(LANDSCAPE)) && a.getValue(TILT).equals(b.getValue(TILT));
+                && a.getValue(ATTACH) == b.getValue(ATTACH) && a.getValue(LANDSCAPE).equals(b.getValue(LANDSCAPE)) && a.getValue(TILT).equals(b.getValue(TILT))
+                && a.getValue(TURN) == 0 && b.getValue(TURN) == 0;
     }
 
     /** The state with its joins to the neighbouring screens of its kind. */
@@ -158,7 +181,7 @@ public class ScreenBlock extends MenuBoardBlock {
      * of whole pixels, clipped to the cell.
      */
     public static VoxelShape shapeIn(BlockState state, BlockPos offset) {
-        String key = state.getValue(FACING) + "/" + state.getValue(ATTACH) + "/" + state.getValue(LANDSCAPE) + "/" + state.getValue(TILT) + "/" + offset;
+        String key = state.getValue(FACING) + "/" + state.getValue(TURN) + "/" + state.getValue(ATTACH) + "/" + state.getValue(LANDSCAPE) + "/" + state.getValue(TILT) + "/" + offset;
         return SHAPES.computeIfAbsent(key, k -> {
             ScreenLayout l = ScreenLayout.of(state);
             double tilt = Math.toRadians(state.getValue(TILT) * 22.5);

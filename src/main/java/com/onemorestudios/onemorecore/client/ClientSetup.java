@@ -44,6 +44,7 @@ public class ClientSetup {
         NeoForge.EVENT_BUS.addListener(TrayCarryRenderer::preparePlayer);
         NeoForge.EVENT_BUS.addListener(TrayCarryRenderer::finishPlayer);
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.MENU_BOOK_ENTITY.get(), MenuBookRenderer::new));
+        bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.MENU_BOARD_ENTITY.get(), ScreenRenderer.Turned::new));
         bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
             private TrayRenderer.Item renderer;
 

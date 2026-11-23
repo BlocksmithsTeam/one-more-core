@@ -1,9 +1,18 @@
 package com.onemorestudios.onemorecore;
 
 import java.util.UUID;
+import java.util.List;
 
 import io.netty.buffer.ByteBuf;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -47,7 +56,7 @@ public record ScreenClick(BlockPos pos, UUID orderId, float x, float y, int side
         if (click.side < 0 || click.side >= ScreenPicture.sides(state)) return;
         Restaurant r = ScreenSettings.owner(level, click.pos);
         if (r == null) return;
-        var tickets = OrderBoardBlock.ticketsAt(level, click.pos, click.side);
+        var tickets = ticketsAt(level, click.pos, click.side);
         if (tickets == null) return;
         ScreenRect rect = group.rect();
         int settings = ScreenSettings.face(r.screens.getOrDefault(click.pos, Restaurant.SCREEN_OFF), click.side);
@@ -61,7 +70,34 @@ public record ScreenClick(BlockPos pos, UUID orderId, float x, float y, int side
         Vec3 point = picture.world(click.x, click.y), eye = player.getEyePosition();
         if (eye.distanceToSqr(point) > REACH * REACH || !picture.faces(eye.subtract(point))
                 || !ScreenRect.visible(level, player, group.members(), eye, point)) return;
-        OrderBoardBlock.giveTicket(level, player, click.pos, tickets, click.orderId);
+        giveTicket(level, player, click.pos, tickets, click.orderId);
+    }
+
+    /** The orders that the screen at a position shows (an Order Screen, or a television in orders mode), or null. */
+    static List<Tickets.Ticket> ticketsAt(ServerLevel level, BlockPos pos) {
+        return ticketsAt(level, pos, 0);
+    }
+
+    /** The orders that one side of the screen at a position shows, or null. */
+    static List<Tickets.Ticket> ticketsAt(ServerLevel level, BlockPos pos, int side) {
+        BlockState state = level.getBlockState(pos);
+        if (ScreenRect.of(state) == null) return null;
+        Restaurant r = ScreenSettings.owner(level, pos);
+        if (r != null && state.getBlock() instanceof MenuBoardBlock board) r.ensureScreen(pos, board.defaultMode());
+        int v = r == null ? Restaurant.SCREEN_OFF : r.screens.getOrDefault(pos, Restaurant.SCREEN_OFF);
+        return r != null && ScreenSettings.mode(ScreenSettings.face(v, side)) == Restaurant.SCREEN_ORDERS ? r.tickets() : null;
+    }
+
+    /** Gives the current ticket for a displayed order if it is still active. */
+    static void giveTicket(ServerLevel level, Player player, BlockPos pos, List<Tickets.Ticket> tickets, UUID orderId) {
+        if (tickets == null) return;
+        Tickets.Ticket t = tickets.stream().filter(ticket -> orderId.equals(ticket.orderId())).findFirst().orElse(null);
+        if (t == null) return;
+        ItemStack ticket = new ItemStack(OneMoreCore.TICKET.get());
+        ticket.set(OneMoreCore.LABEL.get(), t.table().isEmpty() ? "?" : t.table());
+        ticket.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(t.items()));
+        TrayBlock.give(player, ticket);
+        level.playSound(null, pos, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8f, 1.4f);
     }
 
     @Override

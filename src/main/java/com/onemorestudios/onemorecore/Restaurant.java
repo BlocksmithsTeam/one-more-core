@@ -1211,7 +1211,7 @@ public class Restaurant {
 
         CompoundTag now = new CompoundTag();
         now.put("menu", MenuBoardBlockEntity.build(this, level.registryAccess()));
-        now.put("tickets", OrderBoardBlockEntity.encode(tickets(), level.registryAccess()));
+        now.put("tickets", Tickets.encode(tickets(), level.registryAccess()));
         List<Map.Entry<BlockPos, Integer>> configured = List.copyOf(screens.entrySet());
         now.putLongArray("pos", configured.stream().mapToLong(e -> e.getKey().asLong()).toArray());
         now.putIntArray("mode", configured.stream().mapToInt(Map.Entry::getValue).toArray());
@@ -1284,8 +1284,8 @@ public class Restaurant {
     }
 
     /** The taken orders, oldest first: one ticket per party that waits for its food. */
-    List<OrderBoardBlockEntity.Ticket> tickets() {
-        return OrderBoardBlockEntity.tickets(this);
+    List<Tickets.Ticket> tickets() {
+        return Tickets.tickets(this);
     }
 
     /** Whether any block of the table at pos is dirty. */

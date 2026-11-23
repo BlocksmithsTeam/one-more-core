@@ -71,8 +71,6 @@ public class OneMoreCore {
     public static final DeferredBlock<MenuBoardBlock> MENU_BOARD = BLOCKS.register("menu_board",
             () -> new ScreenBlock(BlockBehaviour.Properties.of().strength(1.5f).noOcclusion().sound(SoundType.METAL)));
     public static final DeferredItem<BlockItem> MENU_BOARD_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOARD);
-    public static final DeferredBlock<MonitorBlock> MONITOR = BLOCKS.register("monitor",
-            () -> new MonitorBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.METAL)));
     /** The space of a TV besides its own block. */
     public static final DeferredBlock<ScreenPartBlock> SCREEN_PART = BLOCKS.register("screen_part",
             () -> new ScreenPartBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().noLootTable().sound(SoundType.METAL)));
@@ -109,8 +107,6 @@ public class OneMoreCore {
             () -> new TrayRackBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().sound(SoundType.WOOD)));
     public static final DeferredItem<BlockItem> TRAY_RACK_ITEM = ITEMS.registerSimpleBlockItem(TRAY_RACK);
     public static final DeferredItem<TicketItem> TICKET = ITEMS.register("ticket", () -> new TicketItem(new Item.Properties().stacksTo(1)));
-    public static final DeferredBlock<OrderBoardBlock> ORDER_BOARD = BLOCKS.register("order_board",
-            () -> new OrderBoardBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().sound(SoundType.WOOD)));
     public static final DeferredBlock<MenuBookBlock> MENU_BOOK = BLOCKS.register("menu_book",
             () -> new MenuBookBlock(BlockBehaviour.Properties.of().strength(0.4f).noOcclusion().sound(SoundType.WOOL).pushReaction(PushReaction.DESTROY)));
     public static final DeferredItem<BlockItem> MENU_BOOK_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOOK);
@@ -118,11 +114,9 @@ public class OneMoreCore {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OpenSignBlockEntity>> OPEN_SIGN_ENTITY = BLOCK_ENTITIES.register("open_sign",
             () -> BlockEntityType.Builder.of(OpenSignBlockEntity::new, OPEN_SIGN.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBoardBlockEntity>> MENU_BOARD_ENTITY = BLOCK_ENTITIES.register("menu_board",
-            () -> BlockEntityType.Builder.of(MenuBoardBlockEntity::new, MENU_BOARD.get(), MONITOR.get()).build(null));
+            () -> BlockEntityType.Builder.of(MenuBoardBlockEntity::new, MENU_BOARD.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TrayBlockEntity>> TRAY_ENTITY = BLOCK_ENTITIES.register("tray",
             () -> BlockEntityType.Builder.of(TrayBlockEntity::new, TRAY.get(), IRON_TRAY.get()).build(null));
-    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OrderBoardBlockEntity>> ORDER_BOARD_ENTITY = BLOCK_ENTITIES.register("order_board",
-            () -> BlockEntityType.Builder.of(OrderBoardBlockEntity::new, ORDER_BOARD.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TableNumberBlockEntity>> TABLE_NUMBER_ENTITY = BLOCK_ENTITIES.register("table_number",
             () -> BlockEntityType.Builder.of(TableNumberBlockEntity::new, TABLE_NUMBER_BLOCK.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBookBlockEntity>> MENU_BOOK_ENTITY = BLOCK_ENTITIES.register("menu_book",

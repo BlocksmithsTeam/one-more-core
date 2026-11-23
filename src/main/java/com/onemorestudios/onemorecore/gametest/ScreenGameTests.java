@@ -16,7 +16,7 @@ import com.onemorestudios.onemorecore.MenuBoardBlock;
 import com.onemorestudios.onemorecore.MenuBoardBlockEntity;
 import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.OpenSignBlockEntity;
-import com.onemorestudios.onemorecore.OrderBoardBlockEntity;
+import com.onemorestudios.onemorecore.Tickets;
 import com.onemorestudios.onemorecore.Restaurant;
 import com.onemorestudios.onemorecore.Restaurants;
 import com.onemorestudios.onemorecore.ScreenClick;
@@ -117,7 +117,7 @@ public final class ScreenGameTests {
         method(Restaurant.class, "setScreen", BlockPos.class, int.class)
                 .invoke(restaurant, anchor, ScreenSettings.pack(Restaurant.SCREEN_ORDERS, 0, 0, true));
         addOrder(helper, restaurant, Items.BREAD.getDefaultInstance());
-        UUID id = OrderBoardBlockEntity.decode(OrderBoardBlockEntity.encode((List<OrderBoardBlockEntity.Ticket>) method(Restaurant.class, "tickets").invoke(restaurant), level.registryAccess()), level.registryAccess())
+        UUID id = Tickets.decode(Tickets.encode((List<Tickets.Ticket>) method(Restaurant.class, "tickets").invoke(restaurant), level.registryAccess()), level.registryAccess())
                 .getFirst().orderId();
         var player = GameTestSupport.player(helper);
         var back = ScreenPicture.of(anchor, level.getBlockState(anchor), group.rect(), 1);
@@ -130,6 +130,37 @@ public final class ScreenGameTests {
         level.destroyBlock(pos.above(), false);
         helper.assertTrue(level.isEmptyBlock(pos) && level.getBlockState(side).is(block), "breaking the part breaks only its screen");
         helper.assertTrue(!level.getBlockState(side).getValue(ScreenBlock.CONNECT_RIGHT), "the other screen's frame closes again");
+        helper.succeed();
+    }
+
+    /** A Screen turned 22.5 degrees from south: its picture faces that way, it joins no neighbour, and a card on it still gives a ticket. */
+    @GameTest(template = "empty")
+    @SuppressWarnings("unchecked")
+    public static void turnedScreenFacesItsWay(GameTestHelper helper) throws ReflectiveOperationException {
+        var restaurant = placeRestaurant(helper);
+        var level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(POS);
+        var block = OneMoreCore.MENU_BOARD.get();
+        var straight = block.defaultBlockState().setValue(MenuBoardBlock.FACING, Direction.SOUTH);
+        var state = straight.setValue(ScreenBlock.TURN, 1);
+        level.setBlockAndUpdate(pos.west(), straight);
+        block.setPlacedBy(level, pos.west(), straight, null, ItemStack.EMPTY);
+        level.setBlockAndUpdate(pos, state);
+        block.setPlacedBy(level, pos, state, null, ItemStack.EMPTY);
+        helper.assertTrue(ScreenGroups.of(level, pos).members().size() == 1 && !level.getBlockState(pos.west()).getValue(ScreenBlock.CONNECT_RIGHT),
+                "a turned screen joins no neighbour");
+        var picture = ScreenPicture.of(pos, level.getBlockState(pos), ScreenRect.of(state), 0);
+        Vec3 n = picture.normal();
+        double a = Math.toRadians(22.5);
+        helper.assertTrue(Math.abs(n.x + Math.sin(a)) < 1e-3 && Math.abs(n.z - Math.cos(a)) < 1e-3, "picture faces 22.5 degrees from south: " + n);
+        method(Restaurant.class, "setScreen", BlockPos.class, int.class).invoke(restaurant, pos, ScreenSettings.pack(Restaurant.SCREEN_ORDERS, 0, 0, true));
+        addOrder(helper, restaurant, Items.BREAD.getDefaultInstance());
+        UUID id = displayedOrders(helper).getFirst().orderId();
+        var player = GameTestSupport.player(helper);
+        Vec3 point = picture.world(50, 50), eye = point.add(n.scale(1.5));
+        player.setPos(eye.x, eye.y - player.getEyeHeight(), eye.z);
+        request(new ScreenClick(pos, id, 50, 50), player);
+        helper.assertValueEqual(player.getInventory().countItem(OneMoreCore.TICKET.get()), 1, "ticket from the turned screen");
         helper.succeed();
     }
 
@@ -339,9 +370,16 @@ public final class ScreenGameTests {
         return Restaurants.get(helper.getLevel()).at(helper.absolutePos(SIGN));
     }
 
-    private static Restaurant placeOrderBoard(GameTestHelper helper) {
+    /** A Screen on a wall facing south at POS, showing the orders. */
+    private static Restaurant placeOrderBoard(GameTestHelper helper) throws ReflectiveOperationException {
         var restaurant = placeRestaurant(helper);
-        helper.setBlock(POS, OneMoreCore.ORDER_BOARD.get().defaultBlockState().setValue(MenuBoardBlock.FACING, Direction.SOUTH));
+        var block = OneMoreCore.MENU_BOARD.get();
+        var state = block.defaultBlockState().setValue(MenuBoardBlock.FACING, Direction.SOUTH)
+                .setValue(ScreenBlock.ATTACH, net.minecraft.world.level.block.state.properties.AttachFace.WALL);
+        BlockPos pos = helper.absolutePos(POS);
+        helper.getLevel().setBlockAndUpdate(pos, state);
+        block.setPlacedBy(helper.getLevel(), pos, state, null, ItemStack.EMPTY);
+        method(Restaurant.class, "setScreen", BlockPos.class, int.class).invoke(restaurant, pos, ScreenSettings.pack(Restaurant.SCREEN_ORDERS, 0, 0, true));
         return restaurant;
     }
 
@@ -359,20 +397,18 @@ public final class ScreenGameTests {
         return customer;
     }
 
-    private static List<OrderBoardBlockEntity.Ticket> displayedOrders(GameTestHelper helper) throws ReflectiveOperationException {
-        var board = (OrderBoardBlockEntity) helper.getBlockEntity(POS);
-        @SuppressWarnings("unchecked")
-        var tickets = (List<OrderBoardBlockEntity.Ticket>) method(OrderBoardBlockEntity.class, "tickets", ServerLevel.class)
-                .invoke(board, helper.getLevel());
+    @SuppressWarnings("unchecked")
+    private static List<Tickets.Ticket> displayedOrders(GameTestHelper helper) throws ReflectiveOperationException {
+        var restaurant = Restaurants.get(helper.getLevel()).at(helper.absolutePos(SIGN));
+        var tickets = (List<Tickets.Ticket>) method(Tickets.class, "tickets", Restaurant.class).invoke(null, restaurant);
         var registries = helper.getLevel().registryAccess();
-        return OrderBoardBlockEntity.decode(OrderBoardBlockEntity.encode(tickets, registries), registries);
+        return Tickets.decode(Tickets.encode(tickets, registries), registries);
     }
 
     private static ScreenClick aim(GameTestHelper helper, ServerPlayer player, UUID id, float x) {
         BlockPos pos = helper.absolutePos(POS);
         var state = helper.getLevel().getBlockState(pos);
-        var rect = ScreenRect.OWN;
-        Vec3 point = rect.world(pos, state, rect.x0() + x / 10, rect.y1() - CARD_Y / 10, rect.z());
+        Vec3 point = ScreenPicture.of(pos, state, ScreenRect.of(state), 0).world(x, CARD_Y);
         player.setPos(point.x, point.y - player.getEyeHeight(), point.z + 2);
         return new ScreenClick(pos, id, x, CARD_Y);
     }

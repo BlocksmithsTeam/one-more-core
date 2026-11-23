@@ -1,4 +1,5 @@
-"""Block models of the Screen (menu_board) from the textures of the city billboard model (art by the user's friend): the
+"""Block models of the Screen (straight states only, turn=0; a screen turned between the four directions is drawn by
+ScreenRenderer.Turned with these models) (menu_board) from the textures of the city billboard model (art by the user's friend): the
 frame, the glass and the mount for each way it stands (floor: a post or feet; wall: a bracket; ceiling: rods), portrait or
 landscape, straight or turned down (wall and ceiling: 22.5 and 45 degrees). Frame edges and corners come in a frame and a
 glass version so that joined screens show one glass (multipart on the connect_* properties). The models face south: the
@@ -93,7 +94,7 @@ for (attach, orient), v in V.items():
                 for e in els: e['rotation'] = {'angle': tilt * 22.5, 'axis': 'x', 'origin': [8, v['pivot'][0], v['pivot'][1]]}
             model = f'screen/{attach}_{orient}_{tilt}_{name}'
             json.dump({'textures': TEX, 'elements': els}, open(f'{OUT}/models/block/{model}.json', 'w'), indent=1)
-            base = {'face': attach, 'landscape': 'true' if orient == 'l' else 'false', 'tilt': str(tilt)}
+            base = {'face': attach, 'landscape': 'true' if orient == 'l' else 'false', 'tilt': str(tilt), 'turn': '0'}
             side = name.split('_')[0]
             conds = []
             if name.endswith('_frame') and side in ('left', 'right', 'up', 'down'):
