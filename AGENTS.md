@@ -44,6 +44,8 @@ change how one of them works, change its lines here in the same commit.
   rest pose up close (optional mixin, `required: false`). Up close the tray has one place more than its dishes: a ticket put
   anywhere on it becomes the label and takes no dish's place (`KitchenStations.TicketSlot`; test
   `TrayPlacementGameTests.diegesisTrayUsesAndPersistsPlacedPoses`).
+  The carried tray's hands and dishes move on springs (`TrayCarryRenderer.CarrySway`), stepped once per frame so a second
+  render of the player in the same frame (the inventory's player picture) does not push them.
 - **Grilling skewers** (`compat/GrillingSkewers`): Kaleidoscope Grilling items in `onemorecore:lying_dishes` or with an ID
   ending in `_skewer` lie horizontally on trays and serving surfaces. `TrayPlacerMixin` sets the close-up hand turn before
   Diegesis measures the preview. Test: `GrillingSkewerGameTests.grillingSkewersUseOptionalTagsAndScopedIds`.

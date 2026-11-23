@@ -87,11 +87,15 @@ public final class TrayCarryRenderer {
 
     private static PlayerTrayPass playerTrayPass;
 
+    /** Counts rendered frames: the springs step once per frame, however many times the player is drawn in it. */
+    private static long frameCount;
+
     private LocalPlayer lastPlayer;
     private boolean trayDrawn;
     private boolean offHandWasTray;
 
     void beginFrame(RenderFrameEvent.Pre event) {
+        frameCount++;
         clearPlayerTrayPass();
         LocalPlayer player = Minecraft.getInstance().player;
         if (player != lastPlayer) {
@@ -191,9 +195,14 @@ public final class TrayCarryRenderer {
         /** The dishes float a little off the tray in a fall and come down on it with a small bounce on landing. */
         private final Spring hop = new Spring(16, 0.3f);
         private long lastFrame;
+        private long lastStepFrame = -1;
+        private CarryMotion lastMotion = CarryMotion.STILL;
         private float lastYaw, lastPitch, yawSpeed, pitchSpeed;
 
         CarryMotion sample(AbstractClientPlayer player, float partialTick) {
+            // A second draw of the player in the same frame (the inventory's player picture, with a made-up yaw) must not push the springs.
+            if (lastStepFrame == frameCount) return lastMotion;
+            lastStepFrame = frameCount;
             long now = Util.getNanos();
             float dt = (now - lastFrame) / 1.0e9f;
             if (dt >= 0.001f) {
@@ -239,7 +248,8 @@ public final class TrayCarryRenderer {
                 lastYaw = yaw;
                 lastPitch = pitch;
             }
-            return new CarryMotion(right.motion(), left.motion(), dishes());
+            lastMotion = new CarryMotion(right.motion(), left.motion(), dishes());
+            return lastMotion;
         }
 
         private TrayRenderer.Sway dishes() {
