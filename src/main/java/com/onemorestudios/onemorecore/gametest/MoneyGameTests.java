@@ -300,7 +300,13 @@ public final class MoneyGameTests {
         call(Customer.class, customer, "mobInteract", new Class<?>[] {Player.class, InteractionHand.class}, player, InteractionHand.MAIN_HAND);
         ItemStack tray = new ItemStack(OneMoreCore.TRAY_ITEM.get());
         tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.BREAD))));
+        // The bread lies turned in a corner of the tray: it reaches the table with that pose.
+        var placed = new com.onemorestudios.onemorecore.TrayPose(12.5f, 1, 4.25f, 0, new org.joml.Quaternionf().rotationY(0.9f), 1.1f, -1, 1);
+        tray.set(OneMoreCore.TRAY_POSES.get(), List.of(placed));
         helper.assertTrue(customer.deliver(player, tray), "Customer accepted the dish on the tray");
+        var shown = customer.getServed().get(0);
+        helper.assertTrue(shown.is(Items.BREAD) && List.of(placed).equals(shown.get(OneMoreCore.TRAY_POSES.get())),
+                "The served bread keeps its tray pose: " + shown.get(OneMoreCore.TRAY_POSES.get()));
         helper.assertTrue(Customer.State.EATING == customer.getState() || partial && Customer.State.WAITING_FOOD == customer.getState(),
                 "Customer reached the expected service state");
         return party;
