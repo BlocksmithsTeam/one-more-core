@@ -346,7 +346,6 @@ public class Computer extends Block {
             else if (r.isOpen()) key = "busy";
             else if (request.action == SET_AREA) key = all.setArea(r, BoundingBox.fromCorners(a, b));
             else if (request.action == SET_SPAWN) { r.setSpawn(a); key = "spawn_set"; }
-            else if (Restaurant.container(level, a) == null) key = "not_container";
             else { r.setDelivery(a); key = "delivery_set"; }
             message = Component.translatable("onemorecore.tool." + key, key.equals("too_big") ? Config.MAX_AREA.get() : PLACE_RANGE);
         } else if (request.action == SET_STREAM) {

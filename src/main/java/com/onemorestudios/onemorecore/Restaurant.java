@@ -41,7 +41,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.items.IItemHandler;
-import net.neoforged.neoforge.items.ItemHandlerHelper;
 import net.neoforged.neoforge.items.wrapper.InvWrapper;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -609,12 +608,12 @@ public class Restaurant {
 
     /** A paid shop order that is on its way. */
     static final class Delivery {
-        final ItemStack stack;
+        final List<ItemStack> items;
         final BlockPos destination;
         int ticks;
 
-        Delivery(ItemStack stack, int ticks, BlockPos destination) {
-            this.stack = stack;
+        Delivery(List<ItemStack> items, int ticks, BlockPos destination) {
+            this.items = items;
             this.ticks = ticks;
             this.destination = destination;
         }
@@ -629,18 +628,21 @@ public class Restaurant {
         long total = 0;
         for (var e : cart.entrySet()) total += (long) e.getKey().price() * e.getValue();
         if (total > register) return Buy.COST;
-        for (var e : cart.entrySet()) for (int i = 0; i < e.getValue(); i++) buy(e.getKey());
+        if (cart.isEmpty()) return Buy.OK;
+        List<ItemStack> items = new ArrayList<>(cart.size());
+        for (var e : cart.entrySet()) {
+            ItemStack stack = e.getKey().stack();
+            if (!stack.isEmpty()) items.add(stack.copyWithCount(stack.getCount() * e.getValue()));
+        }
+        if (items.isEmpty()) return Buy.OK;
+        register -= (int) total;
+        deliveries.add(new Delivery(items, deliveryTicks(), delivery.immutable()));
+        owner.setDirty();
         return Buy.OK;
     }
 
-    /** Orders a shop entry with money from the register. The items arrive at the delivery point after shopDeliveryTicks. */
-    public Buy buy(Shop.Entry e) {
-        if (delivery == null) return Buy.NO_DELIVERY;
-        if (register < e.price()) return Buy.COST;
-        register -= e.price();
-        deliveries.add(new Delivery(e.stack().copy(), deliveryTicks(), delivery.immutable()));
-        owner.setDirty();
-        return Buy.OK;
+    public Buy buy(Shop.Entry entry) {
+        return buyAll(Map.of(entry, 1));
     }
 
     /** The item handler of the block, or null. */
@@ -649,34 +651,19 @@ public class Restaurant {
         return handler == null && level.getBlockEntity(pos) instanceof Container c ? new InvWrapper(c) : handler;
     }
 
-    /** Waits while the delivery point is not loaded, so no order is lost. */
     private void tickDeliveries(ServerLevel level) {
-        int budget = 16;
         for (Iterator<Delivery> it = deliveries.iterator(); it.hasNext();) {
-            Delivery d = it.next();
-            BlockPos destination = d.destination == null ? delivery : d.destination;
-            if (destination == null || !level.isLoaded(destination)) continue;
-            if (d.ticks > 0) {
-                d.ticks--;
+            Delivery delivery = it.next();
+            if (!level.isLoaded(delivery.destination == null ? sign : delivery.destination)) continue;
+            if (delivery.ticks > 0) {
+                delivery.ticks--;
                 owner.setDirty();
             }
-            if (d.ticks > 0 || budget == 0) continue;
-            IItemHandler handler = container(level, destination);
-            BlockPos at = handler == null ? destination : destination.above();
-            while (budget > 0 && !d.stack.isEmpty()) {
-                ItemStack part = d.stack.split(d.stack.getMaxStackSize());
-                deliver(level, handler, at, part);
-                budget--;
+            if (delivery.ticks == 0 && Courier.dispatch(level, this, delivery)) {
+                it.remove();
+                owner.setDirty();
             }
-            if (d.stack.isEmpty()) it.remove();
-            owner.setDirty();
         }
-    }
-
-    /** Puts the stack into the container at the delivery point. Without a container, or when it is full, the items drop. */
-    private static void deliver(ServerLevel level, IItemHandler handler, BlockPos at, ItemStack part) {
-        if (handler != null) part = ItemHandlerHelper.insertItemStacked(handler, part, false);
-        if (!part.isEmpty()) level.addFreshEntity(new ItemEntity(level, at.getX() + 0.5, at.getY() + 0.25, at.getZ() + 0.5, part, 0, 0, 0));
     }
 
     /** Takes up to max money from the register, like one click on a storage drawer. */
@@ -1536,10 +1523,8 @@ public class Restaurant {
         if (delivery != null) tag.putLong("delivery", delivery.asLong());
         ListTag pending = new ListTag();
         for (Delivery d : deliveries) {
-            // The count is saved apart from the stack: an order can be larger than one stack.
             CompoundTag t = new CompoundTag();
-            t.put("stack", d.stack.copyWithCount(1).save(owner.registries));
-            t.putInt("count", d.stack.getCount());
+            t.put("items", Courier.saveOrder(d.items, owner.registries));
             t.putInt("ticks", d.ticks);
             if (d.destination != null) t.putLong("destination", d.destination.asLong());
             pending.add(t);
@@ -1643,8 +1628,10 @@ public class Restaurant {
         for (Tag t : tag.getList("deliveries", Tag.TAG_COMPOUND)) {
             CompoundTag d = (CompoundTag) t;
             BlockPos destination = d.contains("destination", Tag.TAG_LONG) ? BlockPos.of(d.getLong("destination")) : null;
-            ItemStack.parse(owner.registries, d.getCompound("stack")).ifPresent(stack ->
-                    r.deliveries.add(new Delivery(stack.copyWithCount(Math.max(1, d.getInt("count"))), d.getInt("ticks"), destination)));
+            List<ItemStack> items = d.contains("items", Tag.TAG_LIST)
+                    ? Courier.loadOrder(d.getList("items", Tag.TAG_COMPOUND), owner.registries)
+                    : Courier.readLine(d, owner.registries).map(List::of).orElseGet(List::of);
+            if (!items.isEmpty()) r.deliveries.add(new Delivery(items, Math.max(0, d.getInt("ticks")), destination));
         }
         long[] d = tag.getLongArray("dirt");
         for (int i = 0; i + 1 < d.length; i += 2) {

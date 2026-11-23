@@ -113,6 +113,20 @@ public class OneMoreCore {
             () -> new MenuBookBlock(BlockBehaviour.Properties.of().strength(0.4f).noOcclusion().sound(SoundType.WOOL).pushReaction(PushReaction.DESTROY)));
     public static final DeferredItem<BlockItem> MENU_BOOK_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOOK);
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
+    public static final DeferredBlock<CardboardBoxBlock> CARDBOARD_BOX = BLOCKS.register("cardboard_box",
+            () -> new CardboardBoxBlock(BlockBehaviour.Properties.of().strength(0.4f).noOcclusion().sound(SoundType.WOOL).pushReaction(PushReaction.BLOCK)));
+    public static final DeferredItem<BlockItem> CARDBOARD_BOX_ITEM = ITEMS.register("cardboard_box",
+            () -> new BlockItem(CARDBOARD_BOX.get(), new Item.Properties().stacksTo(1)) {
+                @Override
+                public boolean canFitInsideContainerItems() {
+                    return false;
+                }
+            });
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CardboardBoxBlockEntity>> CARDBOARD_BOX_ENTITY = BLOCK_ENTITIES.register("cardboard_box",
+            () -> BlockEntityType.Builder.of(CardboardBoxBlockEntity::new, CARDBOARD_BOX.get()).build(null));
+    public static final DeferredHolder<EntityType<?>, EntityType<Courier>> COURIER = ENTITIES.register("courier",
+            () -> EntityType.Builder.<Courier>of(Courier::new, MobCategory.MISC).sized(0.6f, 1.8f)
+                    .noSummon().clientTrackingRange(8).build("courier"));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OpenSignBlockEntity>> OPEN_SIGN_ENTITY = BLOCK_ENTITIES.register("open_sign",
             () -> BlockEntityType.Builder.of(OpenSignBlockEntity::new, OPEN_SIGN.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBoardBlockEntity>> MENU_BOARD_ENTITY = BLOCK_ENTITIES.register("menu_board",
@@ -141,6 +155,7 @@ public class OneMoreCore {
                 output.accept(MENU_BOARD_ITEM);
                 output.accept(MENU_BOOK_ITEM);
                 output.accept(TRAY_RACK_ITEM);
+                output.accept(CARDBOARD_BOX_ITEM);
                 output.accept(TRAY_ITEM);
                 output.accept(IRON_TRAY_ITEM);
                 output.accept(COIN);
@@ -168,7 +183,10 @@ public class OneMoreCore {
         COMPONENTS.register(bus);
         BLOCK_ENTITIES.register(bus);
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
-        bus.addListener((EntityAttributeCreationEvent e) -> e.put(CUSTOMER.get(), Customer.createAttributes().build()));
+        bus.addListener((EntityAttributeCreationEvent e) -> {
+            e.put(CUSTOMER.get(), Customer.createAttributes().build());
+            e.put(COURIER.get(), Courier.createAttributes().build());
+        });
         NeoForge.EVENT_BUS.addListener((ServerAboutToStartEvent e) -> {
             Menu.load(e.getServer().registryAccess());
             Ingredients.rebuild(e.getServer());

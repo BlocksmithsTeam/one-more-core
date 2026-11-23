@@ -1,0 +1,108 @@
+{
+  "format_version": "26.3",
+  "credit": "Made with Blockbench",
+  "parent": "minecraft:block/block",
+  "texture_size": [
+    32,
+    32
+  ],
+  "textures": {
+    "0": "onemorecore:block/cardboard_box",
+    "particle": "onemorecore:block/cardboard_box"
+  },
+  "elements": [
+    {
+      "name": "box",
+      "from": [
+        2,
+        0,
+        2
+      ],
+      "to": [
+        14,
+        10,
+        14
+      ],
+      "rotation": {
+        "angle": 0,
+        "axis": "y",
+        "origin": [
+          8,
+          0,
+          8
+        ]
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            6,
+            6,
+            11
+          ],
+          "texture": "#0"
+        },
+        "east": {
+          "uv": [
+            6,
+            6,
+            12,
+            11
+          ],
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            0,
+            6,
+            6,
+            11
+          ],
+          "texture": "#0"
+        },
+        "west": {
+          "uv": [
+            6,
+            6,
+            12,
+            11
+          ],
+          "texture": "#0"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            6,
+            6
+          ],
+          "texture": "#0"
+        },
+        "down": {
+          "uv": [
+            6,
+            0,
+            12,
+            6
+          ],
+          "texture": "#0"
+        }
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "cardboard_box",
+      "origin": [
+        8,
+        0,
+        8
+      ],
+      "scope": 0,
+      "color": 0,
+      "children": [
+        0
+      ]
+    }
+  ]
+}

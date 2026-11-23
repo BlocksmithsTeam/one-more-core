@@ -80,9 +80,9 @@ public final class ComputerGameTests {
     @GameTest(template = "empty", timeoutTicks = 20)
     public static void managerRequiresLiveSession(GameTestHelper helper) throws ReflectiveOperationException {
         Restaurant restaurant = setup(helper);
-        BlockPos secondChest = TABLE;
-        helper.setBlock(secondChest, Blocks.CHEST);
-        BlockPos delivery = helper.absolutePos(secondChest);
+        BlockPos deliveryPoint = TABLE;
+        helper.setBlock(deliveryPoint, Blocks.STONE);
+        BlockPos delivery = helper.absolutePos(deliveryPoint);
         Computer.Request edit = request(helper, Computer.SET_DELIVERY, coordinates(delivery));
         TestPlayer player = GameTestSupport.player(helper);
         try {

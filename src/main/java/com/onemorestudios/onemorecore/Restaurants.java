@@ -1,5 +1,6 @@
 package com.onemorestudios.onemorecore;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -19,6 +21,9 @@ import net.neoforged.neoforge.network.PacketDistributor;
 /** All restaurants of one dimension. This is the entry point for other mods. */
 public class Restaurants extends SavedData {
     private final Map<BlockPos, Restaurant> bySign = new HashMap<>();
+    private record WaitingParcel(BlockPos pos, ItemStack stack) {}
+    private final List<WaitingParcel> waitingParcels = new ArrayList<>();
+
     /** Needed to save and load the item stacks of pending deliveries. */
     HolderLookup.Provider registries;
 
@@ -141,7 +146,15 @@ public class Restaurants extends SavedData {
         bySign.values().forEach(Restaurant::invalidateLayout);
     }
 
+    // An unloaded drop location or an entity-spawn veto can prevent an overflow parcel from entering the world.
+    void keepParcel(BlockPos pos, ItemStack stack) {
+        waitingParcels.add(new WaitingParcel(pos.immutable(), stack));
+        setDirty();
+    }
+
     void tick(ServerLevel level) {
+        if (level.getGameTime() % 20 == 0 && waitingParcels.removeIf(parcel -> Courier.dropParcel(level, parcel.pos(), parcel.stack())))
+            setDirty();
         for (Restaurant r : List.copyOf(bySign.values())) r.tick(level);
     }
 
@@ -150,6 +163,14 @@ public class Restaurants extends SavedData {
         ListTag list = new ListTag();
         for (Restaurant r : bySign.values()) list.add(r.save());
         tag.put("restaurants", list);
+        ListTag parcels = new ListTag();
+        for (WaitingParcel parcel : waitingParcels) {
+            CompoundTag entry = new CompoundTag();
+            entry.putLong("pos", parcel.pos().asLong());
+            entry.put("stack", parcel.stack().save(registries));
+            parcels.add(entry);
+        }
+        tag.put("waiting_parcels", parcels);
         return tag;
     }
 
@@ -159,6 +180,11 @@ public class Restaurants extends SavedData {
         for (Tag t : tag.getList("restaurants", Tag.TAG_COMPOUND)) {
             Restaurant r = Restaurant.load(data, (CompoundTag) t);
             data.bySign.put(r.sign, r);
+        }
+        for (Tag t : tag.getList("waiting_parcels", Tag.TAG_COMPOUND)) {
+            CompoundTag entry = (CompoundTag) t;
+            ItemStack.parse(registries, entry.getCompound("stack")).ifPresent(stack ->
+                    data.waitingParcels.add(new WaitingParcel(BlockPos.of(entry.getLong("pos")), stack)));
         }
         // Old saves could give one screen to two restaurants, which drew two pictures on it: the first keeps it.
         java.util.Set<BlockPos> seen = new java.util.HashSet<>();
