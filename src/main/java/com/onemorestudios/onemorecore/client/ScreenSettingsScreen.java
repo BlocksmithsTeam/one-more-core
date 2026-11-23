@@ -9,11 +9,11 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * The settings of a screen (sneak-click with an empty hand or a screwdriver): for each side what it shows (off, menu, orders),
- * the menu's kinds, the text size and the paging; for a Screen also how it stands (upright or wide) and how far it is turned
+ * the menu's kinds and look (rows or a board), the text size and the scroll; for a Screen also how it stands (upright or wide) and how far it is turned
  * down. Done sends the changes; Escape drops them.
  */
 final class ScreenSettingsScreen extends Screen {
-    private static final int W = 330, H = 176;
+    private static final int W = 330, H = 200;
     private final ScreenSettings.Open screen;
     private final int[] faces = new int[2];
     private final boolean[] changed = new boolean[2];
@@ -60,7 +60,7 @@ final class ScreenSettingsScreen extends Screen {
         Ui.label(g, font, left, cy, t("shows"));
         cy += 10;
         ui.segments(g, font, left, cy, colW, 14, new Component[] {t("off"), t("menu"), t("orders")}, ScreenSettings.mode(v), mx, my,
-                k -> set(ScreenSettings.pack(k, ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]), ScreenSettings.scroll(faces[side]))));
+                k -> set(ScreenSettings.pack(k, ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]), ScreenSettings.scroll(faces[side]), ScreenSettings.style(faces[side]))));
         cy += 20;
         Ui.label(g, font, left, cy, t("kinds"));
         cy += 10;
@@ -73,9 +73,15 @@ final class ScreenSettingsScreen extends Screen {
             ui.pill(g, font, left + col * (chipW + 3), cy + row * 17, chipW, 14, Component.translatable("onemorecore.board." + kind), on, 0xFF2F80ED, mx, my, () -> {
                 int kinds = ScreenSettings.kinds(faces[side]);
                 set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), (kinds == 0 ? 31 : kinds) ^ bit, ScreenSettings.size(faces[side]),
-                        ScreenSettings.scroll(faces[side])));
+                        ScreenSettings.scroll(faces[side]), ScreenSettings.style(faces[side])));
             });
         }
+        cy += 3 * 17 + 4;
+        Ui.label(g, font, left, cy, t("look"));
+        cy += 10;
+        ui.segments(g, font, left, cy, colW, 14, new Component[] {t("look_rows"), t("look_board")}, ScreenSettings.style(v), mx, my,
+                k -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]),
+                        ScreenSettings.scroll(faces[side]), k)));
         cy = top;
         Ui.label(g, font, right, cy, t("size"));
         cy += 10;
@@ -84,12 +90,12 @@ final class ScreenSettingsScreen extends Screen {
         int[] order = {1, 0, 2};
         int shownSize = size == 1 ? 0 : size == 0 ? 1 : 2;
         ui.segments(g, font, right, cy, colW, 14, new Component[] {t("small"), t("normal"), t("large")}, shownSize, mx, my,
-                k -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), order[k], ScreenSettings.scroll(faces[side]))));
+                k -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), order[k], ScreenSettings.scroll(faces[side]), ScreenSettings.style(faces[side]))));
         cy += 20;
         Ui.label(g, font, right, cy, t("scroll"));
         cy += 10;
         ui.segments(g, font, right, cy, colW, 14, new Component[] {t("scroll_off"), t("scroll_down"), t("scroll_sideways")}, ScreenSettings.scroll(v), mx, my,
-                k -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]), k)));
+                k -> set(ScreenSettings.pack(ScreenSettings.mode(faces[side]), ScreenSettings.kinds(faces[side]), ScreenSettings.size(faces[side]), k, ScreenSettings.style(faces[side]))));
         cy += 20;
         if (landscape >= 0 || tilt >= 0) {
             Ui.label(g, font, right, cy, t("placement"));
