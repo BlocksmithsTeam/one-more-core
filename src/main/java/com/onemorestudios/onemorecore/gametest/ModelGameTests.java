@@ -64,6 +64,7 @@ public final class ModelGameTests {
     public static void ironTrayIsNotCurrency(GameTestHelper helper) throws ReflectiveOperationException {
         GameTestSupport.place(helper, POS, OneMoreCore.OPEN_SIGN.get(), OpenSignBlockEntity.class);
         var restaurant = Restaurants.get(helper.getLevel()).at(helper.absolutePos(POS));
+        int initialBalance = restaurant.register();
         var player = GameTestSupport.player(helper);
         GameTestSupport.give(player, new ItemStack(OneMoreCore.IRON_TRAY_ITEM.get()));
 
@@ -76,7 +77,7 @@ public final class ModelGameTests {
             currency.set("onemorecore:iron_tray");
             helper.assertValueEqual(Config.currency(), OneMoreCore.COIN.get(), "fallback currency for the free iron tray");
             GameTestSupport.click(helper, player, POS);
-            helper.assertValueEqual(restaurant.register(), 0, "the iron tray did not credit the register");
+            helper.assertValueEqual(restaurant.register(), initialBalance, "the iron tray did not credit the register");
             helper.assertTrue(player.getMainHandItem().is(OneMoreCore.IRON_TRAY_ITEM.get()), "the player kept the tray");
         } finally {
             currency.set(previous);

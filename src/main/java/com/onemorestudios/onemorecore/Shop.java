@@ -11,6 +11,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import net.minecraft.core.HolderLookup;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.loading.FMLPaths;
@@ -39,6 +40,40 @@ public class Shop {
     public static Entry byId(String id) {
         for (Entry e : entries) if (e.id.equals(id)) return e;
         return null;
+    }
+
+    private static final String INGREDIENT_PREFIX = "ingredient/";
+
+    static Entry byId(Restaurant restaurant, String id) {
+        Entry configured = byId(id);
+        if (configured != null || !id.startsWith(INGREDIENT_PREFIX)) return configured;
+        String itemId = id;
+        do {
+            itemId = itemId.substring(INGREDIENT_PREFIX.length());
+        } while (itemId.startsWith(INGREDIENT_PREFIX));
+        ResourceLocation item = ResourceLocation.tryParse(itemId);
+        if (item == null || !restaurant.unlockedIngredients().contains(item) || !ingredientListingId(item).equals(id)) return null;
+        return ingredientEntry(item);
+    }
+
+    public static List<Entry> catalog(Restaurant restaurant) {
+        List<Entry> catalog = new ArrayList<>(entries);
+        restaurant.unlockedIngredients().stream().sorted().map(Shop::ingredientEntry)
+                .filter(java.util.Objects::nonNull).forEach(catalog::add);
+        return catalog;
+    }
+
+    private static String ingredientListingId(ResourceLocation item) {
+        String id = INGREDIENT_PREFIX + item;
+        while (byId(id) != null) id = INGREDIENT_PREFIX + id;
+        return id;
+    }
+
+    private static Entry ingredientEntry(ResourceLocation item) {
+        ItemStack stack = Ingredients.stack(item);
+        if (stack.isEmpty()) return null;
+        int count = Math.min(16, stack.getMaxStackSize());
+        return new Entry(ingredientListingId(item), stack.copyWithCount(count), stack, Ingredients.current().shopPrice(item));
     }
 
     static void load(HolderLookup.Provider registries) {

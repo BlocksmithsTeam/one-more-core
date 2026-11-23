@@ -736,17 +736,7 @@ public class ComputerScreen extends Screen {
             int right = x + w - 5;
             switch (line.state()) {
                 case Computer.AVAILABLE -> { toggle(g, right - 18, y + 6, line.on(), mouseX, mouseY, () -> send(Computer.TOGGLE_DISH, line.id())); right -= 24; }
-                case Computer.LOCKED_DAY -> {
-                    Component day = text("locked", line.day());
-                    g.drawString(font, day, right - font.width(day), y + 7, DIM, false);
-                    right -= font.width(day) + 6;
-                }
-                default -> {
-                    Component unlock = text("unlock_cost", line.cost());
-                    int uw = font.width(unlock) + 8;
-                    button(g, right - uw, y + 4, uw, 14, unlock, AMBER, AMBER_HOVER, state.balance() >= line.cost(), mouseX, mouseY, () -> send(Computer.UNLOCK, line.id()));
-                    right -= uw + 6;
-                }
+                default -> { }
             }
             if (line.custom()) {
                 int pw = font.width(String.valueOf(line.price())) + 12;

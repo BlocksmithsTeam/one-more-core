@@ -60,6 +60,7 @@ change how one of them works, change its lines here in the same commit.
   a spread is two list pages). The kinds are bookmarks along the head of both pages, the search last (`RecipeBook.tabSlot`).
 - **Table Number card**: its place on the block is saved as `offset_x`/`offset_z` (a block entity's save writes its own
   position as `x`, `y`, `z`; never use those names in a block entity). Test: `ModelGameTests.tableNumberOffsetSurvivesSave`.
+- **Ingredient unlocks** use `Ingredients`, `IngredientConfig` and `Restaurant.orderable`. Recipes and `ingredients.json` determine what customers, combos, menu screens and menu books can offer. The server rebuilds the index on startup and reload. The sign carries purchased ingredient IDs and the remaining register balance. Legacy saves migrate available dishes once. The Shop prices purchases on the server and the computer sends the capped ingredient lists on Menu requests. See `IngredientGameTests`.
 - **Day start**: no title or status text from the server; each client darkens the screen with "Day N" and a chime when
   the restaurant it stands in opens (`client/DayFade`).
 - **Computer boot** (`ComputerScreen`): once per opening (`ComputerCamera.booted`; the desktop after the free camera does not
