@@ -46,7 +46,7 @@ One click takes the orders of the whole group. Each member gets its own food. Th
 
 ## Restaurant Computer
 
-Use a **Restaurant Computer** inside the restaurant area. Before setting the area, you can use a computer at most 32 blocks from the sign in each direction. The camera moves to the monitor and a desktop opens. You need permission to use the computer block. Stay within reach of it while using its apps. Click an app icon to open its window; the × closes it. Escape closes the window, then leaves the computer.
+Use a **Restaurant Computer** inside the restaurant area. Before setting the area, you can use a computer at most 32 blocks from the sign in each direction. The camera moves to the monitor, the monitor boots (a power-on line, the boot text, the logo; a click or a key skips it) and the desktop opens. You need permission to use the computer block. Stay within reach of it while using its apps. Click an app icon to open its window; the × closes it. Escape closes the window, then turns the monitor off and leaves the computer.
 
 - **Menu**: a searchable catalog of the restaurant's dishes, filtered by kind (main, drink, starter, dessert). Put a dish on the menu or take it off, unlock a dish with money from the register, add any food or drink with your own price (`maxDishPrice`), and change the kind of a dish with its label. Each customer orders up to three items. Individual dishes are limited to one per kind. Customers order only dishes that are on the menu.
   **Combos**: 2 to 3 places for one price; a place is one dish or a whole kind ("Any drink"), for example a burger + any drink + any starter (for example a skewer, a cola and a salad). A customer orders a combo with the chance `comboChance` when all its dishes are on the menu. The Menu app marks saved four-place combos unavailable until you edit them down to two or three places.
@@ -114,5 +114,5 @@ Add blocks of other mods with a datapack. Entries for several furniture mods are
 ## License
 
 MIT. The stain and the cloth are original MIT art.
-The app icon symbols of the Restaurant Computer come from [game-icons.net](https://game-icons.net) (hot-meal, shopping-cart, checklist and upgrade by Delapouite), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), drawn on the mod's own tiles.
+The app icons of the Restaurant Computer are original pixel art (`art/computer/make_icons.py`).
 The television of the Menu Screen and the Order Screen is from [Yuushya Townscape](https://github.com/XiLaiTL/Yuushya-Townscape) (MIT). The Menu Book's Diegesis close-up uses the animated recipe book from [Hands On Delight](https://github.com/Pocky-l/handson-delight) (MIT). See `THIRD_PARTY_NOTICES.md`.
