@@ -73,6 +73,7 @@ public class ClientSetup {
         });
         NeoForge.EVENT_BUS.addListener(BubbleHover::reset);
         bus.addListener(RestaurantHud::register);
+        bus.addListener(DayFade::register);
         bus.addListener(ReadyHud::registerKeys);
         bus.addListener(ReadyHud::registerLayer);
         NeoForge.EVENT_BUS.addListener(ReadyHud::tick);

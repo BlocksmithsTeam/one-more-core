@@ -223,9 +223,7 @@ public class OpenSignBlock extends Block implements EntityBlock {
             if (n > 0) player.getInventory().placeItemBackInInventory(money.copyWithCount(n));
             player.displayClientMessage(n == 0 ? Component.translatable("onemorecore.register.empty")
                     : Component.translatable("onemorecore.register.withdraw", n), true);
-        } else if (r.isOpen()) {
-            player.displayClientMessage(Component.translatable("onemorecore.open.status", r.day, r.toSpawn + r.customers.size(), r.register), true);
-        } else {
+        } else if (!r.isOpen()) {
             r.requestOpen(sl, player);
         }
         return InteractionResult.SUCCESS;

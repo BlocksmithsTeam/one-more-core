@@ -9,9 +9,6 @@ import com.pockyl.diegesis.api.client.DiegesisClient;
 import com.pockyl.diegesis.api.client.StationBehavior;
 import com.pockyl.diegesis.api.client.StationView;
 
-import com.mojang.blaze3d.platform.InputConstants;
-
-import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lwjgl.glfw.GLFW;
@@ -20,8 +17,7 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Moves the camera of a Screen's close-up (KitchenStations.SCREEN_BOARD) to the middle of the picture the player looks at (the
  * side towards the player, of the screen or of its joined group), along the scene's view, as far as the whole picture fits. A
- * very long or tall picture shows a window of it, from its start: the movement keys (or the arrow keys) and a drag with the mouse
- * move the window over the picture. The scene of each tilt looks at the point (8, 16, 8) from 30 pixels away along the glass's
+ * very long or tall picture shows a window of it, from its start: a movement key (or an arrow key) moves the window a window over. The scene of each tilt looks at the point (8, 16, 8) from 30 pixels away along the glass's
  * normal.
  */
 final class ScreenStationBehavior implements StationBehavior {
@@ -31,9 +27,7 @@ final class ScreenStationBehavior implements StationBehavior {
         for (var type : KitchenStations.SCREEN_BOARD) DiegesisClient.registerBehavior(type.id(), view -> new ScreenStationBehavior());
     }
 
-    /** How fast the keys move the window: its own width (or height) in this many seconds. */
-    private static final float PAN_TIME = 1.2f;
-    /** The room the window has to move in along the picture, canvas units (0: the whole picture shows that way). */
+    /** The room the window has to move in along the picture, canvas units (0: the whole picture shows that way), and its size. */
     private float roomX, roomY, viewW, viewH;
 
     @Override
@@ -42,45 +36,21 @@ final class ScreenStationBehavior implements StationBehavior {
         place(view);
     }
 
-    /** Every frame: the keys held move the window, then the camera goes to it. */
-    @Override
-    public void frame(StationView view, float dt) {
-        Minecraft mc = Minecraft.getInstance();
-        long window = mc.getWindow().getWindow();
-        int x = (held(window, mc.options.keyRight, GLFW.GLFW_KEY_RIGHT) ? 1 : 0) - (held(window, mc.options.keyLeft, GLFW.GLFW_KEY_LEFT) ? 1 : 0);
-        int y = (held(window, mc.options.keyDown, GLFW.GLFW_KEY_DOWN) ? 1 : 0) - (held(window, mc.options.keyUp, GLFW.GLFW_KEY_UP) ? 1 : 0);
-        float step = Math.min(dt, 0.1f) / PAN_TIME;
-        if (roomX > 0) ScreenRenderer.panX += x * viewW * step;
-        if (roomY > 0) ScreenRenderer.panY += y * viewH * step;
-        place(view);
-    }
-
-    /** The movement keys move the window where it can move; elsewhere they go on to Diegesis (to the next station). */
+    /**
+     * A movement key (or an arrow) moves the window a whole window over, as Diegesis goes over to the next station; at the end of
+     * the picture that way the key goes on to Diegesis.
+     */
     @Override
     public boolean onKey(StationView view, int key, int scanCode, int modifiers) {
         Minecraft mc = Minecraft.getInstance();
-        boolean sideways = mc.options.keyLeft.matches(key, scanCode) || mc.options.keyRight.matches(key, scanCode) || key == GLFW.GLFW_KEY_LEFT
-                || key == GLFW.GLFW_KEY_RIGHT;
-        boolean upDown = mc.options.keyUp.matches(key, scanCode) || mc.options.keyDown.matches(key, scanCode) || key == GLFW.GLFW_KEY_UP
-                || key == GLFW.GLFW_KEY_DOWN;
-        return sideways && roomX > 0 || upDown && roomY > 0;
-    }
-
-    private static boolean held(long window, KeyMapping mapping, int arrow) {
-        var key = mapping.getKey();
-        return InputConstants.isKeyDown(window, arrow)
-                || key.getType() == InputConstants.Type.KEYSYM && key.getValue() != InputConstants.UNKNOWN.getValue() && InputConstants.isKeyDown(window, key.getValue());
-    }
-
-    @Override
-    public void onSceneReady(StationView view) {
+        int x = mc.options.keyRight.matches(key, scanCode) || key == GLFW.GLFW_KEY_RIGHT ? 1 : mc.options.keyLeft.matches(key, scanCode) || key == GLFW.GLFW_KEY_LEFT ? -1 : 0;
+        int y = mc.options.keyDown.matches(key, scanCode) || key == GLFW.GLFW_KEY_DOWN ? 1 : mc.options.keyUp.matches(key, scanCode) || key == GLFW.GLFW_KEY_UP ? -1 : 0;
+        float px = Math.max(0, Math.min(roomX, ScreenRenderer.panX + x * viewW)), py = Math.max(0, Math.min(roomY, ScreenRenderer.panY + y * viewH));
+        if (px == ScreenRenderer.panX && py == ScreenRenderer.panY) return false;
+        ScreenRenderer.panX = px;
+        ScreenRenderer.panY = py;
         place(view);
-    }
-
-    /** The wheel scrolls the picture the camera looks at. */
-    @Override
-    public boolean onScroll(StationView view, String node, double amount) {
-        return ScreenRenderer.scrollBy(amount);
+        return true;
     }
 
     private void place(StationView view) {
@@ -110,8 +80,6 @@ final class ScreenStationBehavior implements StationBehavior {
         // Far enough for the whole picture (canvas units are tenths of a pixel), a little margin.
         float halfH = viewH / 20, halfW = viewW / 20;
         float distance = Math.max(halfH / HALF_FOV_TAN, halfW / (HALF_FOV_TAN * ASPECT)) * 1.15f + 2;
-        // A drag moves the picture with the mouse: canvas units of a GUI pixel at the picture's distance.
-        ScreenRenderer.canvasPerPixel = 2 * distance * HALF_FOV_TAN * 10 / Math.max(1, Minecraft.getInstance().getWindow().getGuiScaledHeight());
         double tilt = Math.toRadians(ScreenRect.tilt(state));
         float ny = (float) -Math.sin(tilt), nz = (float) -Math.cos(tilt);
         float back = distance - SCENE_DISTANCE;

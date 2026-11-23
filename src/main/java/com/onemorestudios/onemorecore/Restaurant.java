@@ -786,10 +786,7 @@ public class Restaurant {
         toSpawn = serviceLeft > 0 ? Integer.MAX_VALUE
                 : (int) Math.min(Integer.MAX_VALUE, Config.CUSTOMERS_BASE.get() + (long) Config.CUSTOMERS_PER_DAY.get() * (day - 1));
         spawnTimer = 40;
-        announce(level, Component.translatable("onemorecore.open.started.title", day), serviceLeft > 0
-                ? Component.translatable("onemorecore.open.started_time", day, (serviceLeft + 1199) / 1200)
-                : Component.translatable("onemorecore.open.started", day, toSpawn));
-        level.playSound(null, sign, SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 1, 1);
+        // The clients show the day's start themselves (DayFade): a dark fade with "Day N" and a chime.
     }
 
     void tick(ServerLevel level) {

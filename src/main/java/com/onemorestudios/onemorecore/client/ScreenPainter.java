@@ -43,9 +43,18 @@ public final class ScreenPainter {
     private ScreenPainter() {}
 
     private static final ResourceLocation WHITE_TEXTURE = ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/block/white.png");
-    private static final RenderType WHITE = RenderType.entityCutout(WHITE_TEXTURE);
-    /** See-through fills (shadows, highlights): a cutout would draw them solid. */
-    private static final RenderType SHEER = RenderType.entityTranslucent(WHITE_TEXTURE);
+    /**
+     * All fills, solid and see-through, in one type that writes no depth: they cover each other in the order drawn, and the text
+     * and items (which write depth) stay in front of them. With depth, each fill had to stand a little in front of the one before,
+     * and far away the depth buffer could not tell them from the text any more (the text broke up into stripes).
+     */
+    private static final RenderType FILL = RenderType.create(OneMoreCore.MODID + "_screen_fill",
+            com.mojang.blaze3d.vertex.DefaultVertexFormat.NEW_ENTITY, com.mojang.blaze3d.vertex.VertexFormat.Mode.QUADS, 1536, false, false,
+            RenderType.CompositeState.builder().setShaderState(RenderType.RENDERTYPE_ENTITY_TRANSLUCENT_SHADER)
+                    .setTextureState(new net.minecraft.client.renderer.RenderStateShard.TextureStateShard(WHITE_TEXTURE, false, false))
+                    .setTransparencyState(RenderType.TRANSLUCENT_TRANSPARENCY)
+                    .setLightmapState(RenderType.LIGHTMAP).setOverlayState(RenderType.OVERLAY).setWriteMaskState(RenderType.COLOR_WRITE)
+                    .createCompositeState(false));
     private static final String[] KINDS = {"main", "starter", "drink", "dessert", "combo"};
     private static final int[] KIND_COLORS = {0xFFE8762D, 0xFF4CAF50, 0xFF2D8CE8, 0xFFE8508A, 0xFFD32F2F};
     private static final int LIGHT = LightTexture.FULL_BRIGHT;
@@ -95,12 +104,11 @@ public final class ScreenPainter {
             return x >= clipX0 - 0.01f && y >= clipY0 - 0.01f && x + rw <= clipX1 + 0.01f && y + rh <= clipY1 + 0.01f;
         }
 
-        /** A filled rectangle, a little in front of what was drawn before, cut to the clip box. */
+        /** A filled rectangle over what was drawn before, cut to the clip box. */
         void rect(float x, float y, float rw, float rh, int argb) {
             float x0 = Math.max(x, clipX0), y0 = Math.max(y, clipY0), x1 = Math.min(x + rw, clipX1), y1 = Math.min(y + rh, clipY1);
             if (x1 <= x0 || y1 <= y0) return;
-            z += 0.02f;
-            TrayRenderer.quad(pose, buffers.getBuffer(argb >>> 24 == 0xFF ? WHITE : SHEER), x0, y0, x1, y1, z, argb, LIGHT);
+            TrayRenderer.quad(pose, buffers.getBuffer(FILL), x0, y0, x1, y1, z, argb, LIGHT);
         }
 
         /** A rectangle with its corners cut by r (a pixel-art rounded box). */

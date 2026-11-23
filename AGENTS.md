@@ -28,9 +28,12 @@ change how one of them works, change its lines here in the same commit.
   and a removed restaurant tells the clients to forget its pictures. Two owners drew two pictures (menu and orders) on one
   screen. Test: `FixesGameTests.screenBelongsToOneRestaurant`.
 - **Screen close-up** (Diegesis): a click on any cell opens it (the upper cell through `DiegesisHook.register`); a long screen
-  shows a window of at most 2.4:1 from its start (`ScreenStationBehavior`); the movement keys, the arrows and a mouse drag move
-  the window (`ScreenRenderer.panX/panY`; a click runs on release when the mouse did not move). The scene keeps the blocks
+  shows a window of at most 2.4:1 from its start (`ScreenStationBehavior`); a movement key or an arrow moves the window a whole
+  window over (`ScreenRenderer.panX/panY`), and at the end of the picture the key goes on to Diegesis. The scene keeps the blocks
   around (`clear_view`).
+- **Screen drawing**: every fill uses `ScreenPainter.FILL`, which writes no depth and is not sorted: fills cover each other in the
+  order drawn and text and items stay in front. Do not go back to fills that each stand a little in front (far away the depth
+  buffer mixed them with the text).
   A floor or ceiling Screen turns in 16 directions (`TURN`), like a sign; a turned one joins no other.
 - **Tray Rack**: holds up to six trays that players put in (`slot0..slot5` state); an empty rack gives nothing. Its hitbox is a
   shell 1 px thick, open at the front, the back and inside, so every level can be clicked. Tests:
@@ -51,6 +54,8 @@ change how one of them works, change its lines here in the same commit.
   a spread is two list pages). The kinds are bookmarks along the head of both pages, the search last (`RecipeBook.tabSlot`).
 - **Table Number card**: its place on the block is saved as `offset_x`/`offset_z` (a block entity's save writes its own
   position as `x`, `y`, `z`; never use those names in a block entity). Test: `ModelGameTests.tableNumberOffsetSurvivesSave`.
+- **Day start**: no title or status text from the server; each client darkens the screen with "Day N" and a chime when
+  the restaurant it stands in opens (`client/DayFade`).
 - **Windows**: the mod's windows use `client/Ui` (see-through black panel, letterbox bars, pill buttons). New windows use it too.
 
 ## Art
