@@ -109,11 +109,14 @@ public class Config {
             .comment("Maximum number of chat viewers in the skin pool. The oldest viewer drops out.")
             .defineInRange("skinPoolSize", 100, 1, 10000);
 
+    static final ModConfigSpec.IntValue STARTING_BALANCE = B
+            .comment("Coins given once to a new restaurant.")
+            .defineInRange("startingBalance", 60, 0, Integer.MAX_VALUE);
     static final ModConfigSpec.IntValue MAX_DISH_PRICE = B
             .comment("Highest price that a player can give a dish of their own on the Restaurant Computer.")
             .defineInRange("maxDishPrice", 100, 1, 1_000_000);
     static final ModConfigSpec.IntValue SHOP_DELIVERY = B
-            .comment("Ticks between a shop order on the Restaurant Computer and its delivery.")
+            .comment("Ticks between a shop order on the Restaurant Computer and courier dispatch.")
             .defineInRange("shopDeliveryTicks", 600, 0, 72000);
     static final ModConfigSpec.BooleanValue APP_MENU = B
             .comment("Apps of the Restaurant Computer. A disabled app is shown as inactive.")

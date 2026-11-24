@@ -82,12 +82,16 @@ change how one of them works, change its lines here in the same commit.
   `Restaurant.isFood` (wired by the menu side). Test: `DishBlacklistGameTests`.
 - **Table Number card**: its place on the block is saved as `offset_x`/`offset_z` (a block entity's save writes its own
   position as `x`, `y`, `z`; never use those names in a block entity). Test: `ModelGameTests.tableNumberOffsetSurvivesSave`.
+- **Ingredient unlocks** use `Ingredients`, `IngredientConfig` and `Restaurant.orderable`. Recipes and `ingredients.json` determine what customers, combos, menu screens and menu books can offer. A recipe needs at least one readable slot and a usable candidate in every slot. Free candidates satisfy a slot. Dishes whose indexed recipes are all unreadable or unusable need a valid override. The server rebuilds the index and logs their count on startup and reload. The sign carries purchased ingredient IDs and the remaining register balance. Legacy saves migrate ingredient purchases once. The Shop prices purchases on the server and the computer sends the capped ingredient lists on Menu requests. See `IngredientGameTests`.
+- **Shop couriers** (`Restaurant`, `Courier`, `CardboardBoxBlockEntity`): paid orders retain their remaining items and checkout destination in restaurant saved data until delivered. Couriers reference the assigned order by ID. Each restaurant starts at most one courier and delivers at most 16 stacks per tick, including overflow drops. A missing courier can be replaced, and a stale courier disappears. An unloaded spawn or expired 60-second route uses a stand-in at the destination. An unloaded destination is checked once a second until it loads. Legacy orders without a point use the sign. Boxes hold 27 stacks, preserve them on pickup and expose no hopper inventory. Their slots use vanilla shulker placement rules and reject nested cardboard boxes. See `CourierGameTests` and `MoneyGameTests.shopDeliveryUsesSharedTickBudget`.
 - **Day start**: no title or status text from the server; each client darkens the screen with "Day N" and a chime when
   the restaurant it stands in opens (`client/DayFade`).
 - **Computer boot** (`ComputerScreen`): once per opening (`ComputerCamera.booted`; the desktop after the free camera does not
-  boot) the monitor powers on, shows boot text from the state the client already has (no packet) and the logo with a loading
-  bar, about 3.5 s on `Util.getMillis()`; a click or a key but a movement key skips it. Escape on the desktop turns the CRT
-  off (0.3 s) before `ComputerCamera.leave`; the other ways out leave at once. App icons: `art/computer/make_icons.py`.
+  boot) the monitor powers on and shows boot text from the opening computer state, then the logo with a loading
+  bar for about 3.5 s on `Util.getMillis()`. A click or a key skips the boot. Movement keys and the game's screenshot and
+  fullscreen shortcuts (F2 and F11 by default) keep their usual functions. After Escape skips the boot, release it before
+  pressing it again. Escape on the desktop turns the CRT off (0.3 s) before `ComputerCamera.leave`. The other ways out leave
+  at once. App icons: `art/computer/make_icons.py`.
 - **Windows**: the mod's windows use `client/Ui` (see-through black panel, letterbox bars, pill buttons). New windows use it too.
 
 ## Art

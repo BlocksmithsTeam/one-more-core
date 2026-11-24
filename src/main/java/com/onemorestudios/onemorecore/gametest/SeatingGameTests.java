@@ -49,7 +49,7 @@ public final class SeatingGameTests {
         BlockPos computer = helper.absolutePos(COMPUTER);
         helper.setBlock(COMPUTER, OneMoreCore.COMPUTER.get());
         helper.assertTrue(restaurants.forComputer(computer) == r, "the exterior computer can set up a restaurant");
-        r.addMoney(1000);
+        GameTestSupport.setRegister(r, 1000);
         BlockPos chest = SIGN.east();
         helper.setBlock(chest, Blocks.CHEST);
         invoke(r, "setDelivery", new Class<?>[] {BlockPos.class}, helper.absolutePos(chest));
@@ -342,6 +342,10 @@ public final class SeatingGameTests {
 
     private static Restaurant setup(GameTestHelper helper) {
         Restaurant r = sign(helper);
+        int balance = r.register();
+        GameTestSupport.setRegister(r, 100);
+        GameTestSupport.unlock(helper, r, "wheat");
+        GameTestSupport.setRegister(r, balance);
         helper.setBlock(TABLE, Blocks.OAK_SLAB);
         helper.setBlock(SEAT, Blocks.OAK_STAIRS);
         setArea(r, BoundingBox.fromCorners(helper.absolutePos(new BlockPos(0, 1, 1)), helper.absolutePos(new BlockPos(3, 2, 3))));
