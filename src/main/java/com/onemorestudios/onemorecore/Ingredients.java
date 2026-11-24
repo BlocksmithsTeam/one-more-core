@@ -20,6 +20,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
 
 /** The server's recipe index. Each recipe is a list of slots, each with alternative item IDs. */
@@ -55,24 +56,27 @@ final class Ingredients {
                     skipped++;
                     continue;
                 }
+                ResourceLocation id = id(result);
+                var alternatives = recipes.computeIfAbsent(id, key -> new ArrayList<>());
+                if (Restaurant.isFood(result)) foodResults.putIfAbsent(id, result.copyWithCount(1));
                 List<Set<ResourceLocation>> slots = recipe.getIngredients().stream()
-                        .filter(ingredient -> !ingredient.isEmpty())
+                        .filter(ingredient -> ingredient != Ingredient.EMPTY)
                         .map(ingredient -> {
                             Set<ResourceLocation> ids = new TreeSet<>();
                             Arrays.stream(ingredient.getItems()).filter(Ingredients::realIngredient)
                                     .map(Ingredients::id).forEach(ids::add);
                             return ids;
                         }).toList();
-                ResourceLocation id = id(result);
-                recipes.computeIfAbsent(id, key -> new ArrayList<>()).add(slots);
-                if (Restaurant.isFood(result)) foodResults.putIfAbsent(id, result.copyWithCount(1));
+                addRecipe(alternatives, slots);
             } catch (RuntimeException e) {
                 skipped++;
                 OneMoreCore.LOGGER.debug("Recipe {} does not expose its result or ingredients", holder.id(), e);
             }
         }
         config.dishes().forEach((id, slots) -> {
-            recipes.put(id, List.of(slots));
+            var alternatives = new ArrayList<List<Set<ResourceLocation>>>();
+            addRecipe(alternatives, slots);
+            recipes.put(id, alternatives);
             foodResults.computeIfAbsent(id, Ingredients::stack);
         });
 
@@ -89,10 +93,12 @@ final class Ingredients {
 
         Set<ResourceLocation> rawIds = new TreeSet<>();
         int withIngredients = 0;
+        int unreadable = 0;
         for (ResourceLocation dish : dishWorth.keySet()) {
             var alternatives = recipes.get(dish);
             if (alternatives == null) continue;
-            if (alternatives.stream().anyMatch(recipe -> !recipe.isEmpty())) withIngredients++;
+            if (alternatives.isEmpty()) unreadable++;
+            else withIngredients++;
             Map<ResourceLocation, Integer> seen = new HashMap<>();
             for (var recipe : alternatives) {
                 for (var slot : recipe) {
@@ -109,8 +115,19 @@ final class Ingredients {
         raw = List.copyOf(rawIds);
         raw.forEach(id -> unlockCosts.put(id, automaticCost(id)));
         if (registries != null) OneMoreCore.LOGGER.info(
-                "Ingredient index: {} dishes with ingredients, {} without; {} recipes without readable results or ingredients",
-                withIngredients, dishWorth.size() - withIngredients, skipped);
+                "Ingredient index: {} dishes with readable recipes, {} locked without a readable recipe, {} without a recipe; {} recipes could not be read",
+                withIngredients, unreadable, dishWorth.size() - withIngredients - unreadable, skipped);
+    }
+
+    // An empty recipe list marks a known result with no usable alternative. An absent result has no indexed recipe.
+    private void addRecipe(List<List<Set<ResourceLocation>>> alternatives, List<Set<ResourceLocation>> slots) {
+        if (slots.isEmpty()) return;
+        var candidates = slots.stream().map(slot -> {
+            Set<ResourceLocation> usable = new TreeSet<>(slot);
+            usable.removeIf(item -> config.ignore().contains(item) && !config.free().contains(item));
+            return usable;
+        }).toList();
+        if (candidates.stream().noneMatch(Set::isEmpty)) alternatives.add(candidates);
     }
 
     private static boolean realIngredient(ItemStack stack) {

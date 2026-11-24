@@ -15,8 +15,6 @@ import net.minecraft.world.MenuProvider;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -56,8 +54,8 @@ public class CardboardBoxBlockEntity extends BlockEntity implements MenuProvider
     }
 
     @Override
-    public ChestMenu createMenu(int id, Inventory inventory, Player player) {
-        return new ChestMenu(MenuType.GENERIC_9x3, id, inventory, items, 3);
+    public CardboardBoxMenu createMenu(int id, Inventory inventory, Player player) {
+        return new CardboardBoxMenu(id, inventory, items);
     }
 
     ItemStack asItem() {

@@ -17,10 +17,12 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity.RemovalReason;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -159,6 +161,31 @@ public final class CourierGameTests {
         helper.succeed();
     }
 
+    @GameTest(template = FLOOR)
+    public static void boxMenuRejectsNestedParcels(GameTestHelper helper) {
+        floor(helper);
+        var player = GameTestSupport.player(helper);
+        var menu = box(helper, START).createMenu(1, player.getInventory(), player);
+        for (var item : List.of(OneMoreCore.CARDBOARD_BOX_ITEM.get(), Items.SHULKER_BOX)) {
+            ItemStack filled = new ItemStack(item);
+            filled.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.BREAD))));
+            helper.assertFalse(menu.getSlot(0).mayPlace(filled), "Box slot rejects a packed container");
+            menu.setCarried(filled);
+            menu.clicked(0, 0, ClickType.PICKUP, player);
+            helper.assertTrue(menu.getSlot(0).getItem().isEmpty() && menu.getCarried() == filled,
+                    "Direct placement leaves the packed container on the cursor");
+            menu.setCarried(ItemStack.EMPTY);
+            menu.getSlot(27).set(filled);
+            menu.clicked(27, 0, ClickType.QUICK_MOVE, player);
+            helper.assertTrue(menu.getContainer().isEmpty() && menu.getSlot(27).getItem() == filled,
+                    "Shift-click leaves the packed container in the player inventory");
+        }
+        menu.getSlot(27).set(new ItemStack(Items.BREAD));
+        menu.clicked(27, 0, ClickType.QUICK_MOVE, player);
+        helper.assertTrue(menu.getSlot(0).getItem().is(Items.BREAD), "Ordinary items still shift-click into the box");
+        helper.succeed();
+    }
+
     /** Legacy entries retain their checkout point, with the sign as the fallback for a missing destination tag. */
     @GameTest(template = FLOOR, timeoutTicks = 200)
     public static void legacyOrdersKeepCheckoutPointAndUseSignWhenMissing(GameTestHelper helper) throws Exception {
@@ -172,10 +199,9 @@ public final class CourierGameTests {
         legacy.add(wheat);
         legacy.add(legacyLine(helper, Items.CARROT, 3));
         saved.put("deliveries", legacy);
-        var restored = (Restaurant) method(Restaurant.class, "load", Restaurants.class, CompoundTag.class)
-                .invoke(null, Restaurants.get(helper.getLevel()), saved);
-        method(Restaurant.class, "tickDeliveries", ServerLevel.class).invoke(restored, helper.getLevel());
-        helper.assertValueEqual(couriers(helper).size(), 2, "Each legacy order dispatched once");
+        method(Restaurant.class, "restore", CompoundTag.class).invoke(restaurant, saved);
+        tickDeliveries(helper, restaurant);
+        helper.assertValueEqual(couriers(helper).size(), 1, "Only one legacy order dispatched this tick");
         helper.succeedWhen(() -> {
             helper.assertValueEqual(original.countItem(Items.WHEAT), 6, "Wheat at the checkout chest");
             helper.assertTrue(current.isEmpty(), "The newly configured chest stayed empty");
@@ -196,30 +222,104 @@ public final class CourierGameTests {
             Courier courier = couriers(helper).getFirst();
             CompoundTag saved = courier.saveWithoutId(new CompoundTag());
             courier.remove(RemovalReason.UNLOADED_TO_CHUNK);
-            helper.assertValueEqual(boxes(helper, START).size(), 0, "Unloading leaves the parcel with the saved courier");
+            helper.assertValueEqual(boxes(helper, START).size(), 0, "Unloading keeps the order pending");
             Courier restored = OneMoreCore.COURIER.get().create(helper.getLevel());
             restored.load(saved);
-            helper.assertTrue(restored.carrying() && helper.getLevel().addFreshEntity(restored), "Saved courier rejoined with its parcel");
+            helper.assertTrue(restored.carrying() && helper.getLevel().addFreshEntity(restored), "Saved courier rejoined its order");
         }).thenWaitUntil(() -> {
             helper.assertTrue(couriers(helper).isEmpty(), "Reloaded courier delivered and returned");
             helper.assertValueEqual(chest.countItem(Items.WHEAT), 6, "Reloaded order arrived exactly once");
         }).thenSucceed();
     }
 
-    @GameTest(template = FLOOR, timeoutTicks = 120)
-    public static void killedCourierDropsPackedOverflowWhenBoxesCannotFit(GameTestHelper helper) throws Exception {
+    @GameTest(template = FLOOR, timeoutTicks = 240)
+    public static void killedCourierIsReplacedAndItsOldSaveCannotDeliver(GameTestHelper helper) throws Exception {
         Restaurant restaurant = restaurant(helper, POINT);
-        for (BlockPos pos : BlockPos.betweenClosed(START.offset(-1, -1, -1), START.offset(1, -1, 1)))
-            helper.setBlock(pos, Blocks.AIR);
-        buy(helper, restaurant, 0, Map.of(entry(Items.IRON_SWORD, 28), 1));
-        method(Restaurant.class, "tickDeliveries", ServerLevel.class).invoke(restaurant, helper.getLevel());
+        var chest = GameTestSupport.place(helper, POINT, Blocks.CHEST, ChestBlockEntity.class);
+        buy(helper, restaurant, 0, Map.of(entry(Items.WHEAT, 6), 1));
+        tickDeliveries(helper, restaurant);
         helper.assertValueEqual(couriers(helper).size(), 1, "Courier ready for removal");
-        couriers(helper).getFirst().kill();
-        var parcels = drops(helper).stream().map(ItemEntity::getItem)
-                .filter(stack -> stack.is(OneMoreCore.CARDBOARD_BOX_ITEM.get())).toList();
-        helper.assertValueEqual(parcels.size(), 2, "Overflow parcel count");
-        helper.assertValueEqual(parcels.stream().mapToInt(stack -> count(stack, Items.IRON_SWORD)).sum(), 28, "Items in overflow parcels");
+        Courier original = couriers(helper).getFirst();
+        CompoundTag oldCourier = original.saveWithoutId(new CompoundTag());
+        var pending = savedOrders(restaurant);
+        helper.assertValueEqual(pending.size(), 1, "An order in flight stays in restaurant storage");
+        helper.assertValueEqual(pending.getCompound(0).getUUID("id"), oldCourier.getUUID("order"), "The courier references the saved order");
+        helper.assertFalse(oldCourier.contains("parcel"), "The courier save carries no items");
+        original.kill();
+        helper.assertTrue(boxes(helper, START).isEmpty() && drops(helper).isEmpty(), "Killing the courier keeps the order pending");
+        helper.startSequence().thenWaitUntil(() -> {
+            helper.assertValueEqual(chest.countItem(Items.WHEAT), 6, "A replacement delivered the order");
+            helper.assertTrue(couriers(helper).isEmpty(), "The replacement returned");
+        }).thenExecute(() -> {
+            Courier stale = OneMoreCore.COURIER.get().create(helper.getLevel());
+            stale.load(oldCourier);
+            helper.assertTrue(helper.getLevel().addFreshEntity(stale), "The stale courier save was loaded");
+        }).thenWaitUntil(() -> helper.assertTrue(couriers(helper).isEmpty(), "The stale courier vanished"))
+                .thenExecute(() -> helper.assertValueEqual(chest.countItem(Items.WHEAT), 6, "The stale save delivered nothing"))
+                .thenSucceed();
+    }
+
+    @GameTest(template = FLOOR)
+    public static void unloadedSpawnUsesStandInAtCheckoutPoint(GameTestHelper helper) throws Exception {
+        Restaurant restaurant = restaurant(helper, POINT);
+        var chest = GameTestSupport.place(helper, POINT, Blocks.CHEST, ChestBlockEntity.class);
+        BlockPos unloaded = helper.absolutePos(START).east(1_000_000);
+        helper.assertFalse(helper.getLevel().isLoaded(unloaded), "The spawn chunk is unloaded");
+        method(Restaurant.class, "setSpawn", BlockPos.class).invoke(restaurant, unloaded);
+        buy(helper, restaurant, 0, Map.of(entry(Items.WHEAT, 9), 1));
+        tickDeliveries(helper, restaurant);
+        helper.assertValueEqual(chest.countItem(Items.WHEAT), 9, "The stand-in fills the loaded destination");
+        helper.assertTrue(couriers(helper).isEmpty() && savedOrders(restaurant).isEmpty(), "Delivery completed without a courier");
         helper.succeed();
+    }
+
+    @GameTest(template = FLOOR)
+    public static void unloadedDestinationWaitsAndRetainsTheOrder(GameTestHelper helper) throws Exception {
+        Restaurant restaurant = restaurant(helper, POINT);
+        BlockPos unloaded = helper.absolutePos(POINT).east(1_000_000);
+        helper.assertFalse(helper.getLevel().isLoaded(unloaded), "The destination chunk is unloaded");
+        method(Restaurant.class, "setDelivery", BlockPos.class).invoke(restaurant, unloaded);
+        buy(helper, restaurant, 0, Map.of(entry(Items.WHEAT, 9), 1));
+        tickDeliveries(helper, restaurant);
+        var pending = savedOrders(restaurant).getCompound(0);
+        helper.assertTrue(pending.getBoolean("stand_in") && couriers(helper).isEmpty(), "The order waits for stand-in delivery");
+        helper.assertValueEqual(pending.getLong("destination"), unloaded.asLong(), "The checkout point is preserved");
+        helper.assertValueEqual(pending.getList("items", Tag.TAG_COMPOUND).getCompound(0).getInt("count"), 9, "The paid items are preserved");
+        var field = Restaurant.class.getDeclaredField("deliveries");
+        field.setAccessible(true);
+        var delivery = ((List<?>) field.get(restaurant)).getFirst();
+        var retry = delivery.getClass().getDeclaredField("retryAt");
+        retry.setAccessible(true);
+        helper.assertValueEqual(retry.getLong(delivery), helper.getLevel().getGameTime() + 20, "The next attempt waits one second");
+        helper.succeed();
+    }
+
+    @GameTest(template = FLOOR, timeoutTicks = 1240)
+    public static void inactiveCourierFallsBackAfterSixtySeconds(GameTestHelper helper) throws Exception {
+        Restaurant restaurant = restaurant(helper, POINT);
+        var chest = GameTestSupport.place(helper, POINT, Blocks.CHEST, ChestBlockEntity.class);
+        buy(helper, restaurant, 0, Map.of(entry(Items.WHEAT, 9), 1));
+        tickDeliveries(helper, restaurant);
+        Courier inactive = couriers(helper).getFirst();
+        inactive.setNoAi(true);
+        long deadline = helper.getLevel().getGameTime() + 1200;
+        helper.assertValueEqual(savedOrders(restaurant).getCompound(0).getLong("fallback_at"), deadline,
+                "The fallback deadline is saved with the order");
+        helper.runAfterDelay(1190, () -> helper.assertTrue(chest.isEmpty(), "The stand-in has not delivered early"));
+        helper.succeedWhen(() -> {
+            helper.assertTrue(helper.getLevel().getGameTime() >= deadline, "The route has timed out");
+            helper.assertValueEqual(chest.countItem(Items.WHEAT), 9, "The order arrived even though the courier never ran its AI");
+            helper.assertTrue(inactive.isRemoved(), "The timed-out courier was removed");
+        });
+    }
+
+    private static void tickDeliveries(GameTestHelper helper, Restaurant restaurant) throws Exception {
+        method(Restaurant.class, "tickDeliveries", ServerLevel.class).invoke(restaurant, helper.getLevel());
+    }
+
+    private static ListTag savedOrders(Restaurant restaurant) throws Exception {
+        CompoundTag saved = (CompoundTag) method(Restaurant.class, "save").invoke(restaurant);
+        return saved.getList("deliveries", Tag.TAG_COMPOUND);
     }
 
     private static void floor(GameTestHelper helper) {

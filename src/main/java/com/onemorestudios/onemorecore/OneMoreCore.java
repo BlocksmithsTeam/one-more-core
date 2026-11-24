@@ -24,6 +24,8 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.flag.FeatureFlags;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -65,6 +67,7 @@ public class OneMoreCore {
     private static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(MODID);
     private static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
     private static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(Registries.ENTITY_TYPE, MODID);
+    private static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(Registries.MENU, MODID);
     private static final DeferredRegister<EntityDataSerializer<?>> SERIALIZERS = DeferredRegister.create(NeoForgeRegistries.Keys.ENTITY_DATA_SERIALIZERS, MODID);
 
     public static final DeferredBlock<OpenSignBlock> OPEN_SIGN = BLOCKS.register("open_sign",
@@ -122,6 +125,8 @@ public class OneMoreCore {
                     return false;
                 }
             });
+    public static final DeferredHolder<MenuType<?>, MenuType<CardboardBoxMenu>> CARDBOARD_BOX_MENU =
+            MENUS.register("cardboard_box", () -> new MenuType<>(CardboardBoxMenu::new, FeatureFlags.VANILLA_SET));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CardboardBoxBlockEntity>> CARDBOARD_BOX_ENTITY = BLOCK_ENTITIES.register("cardboard_box",
             () -> BlockEntityType.Builder.of(CardboardBoxBlockEntity::new, CARDBOARD_BOX.get()).build(null));
     public static final DeferredHolder<EntityType<?>, EntityType<Courier>> COURIER = ENTITIES.register("courier",
@@ -178,6 +183,7 @@ public class OneMoreCore {
         BLOCKS.register(bus);
         ITEMS.register(bus);
         ENTITIES.register(bus);
+        MENUS.register(bus);
         SERIALIZERS.register(bus);
         TABS.register(bus);
         COMPONENTS.register(bus);
