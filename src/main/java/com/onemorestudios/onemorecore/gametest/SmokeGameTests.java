@@ -47,12 +47,13 @@ public final class SmokeGameTests {
     @GameTest(template = "empty")
     public static void registerAcceptsCoins(GameTestHelper helper) {
         Restaurant restaurant = placeRegister(helper);
+        int initialBalance = restaurant.register();
         Item coin = defaultCoin(helper);
         TestPlayer player = GameTestSupport.player(helper);
 
         GameTestSupport.give(player, new ItemStack(coin, 7));
         helper.assertTrue(GameTestSupport.click(helper, player, POS).consumesAction(), "Deposit click was handled");
-        helper.assertValueEqual(restaurant.register(), 7, "register balance");
+        helper.assertValueEqual(restaurant.register(), initialBalance + 7, "register balance");
         helper.assertTrue(player.getMainHandItem().isEmpty(), "Deposit emptied the main hand");
         helper.succeed();
     }
@@ -61,6 +62,7 @@ public final class SmokeGameTests {
     @GameTest(template = "empty")
     public static void registerReturnsOneStack(GameTestHelper helper) {
         Restaurant restaurant = placeRegister(helper);
+        int initialBalance = restaurant.register();
         Item coin = defaultCoin(helper);
         TestPlayer player = GameTestSupport.player(helper);
         ItemStack fullStack = new ItemStack(coin);
@@ -71,12 +73,12 @@ public final class SmokeGameTests {
         GameTestSupport.click(helper, player, POS);
         GameTestSupport.give(player, new ItemStack(coin, 7));
         GameTestSupport.click(helper, player, POS);
-        helper.assertValueEqual(restaurant.register(), stackSize + 7, "balance before withdrawal");
+        helper.assertValueEqual(restaurant.register(), initialBalance + stackSize + 7, "balance before withdrawal");
         helper.assertTrue(player.getMainHandItem().isEmpty(), "Main hand was empty before withdrawal");
 
         player.setShiftKeyDown(true);
         helper.assertTrue(GameTestSupport.click(helper, player, POS).consumesAction(), "Withdrawal click was handled");
-        helper.assertValueEqual(restaurant.register(), 7, "remaining register balance");
+        helper.assertValueEqual(restaurant.register(), initialBalance + 7, "remaining register balance");
         helper.assertValueEqual(player.getInventory().countItem(coin), stackSize, "number of coins returned");
         helper.assertTrue(player.getInventory().items.stream()
                 .anyMatch(stack -> stack.is(coin) && stack.getCount() == stackSize), "The returned coins form one full stack");

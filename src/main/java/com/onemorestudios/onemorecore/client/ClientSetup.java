@@ -24,6 +24,7 @@ public class ClientSetup {
         // Mods > One More Core > Config: every option in the game, the stream chat too.
         container.registerExtensionPoint(net.neoforged.neoforge.client.gui.IConfigScreenFactory.class, net.neoforged.neoforge.client.gui.ConfigurationScreen::new);
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerEntityRenderer(OneMoreCore.CUSTOMER.get(), CustomerRenderer::new));
+        bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerEntityRenderer(OneMoreCore.COURIER.get(), CourierRenderer::new));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.OPEN_SIGN_ENTITY.get(), OpenSignRenderer::new));
         bus.addListener(OpenSignRenderer::registerModels);
         bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {

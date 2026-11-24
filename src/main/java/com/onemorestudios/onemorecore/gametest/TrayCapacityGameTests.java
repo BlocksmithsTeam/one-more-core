@@ -195,7 +195,12 @@ public final class TrayCapacityGameTests {
         data.putLong("sign", helper.absolutePos(POS).asLong());
 
         var off = new ListTag();
-        for (Menu.Entry entry : Menu.entries) off.add(StringTag.valueOf(entry.id()));
+        var load = Restaurant.class.getDeclaredMethod("load", Restaurants.class, CompoundTag.class);
+        load.setAccessible(true);
+        Restaurants restaurants = Restaurants.get(helper.getLevel());
+        data.put("unlockedIngredients", new ListTag());
+        Restaurant base = (Restaurant) load.invoke(null, restaurants, data);
+        for (Menu.Entry entry : base.dishes()) off.add(StringTag.valueOf(entry.id()));
         data.put("off", off);
 
         var custom = new ListTag();
@@ -220,9 +225,10 @@ public final class TrayCapacityGameTests {
         combos.add(combo);
         data.put("combos", combos);
 
-        var load = Restaurant.class.getDeclaredMethod("load", Restaurants.class, CompoundTag.class);
-        load.setAccessible(true);
-        return (Restaurant) load.invoke(null, Restaurants.get(helper.getLevel()), data);
+        Restaurant restaurant = (Restaurant) load.invoke(null, restaurants, data);
+        GameTestSupport.setRegister(restaurant, 100);
+        GameTestSupport.unlock(helper, restaurant, "wheat", "cocoa_beans");
+        return restaurant;
     }
 
     private static Method orderGenerator() throws ReflectiveOperationException {
