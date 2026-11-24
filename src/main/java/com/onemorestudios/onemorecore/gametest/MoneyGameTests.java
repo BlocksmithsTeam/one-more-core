@@ -8,11 +8,13 @@ import java.util.Map;
 import java.util.Set;
 
 import com.onemorestudios.onemorecore.Config;
+import com.onemorestudios.onemorecore.Courier;
 import com.onemorestudios.onemorecore.Customer;
 import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.OpenSignBlockEntity;
 import com.onemorestudios.onemorecore.Restaurant;
 import com.onemorestudios.onemorecore.Restaurants;
+import com.onemorestudios.onemorecore.Shop;
 import com.onemorestudios.onemorecore.TableItems;
 import com.onemorestudios.onemorecore.gametest.GameTestSupport.TestPlayer;
 import net.minecraft.core.BlockPos;
@@ -34,6 +36,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.ModConfigSpec.ConfigValue;
@@ -218,6 +221,64 @@ public final class MoneyGameTests {
             players.removePlayer(player);
         }
         helper.succeed();
+    }
+
+    @GameTest(template = "courier_floor")
+    public static void shopDeliveryUsesSharedTickBudget(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var restaurant = placeRestaurant(helper);
+        var point = new BlockPos(8, 1, 5);
+        var spawn = point.west();
+        for (BlockPos pos : BlockPos.betweenClosed(point.offset(-1, -1, -1), point.offset(1, -1, 1)))
+            helper.setBlock(pos, Blocks.AIR);
+        helper.setBlock(point.below(), Blocks.STONE);
+        var chest = GameTestSupport.place(helper, point, Blocks.CHEST, ChestBlockEntity.class);
+        for (int slot = 8; slot < chest.getContainerSize(); slot++) chest.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+        call(Restaurant.class, restaurant, "setDelivery", new Class<?>[] {BlockPos.class}, helper.absolutePos(point));
+        call(Restaurant.class, restaurant, "setSpawn", new Class<?>[] {BlockPos.class}, helper.absolutePos(spawn));
+        withConfig("SHOP_DELIVERY", 0, () -> {
+            for (int amount : List.of(10, 18)) {
+                var entry = new Shop.Entry("swords", new ItemStack(Items.IRON_SWORD, amount), new ItemStack(Items.IRON_SWORD), 0);
+                helper.assertValueEqual(restaurant.buy(entry), Restaurant.Buy.OK, "Checkout accepted");
+            }
+        });
+
+        call(Restaurant.class, restaurant, "tickDeliveries", new Class<?>[] {ServerLevel.class}, level);
+        var first = level.getEntitiesOfClass(Courier.class, helper.getBounds());
+        helper.assertValueEqual(first.size(), 1, "One courier may start per restaurant per tick");
+        first.getFirst().setNoAi(true);
+
+        helper.runAfterDelay(1, () -> {
+            call(Restaurant.class, restaurant, "tickDeliveries", new Class<?>[] {ServerLevel.class}, level);
+            var couriers = level.getEntitiesOfClass(Courier.class, helper.getBounds());
+            helper.assertValueEqual(couriers.size(), 2, "The second courier starts on the next tick");
+            Courier second = couriers.stream().filter(courier -> courier != first.getFirst()).findFirst().orElseThrow();
+            var at = Vec3.atBottomCenterOf(helper.absolutePos(spawn));
+            for (Courier courier : List.of(first.getFirst(), second)) {
+                courier.setNoAi(true);
+                courier.setPos(at.x, at.y, at.z);
+                call(Courier.class, courier, "customServerAiStep", new Class<?>[0]);
+            }
+            int packed = drops(helper, OneMoreCore.CARDBOARD_BOX_ITEM.get()).stream()
+                    .map(ItemEntity::getItem).map(stack -> stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY))
+                    .flatMap(ItemContainerContents::nonEmptyStream).mapToInt(ItemStack::getCount).sum();
+            helper.assertValueEqual(chest.countItem(Items.IRON_SWORD), 8, "The chest accepted eight stacks");
+            helper.assertValueEqual(packed, 8, "Packed item drops use the remaining budget");
+            var pending = save(restaurant).getList("deliveries", Tag.TAG_COMPOUND);
+            helper.assertValueEqual(pending.size(), 1, "A partially delivered order remains saved");
+            helper.assertValueEqual(pending.getCompound(0).getList("items", Tag.TAG_COMPOUND).getCompound(0).getInt("count"),
+                    12, "Only the undelivered stacks remain");
+            helper.runAfterDelay(1, () -> {
+                second.setPos(at.x, at.y, at.z);
+                call(Courier.class, second, "customServerAiStep", new Class<?>[0]);
+                int total = drops(helper, OneMoreCore.CARDBOARD_BOX_ITEM.get()).stream()
+                        .map(ItemEntity::getItem).map(stack -> stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY))
+                        .flatMap(ItemContainerContents::nonEmptyStream).mapToInt(ItemStack::getCount).sum();
+                helper.assertValueEqual(total, 20, "The next tick delivers the rest");
+                helper.assertTrue(save(restaurant).getList("deliveries", Tag.TAG_COMPOUND).isEmpty(), "Both orders completed");
+                helper.succeed();
+            });
+        });
     }
 
     private static Restaurant placeRestaurant(GameTestHelper helper) {

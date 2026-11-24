@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -35,19 +36,18 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
 
-/** Once dispatched, the saved courier owns the order independently of the sign and the delivery point. */
+/** A courier transports a paid order whose contents and progress belong to its restaurant. */
 public class Courier extends PathfinderMob {
-    private static final int ROUTE_TIMEOUT = 60 * 20;
+    static final int ROUTE_TIMEOUT = 60 * 20;
     private static final int SPAWN_DISTANCE = 8;
     private static final int NO_PATH_GRACE = 10;
     private static final EntityDataAccessor<Boolean> CARRYING =
             SynchedEntityData.defineId(Courier.class, EntityDataSerializers.BOOLEAN);
 
-    private final List<ItemStack> items = new ArrayList<>();
+    private UUID orderId;
     private BlockPos sign;
     private BlockPos start;
-    private BlockPos destination;
-    private boolean boxesOnly;
+    private BlockPos unroutableAt;
     private int travelTicks;
     private int noPathTicks;
 
@@ -76,24 +76,22 @@ public class Courier extends PathfinderMob {
         return entityData.get(CARRYING);
     }
 
-    static boolean dispatch(ServerLevel level, Restaurant restaurant, Restaurant.Delivery delivery) {
-        BlockPos target = delivery.destination == null ? restaurant.sign : delivery.destination;
+    static UUID dispatch(ServerLevel level, Restaurant restaurant, Restaurant.Delivery delivery) {
+        BlockPos target = delivery.target(restaurant.sign);
         BlockPos origin = restaurant.spawn();
         if (origin == null) origin = findSpawn(level, target, restaurant.area());
         if (origin == null) origin = level.isEmptyBlock(target) ? target : target.above();
-        if (!level.isLoaded(origin)) return false;
+        if (!level.isLoaded(origin)) return null;
 
         Courier courier = OneMoreCore.COURIER.get().create(level);
-        if (courier == null) return false;
+        if (courier == null) return null;
         courier.sign = restaurant.sign;
         courier.start = origin;
-        courier.destination = target;
-        courier.boxesOnly = delivery.destination == null;
-        delivery.items.forEach(stack -> courier.items.add(stack.copy()));
+        courier.orderId = delivery.id;
         courier.entityData.set(CARRYING, true);
         Vec3 at = Vec3.atBottomCenterOf(origin);
         courier.moveTo(at.x, at.y, at.z, 0, 0);
-        return level.addFreshEntity(courier);
+        return level.addFreshEntity(courier) ? courier.getUUID() : null;
     }
 
     private static BlockPos findSpawn(ServerLevel level, BlockPos target, BoundingBox area) {
@@ -114,48 +112,85 @@ public class Courier extends PathfinderMob {
     }
 
     @Override
-    protected void customServerAiStep() {
-        super.customServerAiStep();
-        if (!(level() instanceof ServerLevel level) || start == null) return;
-        boolean outbound = !items.isEmpty();
-        BlockPos target = outbound ? destination : start;
-        if ((outbound && level.isLoaded(target) && closeToDelivery(target))
-                || (!outbound && atStart(target))) {
-            if (outbound) {
-                deliver(level, target, !boxesOnly);
-                getNavigation().stop();
-                travelTicks = 0;
-                noPathTicks = 0;
-            } else {
+    public void tick() {
+        if (isNoAi() && orderId != null && level() instanceof ServerLevel level) {
+            Restaurant restaurant = Restaurants.get(level).at(sign);
+            if (restaurant == null || restaurant.courierOrder(orderId, getUUID()) == null) {
                 vanish(level);
-            }
-            return;
-        }
-        if (++travelTicks < ROUTE_TIMEOUT) {
-            if (getNavigation().isInProgress()) return;
-            Set<BlockPos> stops = new LinkedHashSet<>();
-            if (outbound) {
-                for (BlockPos pos : boxSpots(target)) if (canStand(level, pos)) stops.add(pos);
-                if (canStand(level, target.above())) stops.add(target.above());
-            } else if (level.isLoaded(target)) {
-                stops.add(target);
-            }
-            var path = stops.isEmpty() ? null : getNavigation().createPath(stops, 0);
-            if (path != null && path.canReach() && getNavigation().moveTo(path, 1.0)) {
-                noPathTicks = 0;
                 return;
             }
-            // On the first tick after spawning or loading, ground navigation can still see the courier as airborne.
-            if (++noPathTicks < NO_PATH_GRACE) return;
         }
+        super.tick();
+    }
+
+    @Override
+    protected void customServerAiStep() {
+        super.customServerAiStep();
+        if (!(level() instanceof ServerLevel level)) return;
+        if (start == null) {
+            vanish(level);
+            return;
+        }
+        Restaurant restaurant = Restaurants.get(level).at(sign);
+        Restaurant.Delivery order = restaurant == null ? null : restaurant.courierOrder(orderId, getUUID());
+        boolean outbound = orderId != null;
+        if (outbound && order == null) {
+            vanish(level);
+            return;
+        }
+        BlockPos target = outbound ? order.target(sign) : start;
         if (outbound) {
-            BlockPos here = blockPosition();
-            Restaurant restaurant = Restaurants.get(level).at(sign);
-            BoundingBox area = restaurant == null ? null : restaurant.area();
-            boolean nearArea = area == null ? here.distManhattan(sign) <= 1 : area.inflatedBy(1).isInside(here);
-            deliver(level, nearArea ? here : start, false);
+            long now = level.getGameTime();
+            if (now >= order.fallbackAt || !level.isLoaded(target)) {
+                getNavigation().stop();
+                return;
+            }
+            if (closeToDelivery(target) || unroutableAt != null) {
+                unloadOrder(level, restaurant, order, target);
+                return;
+            }
+        } else if (atStart(target) || ++travelTicks >= ROUTE_TIMEOUT) {
+            vanish(level);
+            return;
         }
-        vanish(level);
+        if (getNavigation().isInProgress()) return;
+        Set<BlockPos> stops = new LinkedHashSet<>();
+        if (outbound) {
+            for (BlockPos pos : boxSpots(target)) if (canStand(level, pos)) stops.add(pos);
+            if (canStand(level, target.above())) stops.add(target.above());
+        } else if (level.isLoaded(target)) {
+            stops.add(target);
+        }
+        var path = stops.isEmpty() ? null : getNavigation().createPath(stops, 0);
+        if (path != null && path.canReach() && getNavigation().moveTo(path, 1.0)) {
+            noPathTicks = 0;
+            return;
+        }
+        // On the first tick after spawning or loading, ground navigation can still see the courier as airborne.
+        if (++noPathTicks < NO_PATH_GRACE) return;
+        if (!outbound) {
+            vanish(level);
+            return;
+        }
+        BlockPos here = blockPosition();
+        BoundingBox area = restaurant.area();
+        boolean nearArea = area == null ? here.distManhattan(sign) <= 1 : area.inflatedBy(1).isInside(here);
+        unroutableAt = nearArea ? here : start;
+        unloadOrder(level, restaurant, order, target);
+    }
+
+    private void unloadOrder(ServerLevel level, Restaurant restaurant, Restaurant.Delivery order, BlockPos target) {
+        getNavigation().stop();
+        BlockPos at = unroutableAt != null && level.isLoaded(unroutableAt) ? unroutableAt : target;
+        boolean useContainer = at.equals(target) && order.destination != null;
+        if (!deliver(level, restaurant, order, at, useContainer, this)) return;
+        if (unroutableAt != null) {
+            vanish(level);
+        } else {
+            orderId = null;
+            entityData.set(CARRYING, false);
+            noPathTicks = 0;
+        }
     }
 
     private boolean closeToDelivery(BlockPos target) {
@@ -169,63 +204,53 @@ public class Courier extends PathfinderMob {
         return distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.5;
     }
 
-    private void deliver(ServerLevel level, BlockPos at, boolean useContainer) {
+    static boolean deliver(ServerLevel level, Restaurant restaurant, Restaurant.Delivery order, BlockPos at,
+            boolean useContainer, Courier courier) {
+        long now = level.getGameTime();
+        if (now < order.retryAt || restaurant.deliveryStacksLeft(now) == 0) return false;
         var container = useContainer ? Restaurant.container(level, at) : null;
-        if (container != null) {
-            items.replaceAll(stack -> {
-                while (!stack.isEmpty()) {
-                    ItemStack part = stack.split(stack.getMaxStackSize());
-                    ItemStack remainder = ItemHandlerHelper.insertItemStacked(container, part, false);
-                    if (!remainder.isEmpty()) {
-                        stack.grow(remainder.getCount());
-                        break;
-                    }
-                }
-                return stack;
-            });
-            items.removeIf(ItemStack::isEmpty);
+        List<ItemStack> parcel = new ArrayList<>();
+        boolean progressed = false;
+        for (var pending = order.items.iterator(); pending.hasNext();) {
+            ItemStack stack = pending.next();
+            while (!stack.isEmpty() && restaurant.takeDeliveryStack(now)) {
+                ItemStack part = stack.split(stack.getMaxStackSize());
+                ItemStack remainder = container == null ? part : ItemHandlerHelper.insertItemStacked(container, part, false);
+                if (!remainder.isEmpty()) parcel.add(remainder);
+                progressed = true;
+            }
+            if (!stack.isEmpty()) break;
+            pending.remove();
         }
-        leaveParcels(level, at);
+        if (!progressed) return false;
+        if (!parcel.isEmpty() && !leaveParcel(level, at, parcel, courier)) {
+            order.items.addAll(parcel);
+            order.retryAt = now + 20;
+        }
+        if (!restaurant.deliveryProgress(order)) return false;
 
         level.playSound(null, at, SoundEvents.WOOL_PLACE, SoundSource.BLOCKS, 0.75f, 0.85f);
-        Restaurant restaurant = Restaurants.get(level).at(sign);
-        if (restaurant != null && restaurant.area() != null) {
+        if (restaurant.area() != null) {
             for (var player : level.players()) {
                 if (restaurant.area().isInside(player.blockPosition()))
                     player.sendSystemMessage(Component.translatable("onemorecore.courier.arrived"));
             }
         }
+        return true;
     }
 
-    private void leaveParcels(ServerLevel level, BlockPos at) {
-        if (items.isEmpty()) return;
-        var spots = boxSpots(at).iterator();
-        var pending = items.iterator();
-        ItemStack stack = pending.next();
-        while (!stack.isEmpty()) {
-            List<ItemStack> parcel = new ArrayList<>(CardboardBoxBlockEntity.CAPACITY);
-            while (parcel.size() < CardboardBoxBlockEntity.CAPACITY && !stack.isEmpty()) {
-                parcel.add(stack.split(stack.getMaxStackSize()));
-                if (stack.isEmpty() && pending.hasNext()) stack = pending.next();
-            }
-            boolean placed = false;
-            while (spots.hasNext() && !placed) {
-                BlockPos pos = spots.next();
-                if (canPlace(level, pos) && level.getEntities(this, new AABB(pos), entity -> entity.isPickable()).isEmpty()
-                        && level.setBlock(pos, OneMoreCore.CARDBOARD_BOX.get().defaultBlockState()
-                                .setValue(CardboardBoxBlock.FACING, getDirection().getOpposite()), Block.UPDATE_ALL)
-                        && level.getBlockEntity(pos) instanceof CardboardBoxBlockEntity box) {
-                    for (int slot = 0; slot < parcel.size(); slot++) box.items.setItem(slot, parcel.get(slot));
-                    placed = true;
-                }
-            }
-            if (!placed) {
-                ItemStack packed = CardboardBoxBlockEntity.parcel(parcel);
-                if (!dropParcel(level, at, packed)) Restaurants.get(level).keepParcel(at, packed);
+    private static boolean leaveParcel(ServerLevel level, BlockPos at, List<ItemStack> parcel, Courier courier) {
+        Direction facing = courier == null ? Direction.NORTH : courier.getDirection().getOpposite();
+        for (BlockPos pos : boxSpots(at)) {
+            if (canPlace(level, pos) && level.getEntities(courier, new AABB(pos), Entity::isPickable).isEmpty()
+                    && level.setBlock(pos, OneMoreCore.CARDBOARD_BOX.get().defaultBlockState()
+                            .setValue(CardboardBoxBlock.FACING, facing), Block.UPDATE_ALL)
+                    && level.getBlockEntity(pos) instanceof CardboardBoxBlockEntity box) {
+                for (int slot = 0; slot < parcel.size(); slot++) box.items.setItem(slot, parcel.get(slot));
+                return true;
             }
         }
-        items.clear();
-        entityData.set(CARRYING, false);
+        return dropParcel(level, at, CardboardBoxBlockEntity.parcel(parcel));
     }
 
     private static List<BlockPos> boxSpots(BlockPos center) {
@@ -318,36 +343,27 @@ public class Courier extends PathfinderMob {
     }
 
     @Override
-    public void remove(RemovalReason reason) {
-        if (!isRemoved() && reason.shouldDestroy() && level() instanceof ServerLevel level)
-            leaveParcels(level, blockPosition());
-        super.remove(reason);
-    }
-
-    @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         if (start == null) return;
         tag.putLong("sign", sign.asLong());
         tag.putLong("start", start.asLong());
-        tag.putLong("destination", destination.asLong());
-        tag.putBoolean("boxes_only", boxesOnly);
+        if (orderId != null) tag.putUUID("order", orderId);
+        else tag.putBoolean("returning", true);
+        if (unroutableAt != null) tag.putLong("unroutable_at", unroutableAt.asLong());
         tag.putInt("travel_ticks", travelTicks);
-        tag.put("parcel", saveOrder(items, registryAccess()));
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
-        if (!tag.contains("start", Tag.TAG_LONG)) return;
+        if (!tag.contains("start", Tag.TAG_LONG) || !tag.hasUUID("order") && !tag.getBoolean("returning")) return;
         sign = BlockPos.of(tag.getLong("sign"));
         start = BlockPos.of(tag.getLong("start"));
-        destination = BlockPos.of(tag.getLong("destination"));
-        boxesOnly = tag.getBoolean("boxes_only");
+        orderId = tag.hasUUID("order") ? tag.getUUID("order") : null;
+        unroutableAt = tag.contains("unroutable_at", Tag.TAG_LONG) ? BlockPos.of(tag.getLong("unroutable_at")) : null;
         travelTicks = tag.getInt("travel_ticks");
-        items.clear();
-        items.addAll(loadOrder(tag.getList("parcel", Tag.TAG_COMPOUND), registryAccess()));
-        entityData.set(CARRYING, !items.isEmpty());
+        entityData.set(CARRYING, orderId != null);
     }
 
     static ListTag saveOrder(List<ItemStack> stacks, HolderLookup.Provider registries) {

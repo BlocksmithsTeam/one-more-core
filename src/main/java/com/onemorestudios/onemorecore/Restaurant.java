@@ -261,6 +261,9 @@ public class Restaurant {
     final List<Menu.Entry> custom = new ArrayList<>();
     BlockPos delivery;
     final List<Delivery> deliveries = new ArrayList<>();
+    private long lastDispatchTick = Long.MIN_VALUE;
+    private long deliveryBudgetTick = Long.MIN_VALUE;
+    private int deliveryBudget;
     /** Dirty serving surfaces and their dirty cells, see {@link Dirt}. */
     final Map<BlockPos, Long> dirt = new HashMap<>();
 
@@ -608,14 +611,24 @@ public class Restaurant {
 
     /** A paid shop order that is on its way. */
     static final class Delivery {
+        final UUID id;
         final List<ItemStack> items;
         final BlockPos destination;
         int ticks;
+        long fallbackAt;
+        long retryAt;
+        UUID courierId;
+        boolean standIn;
 
-        Delivery(List<ItemStack> items, int ticks, BlockPos destination) {
-            this.items = items;
+        Delivery(UUID id, List<ItemStack> items, int ticks, BlockPos destination) {
+            this.id = id;
+            this.items = new ArrayList<>(items);
             this.ticks = ticks;
             this.destination = destination;
+        }
+
+        BlockPos target(BlockPos sign) {
+            return destination == null ? sign : destination;
         }
     }
 
@@ -636,7 +649,7 @@ public class Restaurant {
         }
         if (items.isEmpty()) return Buy.OK;
         register -= (int) total;
-        deliveries.add(new Delivery(items, deliveryTicks(), delivery.immutable()));
+        deliveries.add(new Delivery(UUID.randomUUID(), items, deliveryTicks(), delivery.immutable()));
         owner.setDirty();
         return Buy.OK;
     }
@@ -652,18 +665,71 @@ public class Restaurant {
     }
 
     private void tickDeliveries(ServerLevel level) {
-        for (Iterator<Delivery> it = deliveries.iterator(); it.hasNext();) {
-            Delivery delivery = it.next();
-            if (!level.isLoaded(delivery.destination == null ? sign : delivery.destination)) continue;
+        long now = level.getGameTime();
+        for (Delivery delivery : List.copyOf(deliveries)) {
             if (delivery.ticks > 0) {
                 delivery.ticks--;
                 owner.setDirty();
+                if (delivery.ticks > 0) continue;
             }
-            if (delivery.ticks == 0 && Courier.dispatch(level, this, delivery)) {
-                it.remove();
+            if (delivery.fallbackAt == 0) {
+                delivery.fallbackAt = now + Courier.ROUTE_TIMEOUT;
                 owner.setDirty();
             }
+            if (now < delivery.retryAt) continue;
+            BlockPos target = delivery.target(sign);
+            boolean loaded = level.isLoaded(target);
+            if (!loaded || now >= delivery.fallbackAt) useStandIn(level, delivery);
+            if (!loaded) {
+                delivery.retryAt = now + 20;
+                continue;
+            }
+            if (!delivery.standIn) {
+                if (delivery.courierId != null && level.getEntity(delivery.courierId) instanceof Courier) continue;
+                if (lastDispatchTick == now) continue;
+                lastDispatchTick = now;
+                delivery.courierId = Courier.dispatch(level, this, delivery);
+                owner.setDirty();
+                if (delivery.courierId != null) continue;
+                useStandIn(level, delivery);
+            }
+            Courier.deliver(level, this, delivery, target, delivery.destination != null, null);
         }
+    }
+
+    private void useStandIn(ServerLevel level, Delivery delivery) {
+        if (delivery.standIn) return;
+        delivery.standIn = true;
+        if (delivery.courierId != null && level.getEntity(delivery.courierId) instanceof Courier courier)
+            courier.discard();
+        delivery.courierId = null;
+        owner.setDirty();
+    }
+
+    Delivery courierOrder(UUID orderId, UUID courierId) {
+        for (Delivery delivery : deliveries)
+            if (delivery.id.equals(orderId) && courierId.equals(delivery.courierId)) return delivery;
+        return null;
+    }
+
+    int deliveryStacksLeft(long now) {
+        if (now != deliveryBudgetTick) {
+            deliveryBudgetTick = now;
+            deliveryBudget = 16;
+        }
+        return deliveryBudget;
+    }
+
+    boolean takeDeliveryStack(long now) {
+        if (deliveryStacksLeft(now) == 0) return false;
+        deliveryBudget--;
+        return true;
+    }
+
+    boolean deliveryProgress(Delivery delivery) {
+        if (delivery.items.isEmpty()) deliveries.remove(delivery);
+        owner.setDirty();
+        return delivery.items.isEmpty();
     }
 
     /** Takes up to max money from the register, like one click on a storage drawer. */
@@ -832,11 +898,11 @@ public class Restaurant {
         // Hidden chunks can unload entities without calling Customer.remove or a second tracking callback.
         for (Customer c : List.copyOf(customers)) if (c.isRemoved()) c.removeFromRestaurant();
         if (level.getGameTime() % 10 == 5) sendScreens(level);
+        tickDeliveries(level);
         if (!level.isLoaded(sign)) return;
         BlockState state = level.getBlockState(sign);
         if (!state.is(OneMoreCore.OPEN_SIGN)) return;
         recoverInterruptedBills(level);
-        tickDeliveries(level);
         if (state.getValue(OpenSignBlock.OPEN) != open) level.setBlockAndUpdate(sign, state.setValue(OpenSignBlock.OPEN, open));
         if (!open && readyCheckActive) tickReadyCheck(level);
         if (area != null && level.getGameTime() % 10 == 0) sendStatus(level);
@@ -1524,8 +1590,12 @@ public class Restaurant {
         ListTag pending = new ListTag();
         for (Delivery d : deliveries) {
             CompoundTag t = new CompoundTag();
+            t.putUUID("id", d.id);
             t.put("items", Courier.saveOrder(d.items, owner.registries));
             t.putInt("ticks", d.ticks);
+            if (d.fallbackAt != 0) t.putLong("fallback_at", d.fallbackAt);
+            if (d.courierId != null) t.putUUID("courier", d.courierId);
+            if (d.standIn) t.putBoolean("stand_in", true);
             if (d.destination != null) t.putLong("destination", d.destination.asLong());
             pending.add(t);
         }
@@ -1631,7 +1701,14 @@ public class Restaurant {
             List<ItemStack> items = d.contains("items", Tag.TAG_LIST)
                     ? Courier.loadOrder(d.getList("items", Tag.TAG_COMPOUND), owner.registries)
                     : Courier.readLine(d, owner.registries).map(List::of).orElseGet(List::of);
-            if (!items.isEmpty()) r.deliveries.add(new Delivery(items, Math.max(0, d.getInt("ticks")), destination));
+            if (!items.isEmpty()) {
+                var order = new Delivery(d.hasUUID("id") ? d.getUUID("id") : UUID.randomUUID(),
+                        items, Math.max(0, d.getInt("ticks")), destination);
+                order.fallbackAt = d.getLong("fallback_at");
+                if (d.hasUUID("courier")) order.courierId = d.getUUID("courier");
+                order.standIn = d.getBoolean("stand_in");
+                r.deliveries.add(order);
+            }
         }
         long[] d = tag.getLongArray("dirt");
         for (int i = 0; i + 1 < d.length; i += 2) {

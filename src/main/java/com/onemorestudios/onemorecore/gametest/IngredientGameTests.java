@@ -1,8 +1,10 @@
 package com.onemorestudios.onemorecore.gametest;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 
 import com.onemorestudios.onemorecore.Computer;
 import com.onemorestudios.onemorecore.Config;
@@ -16,6 +18,7 @@ import com.onemorestudios.onemorecore.Shop;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.NonNullList;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -27,7 +30,13 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.CraftingBookCategory;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.ShapelessRecipe;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -39,6 +48,56 @@ public final class IngredientGameTests {
     private static final BlockPos SIGN = new BlockPos(1, 1, 1);
     private static final BlockPos COMPUTER = SIGN.south();
     private static final ResourceLocation WHEAT = id("wheat");
+
+    @GameTest(template = "empty")
+    public static void unreadableRecipesRequireAnOverride(GameTestHelper helper) throws ReflectiveOperationException {
+        var recipes = List.of(
+                recipe("hidden", Items.COOKED_COD),
+                recipe("hidden_intermediate", Items.SUGAR),
+                recipe("with_intermediate", Items.PUMPKIN_PIE, Ingredient.of(Items.PUMPKIN), Ingredient.of(Items.SUGAR)),
+                recipe("filtered_slot", Items.BREAD, Ingredient.of(Items.EGG)),
+                recipe("free_slot", Items.MUSHROOM_STEW, Ingredient.of(Items.BOWL)),
+                recipe("readable_alternate", Items.COOKED_CHICKEN, Ingredient.of(Items.WHEAT)),
+                recipe("unreadable_alternate", Items.COOKED_CHICKEN));
+        var ingredients = Class.forName("com.onemorestudios.onemorecore.Ingredients");
+        var config = Class.forName("com.onemorestudios.onemorecore.IngredientConfig");
+        var parse = config.getDeclaredMethod("parse", String.class);
+        parse.setAccessible(true);
+        var constructor = ingredients.getDeclaredConstructor(Collection.class, config, List.class, HolderLookup.Provider.class);
+        constructor.setAccessible(true);
+        var availability = ingredients.getDeclaredMethod("availability", Set.class);
+        availability.setAccessible(true);
+        var rules = parse.invoke(null, """
+                {"free":["minecraft:bowl"],"ignore":["minecraft:egg"]}
+                """);
+        var index = constructor.newInstance(recipes, rules, List.of(), helper.getLevel().registryAccess());
+        var access = availability.invoke(index, Set.of(id("egg"), id("pumpkin")));
+        var dish = access.getClass().getDeclaredMethod("dish", ResourceLocation.class);
+        dish.setAccessible(true);
+        helper.assertFalse((boolean) dish.invoke(access, id("cooked_cod")), "An empty ingredient list keeps the dish locked");
+        helper.assertFalse((boolean) dish.invoke(access, id("pumpkin_pie")), "An unreadable intermediate is unavailable");
+        helper.assertFalse((boolean) dish.invoke(access, id("bread")), "A slot with only ignored candidates stays locked after a config change");
+        helper.assertTrue((boolean) dish.invoke(access, id("mushroom_stew")), "A slot with only a free candidate is satisfied");
+        helper.assertFalse((boolean) dish.invoke(access, id("cooked_chicken")), "An unreadable alternative cannot bypass a readable recipe");
+        helper.assertTrue((boolean) dish.invoke(availability.invoke(index, Set.of(WHEAT)), id("cooked_chicken")),
+                "A readable alternative can still unlock the dish");
+
+        var corrected = parse.invoke(null, """
+                {"dishes":{"minecraft:cooked_cod":["minecraft:cod"],"minecraft:bread":["#onemorecore:missing"]}}
+                """);
+        var correctedIndex = constructor.newInstance(recipes, corrected, List.of(), helper.getLevel().registryAccess());
+        var correctedAccess = availability.invoke(correctedIndex, Set.of(id("cod")));
+        helper.assertTrue((boolean) dish.invoke(correctedAccess, id("cooked_cod")), "An explicit ingredient override unlocks the dish");
+        helper.assertFalse((boolean) dish.invoke(correctedAccess, id("bread")), "An empty override tag keeps the dish locked");
+        helper.succeed();
+    }
+
+    private static RecipeHolder<?> recipe(String name, Item result, Ingredient... slots) {
+        var ingredients = NonNullList.<Ingredient>create();
+        ingredients.addAll(List.of(slots));
+        return new RecipeHolder<>(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, name),
+                new ShapelessRecipe("", CraftingBookCategory.MISC, new ItemStack(result), ingredients));
+    }
 
     @GameTest(template = "empty")
     public static void breadRequiresWheat(GameTestHelper helper) {
