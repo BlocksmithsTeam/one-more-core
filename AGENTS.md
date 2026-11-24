@@ -74,6 +74,8 @@ change how one of them works, change its lines here in the same commit.
   it touches now (`WipingBehavior`); the server cleans every cell on the way and its neighbours (`Restaurant.wipeCells` with two
   ends, a stroke longer than a block counts as its end only), so the dirt goes as soon as the cloth passes. Test:
   `MoneyGameTests.strokeWipesEveryCellOnItsWay`.
+- **Order bubble**: a named customer (a chat viewer) shows its name in a row on top of the bubble, over a thin line, while the
+  bubble shows; the vanilla name tag is hidden then (`CustomerRenderer.renderBubble`, `renderNameTag`).
 - **Table Number card**: its place on the block is saved as `offset_x`/`offset_z` (a block entity's save writes its own
   position as `x`, `y`, `z`; never use those names in a block entity). Test: `ModelGameTests.tableNumberOffsetSurvivesSave`.
 - **Day start**: no title or status text from the server; each client darkens the screen with "Day N" and a chime when

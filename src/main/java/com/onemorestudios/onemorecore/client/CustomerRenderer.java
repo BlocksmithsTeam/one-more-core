@@ -174,9 +174,11 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         return skin == null ? fallback : skin;
     }
 
-    // The vanilla name tag is at the height of the patience bar. This puts it above the order icons.
+    // The vanilla name tag is at the height of the patience bar. This puts it above the order icons. While the order bubble
+    // shows, the name is in the bubble's top row instead (renderBubble).
     @Override
     protected void renderNameTag(Customer customer, Component name, PoseStack pose, MultiBufferSource buffers, int light, float partialTick) {
+        if (showsBubble(customer)) return;
         pose.pushPose();
         pose.translate(0, 0.75, 0);
         super.renderNameTag(customer, name, pose, buffers, light, partialTick);
@@ -204,22 +206,45 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
      * A speech bubble above the head: a "!" while the customer waits for a player to take the order, then the ordered
      * items. A patience bar at the bottom of the bubble.
      */
-    private void renderBubble(Customer customer, PoseStack pose, MultiBufferSource buffers) {
+    private static boolean showsBubble(Customer customer) {
         Customer.State state = customer.getState();
-        if (state != Customer.State.WAITING_ORDER && state != Customer.State.WAITING_FOOD) return;
+        return state == Customer.State.WAITING_ORDER || state == Customer.State.WAITING_FOOD;
+    }
+
+    /** The name row on top of the bubble (a chat viewer's name), in blocks, and the size of its letters. */
+    private static final float NAME_H = 0.2f, NAME_SCALE = 0.018f;
+    private static final int NAME_MAX_PX = 150, NAME_COLOR = 0xFFFFE2A0;
+
+    private void renderBubble(Customer customer, PoseStack pose, MultiBufferSource buffers) {
+        if (!showsBubble(customer)) return;
         List<ItemStack> order = customer.getOrder();
         int slots = Math.max(1, order.size());
         float half = Math.max(CAP, (slots * SLOT + 0.16f) / 2);
+        // A named customer (a chat viewer) has its name in a row on top of the bubble; the bubble grows up for it.
+        Font nameFont = getFont();
+        String name = customer.hasCustomName() ? customer.getCustomName().getString() : "";
+        if (nameFont.width(name) > NAME_MAX_PX) name = nameFont.plainSubstrByWidth(name, NAME_MAX_PX - nameFont.width("...")) + "...";
+        float nameH = name.isEmpty() ? 0 : NAME_H;
+        if (!name.isEmpty()) half = Math.max(half, nameFont.width(name) * NAME_SCALE / 2 + 0.14f);
         pose.pushPose();
         pose.translate(0, customer.getBbHeight() + 0.75, 0);
         pose.mulPose(entityRenderDispatcher.cameraOrientation());
         Matrix4f m = pose.last().pose();
         VertexConsumer vc = buffers.getBuffer(RenderType.text(BUBBLE));
-        float top = BODY_H / 2, bottom = -BODY_H / 2, z = -0.04f;
+        float top = BODY_H / 2, bottom = -BODY_H / 2, z = -0.04f, outer = top + nameH;
         // Body: left cap, stretched middle, right cap. Tail under the middle.
-        quad(vc, m, -half, bottom, -half + CAP, top, z, 0, 0, 8, 20, 0xFFFFFFFF);
-        quad(vc, m, -half + CAP, bottom, half - CAP, top, z, 8, 0, 24, 20, 0xFFFFFFFF);
-        quad(vc, m, half - CAP, bottom, half, top, z, 24, 0, 32, 20, 0xFFFFFFFF);
+        quad(vc, m, -half, bottom, -half + CAP, outer, z, 0, 0, 8, 20, 0xFFFFFFFF);
+        quad(vc, m, -half + CAP, bottom, half - CAP, outer, z, 8, 0, 24, 20, 0xFFFFFFFF);
+        quad(vc, m, half - CAP, bottom, half, outer, z, 24, 0, 32, 20, 0xFFFFFFFF);
+        if (!name.isEmpty()) {
+            // A thin line under the name parts it from the order.
+            quad(vc, m, -half + 0.1f, top - 0.005f, half - 0.1f, top + 0.005f, z + 0.005f, 28, 28, 32, 32, 0x40FFFFFF);
+            pose.pushPose();
+            pose.translate(0, top + nameH / 2 + 4.5f * NAME_SCALE - 0.01f, 0);
+            pose.scale(NAME_SCALE, -NAME_SCALE, NAME_SCALE);
+            nameFont.drawInBatch(name, -nameFont.width(name) / 2f, 0, NAME_COLOR, false, pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
+            pose.popPose();
+        }
         quad(vc, m, -CAP / 2, bottom - CAP, CAP / 2, bottom, z, 12, 20, 20, 28, 0xFFFFFFFF);
         // Patience bar: a dark track and a coloured fill, from red (0) over yellow to green (1).
         float left = Mth.clamp(customer.getPatience(), 0, 1);
@@ -239,7 +264,7 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
             int color = guest == Customer.Type.VIP ? 0xFFFFD24A : guest == Customer.Type.REGULAR ? 0xFFFF6B7A : 0xFF8FD3FF;
             Font font = getFont();
             pose.pushPose();
-            pose.translate(-half + 0.06f, top - 0.03f, 0);
+            pose.translate(-half + 0.06f, outer - 0.03f, 0);
             pose.scale(0.022f, -0.022f, 0.022f);
             font.drawInBatch(mark, 0, 0, color, false, pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
             pose.popPose();
