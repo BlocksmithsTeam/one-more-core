@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.EncoderException;
@@ -132,7 +133,8 @@ public class Computer extends Block {
         static IngredientData capped(RegistryAccess registries, List<IngredientLine> ingredients, List<LockedDish> dishes) {
             var listed = withinBudget(registries, ingredients, IngredientLine.CODEC, LIST_BUDGET);
             var locked = withinBudget(registries, dishes, LockedDish.CODEC, LIST_BUDGET);
-            return new IngredientData(listed, locked, ingredients.size() - listed.size(), dishes.size() - locked.size());
+            return new IngredientData(List.copyOf(listed), List.copyOf(locked),
+                    ingredients.size() - listed.size(), dishes.size() - locked.size());
         }
     }
 
@@ -155,7 +157,7 @@ public class Computer extends Block {
      * lines of the manager app. "area" is empty or {minX, minY, minZ, maxX, maxY, maxZ}; sign, spawn and delivery are
      * there for the manager app's free camera.
      */
-    public record State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance,
+    public record State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, int day,
             List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message,
             Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
             List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades,
@@ -164,7 +166,7 @@ public class Computer extends Block {
         public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, List<MenuLine> menu, List<ShopLine> shop,
                 List<Component> info, Component message, Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
                 List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades) {
-            this(pos, open, found, apps, currency, balance, menu, shop, info, message, sign, area, spawn, delivery, combos, surfaces, offSurfaces, upgrades, List.of(), Optional.empty());
+            this(pos, open, found, apps, currency, balance, 0, menu, shop, info, message, sign, area, spawn, delivery, combos, surfaces, offSurfaces, upgrades, List.of(), Optional.empty());
         }
         public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, List<MenuLine> menu, List<ShopLine> shop,
                 List<Component> info, Component message, Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
@@ -186,6 +188,7 @@ public class Computer extends Block {
             b.writeVarInt(s.apps);
             ItemStack.OPTIONAL_STREAM_CODEC.encode(b, s.currency);
             b.writeVarInt(s.balance);
+            b.writeVarInt(s.day);
             MenuLine.CODEC.apply(ByteBufCodecs.list()).encode(b, s.menu);
             ShopLine.CODEC.apply(ByteBufCodecs.list()).encode(b, s.shop);
             ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(b, s.info);
@@ -200,7 +203,7 @@ public class Computer extends Block {
             UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).encode(b, s.upgrades);
             ByteBufCodecs.stringUtf8(256).apply(ByteBufCodecs.list(8)).encode(b, s.stream);
             ByteBufCodecs.optional(IngredientData.CODEC).encode(b, s.ingredientData);
-        }, b -> new State(b.readBlockPos(), b.readBoolean(), b.readBoolean(), b.readVarInt(), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(),
+        }, b -> new State(b.readBlockPos(), b.readBoolean(), b.readBoolean(), b.readVarInt(), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(), b.readVarInt(),
                 MenuLine.CODEC.apply(ByteBufCodecs.list()).decode(b), ShopLine.CODEC.apply(ByteBufCodecs.list()).decode(b),
                 ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(b), ComponentSerialization.STREAM_CODEC.decode(b),
                 OPTIONAL_POS.decode(b), INTS.decode(b), OPTIONAL_POS.decode(b), OPTIONAL_POS.decode(b),
@@ -306,7 +309,7 @@ public class Computer extends Block {
     static void playerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) { SESSIONS.remove(event.getEntity()); }
 
     static void registerPayloads(RegisterPayloadHandlersEvent event) {
-        event.registrar("3")
+        event.registrar("4")
                 // The handler runs on the client only, so the client class is not loaded on a dedicated server.
                 .playToClient(State.TYPE, State.CODEC, (state, context) -> com.onemorestudios.onemorecore.client.ComputerCamera.receive(state))
                 .playToClient(CheckoutResult.TYPE, CheckoutResult.CODEC, (result, context) -> com.onemorestudios.onemorecore.client.ComputerCamera.receive(result))
@@ -589,7 +592,7 @@ public class Computer extends Block {
                 for (BlockPos p : all) { surfaces.add(p); if (!on) off.add(p); }
             }
         }
-        return new State(pos, open, true, apps, currency, r.register(),
+        return new State(pos, open, true, apps, currency, r.register(), r.day(),
                 withinBudget(registries, menu, MenuLine.CODEC, 256 * 1024),
                 withinBudget(registries, shop, ShopLine.CODEC, 256 * 1024), info, message, Optional.of(r.sign),
                 a == null ? List.of() : List.of(a.minX(), a.minY(), a.minZ(), a.maxX(), a.maxY(), a.maxZ()),
@@ -600,14 +603,36 @@ public class Computer extends Block {
                     int lv = r.upgrade(id);
                     return new UpgradeLine(id, lv, costs.size(), lv < costs.size() ? costs.get(lv) : 0);
                 }).toList(),
-                stream(), menuRequest ? Optional.of(ingredientData(registries, r, dishes)) : Optional.empty());
+                stream(), menuRequest ? Optional.of(ingredientData(registries, r, dishes, menu)) : Optional.empty());
     }
 
-    private static IngredientData ingredientData(RegistryAccess registries, Restaurant r, List<Menu.Entry> dishes) {
-        Ingredients index = Ingredients.current();
+    private record DishSettings(boolean on, String kind) {}
+    private record IngredientMenuKey(Ingredients index, Set<ResourceLocation> unlocked,
+            List<Menu.Entry> dishes, List<DishSettings> settings) {}
+    private record CachedIngredientData(IngredientMenuKey key, IngredientData data) {}
+
+    // Accessed on the server thread. Weak keys let removed restaurants and stopped worlds release their data.
+    private static final Map<Restaurant, CachedIngredientData> INGREDIENT_MENUS = new WeakHashMap<>();
+    private static long ingredientMenuComputations; // GameTest hook
+
+    private static IngredientData ingredientData(RegistryAccess registries, Restaurant r, List<Menu.Entry> dishes, List<MenuLine> menu) {
+        // The index is replaced when recipes, tags or ingredients.json are reloaded.
+        var key = new IngredientMenuKey(Ingredients.current(), r.unlockedIngredients(), dishes,
+                menu.stream().map(line -> new DishSettings(line.on(), line.kind())).toList());
+        var cached = INGREDIENT_MENUS.get(r);
+        if (cached != null && cached.key.equals(key)) return cached.data;
+
+        var data = computeIngredientData(registries, r, key);
+        INGREDIENT_MENUS.put(r, new CachedIngredientData(key, data));
+        return data;
+    }
+
+    private static IngredientData computeIngredientData(RegistryAccess registries, Restaurant r, IngredientMenuKey inputs) {
+        ingredientMenuComputations++;
+        Ingredients index = inputs.index;
         var availability = r.ingredientAvailability();
-        var unlocked = r.unlockedIngredients();
-        List<Menu.Entry> locked = dishes.stream().filter(e -> !r.ingredientsAvailable(e)).toList();
+        var unlocked = inputs.unlocked;
+        List<Menu.Entry> locked = inputs.dishes.stream().filter(e -> !r.ingredientsAvailable(e)).toList();
         Map<ResourceLocation, List<Menu.Entry>> lockedByItem = new HashMap<>();
         for (Menu.Entry dish : locked) {
             if (!r.isOn(dish)) continue;
