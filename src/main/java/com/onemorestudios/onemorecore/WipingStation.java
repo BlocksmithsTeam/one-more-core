@@ -56,7 +56,9 @@ public final class WipingStation implements StationLogic {
             if (r != null) r.collect(cl, player, station.pos());
             return;
         }
+        // The stroke rate first: the checks after it search the table.
         if (!"wipe".equals(action) || !(station.level() instanceof ServerLevel level)
+                || level.getGameTime() - lastWipe.getOrDefault(player.getUUID(), level.getGameTime() - 1) < 1
                 || player.level() != level || !station.users().contains(player)
                 || !opens(player, station.pos(), station.blockState())
                 || !data.contains("x", Tag.TAG_FLOAT) || !data.contains("z", Tag.TAG_FLOAT)) return;
@@ -75,9 +77,7 @@ public final class WipingStation implements StationLogic {
         // A stroke longer than a block in one tick is a jump, not a wipe: only its end counts.
         int sx = pos.getX() * 8 + (int) Math.floor(x0 / 2), sz = pos.getZ() * 8 + (int) Math.floor(z0 / 2);
         if (Math.max(Math.abs(sx - cx), Math.abs(sz - cz)) > 8) { sx = cx; sz = cz; }
-        long now = level.getGameTime();
-        if (now - lastWipe.getOrDefault(player.getUUID(), now - 1) < 1) return;
-        lastWipe.put(player.getUUID(), now);
+        lastWipe.put(player.getUUID(), level.getGameTime());
         r.wipeCells(level, table, sx, sz, cx, cz, new Vec3(cx / 8.0 + 1 / 16.0, pos.getY() + Dirt.top(level, pos), cz / 8.0 + 1 / 16.0));
     }
 

@@ -1472,7 +1472,11 @@ public class Restaurant {
     boolean wipeCells(ServerLevel level, Set<BlockPos> table, int x0, int z0, int x1, int z1, Vec3 hit) {
         boolean changed = false;
         int steps = Math.max(Math.abs(x1 - x0), Math.abs(z1 - z0));
+        // Only the blocks under the stroke (and its 1-cell border) can change.
+        int bx0 = Math.floorDiv(Math.min(x0, x1) - 1, 8), bx1 = Math.floorDiv(Math.max(x0, x1) + 1, 8);
+        int bz0 = Math.floorDiv(Math.min(z0, z1) - 1, 8), bz1 = Math.floorDiv(Math.max(z0, z1) + 1, 8);
         for (BlockPos p : table) {
+            if (p.getX() < bx0 || p.getX() > bx1 || p.getZ() < bz0 || p.getZ() > bz1) continue;
             Long cells = dirt.get(p);
             if (cells == null) continue;
             long left = cells;

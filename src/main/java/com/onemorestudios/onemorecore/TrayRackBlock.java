@@ -140,11 +140,15 @@ public class TrayRackBlock extends Block {
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
 
-    /** An empty tray goes on the free level nearest the click; a full rack or a tray with dishes on it is refused. */
+    /**
+     * An empty tray goes on the free level nearest the click; a full rack, or a tray with dishes or a ticket on it, is refused
+     * (a level keeps only the tray's kind).
+     */
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
         Slot kind = Slot.of(stack);
-        if (kind == Slot.EMPTY || stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).nonEmptyItems().iterator().hasNext())
+        if (kind == Slot.EMPTY || stack.has(OneMoreCore.TRAY_TICKET.get())
+                || stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).nonEmptyItems().iterator().hasNext())
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         int i = nearest(state, (hit.getLocation().y - pos.getY()) * 16, false);
         if (i < 0) {
