@@ -442,9 +442,7 @@ public class Customer extends PathfinderMob {
         if (held.getItem() instanceof TrayItem) {
             TrayItem.returnOverflow(player, held);
             if (!wants(held)) return false;
-            // Only the first tray lies on the table as it was: the dishes of a second tray would be drawn on top of it.
-            boolean layout = getServed().stream().noneMatch(s -> s.has(OneMoreCore.TRAY_POSES.get()));
-            TrayItem.serveDishes(held, this::wants, (dish, at) -> serve(player, dish, layout ? at : null));
+            TrayItem.serveDishes(held, this::wants, (dish, at) -> serve(player, dish, at));
             checkServed();
             return true;
         }
@@ -460,8 +458,8 @@ public class Customer extends PathfinderMob {
     }
 
     /**
-     * Serves one item of the stack (the stack itself is not changed). From a tray (at: its pose there) the item keeps that
-     * pose on the table: the served copy carries it as its tray_poses component (CustomerRenderer.renderServed).
+     * Serves one item of the stack (the stack itself is not changed). From a tray (at: its pose there) the served copy
+     * carries that pose as its tray_poses component: on the table it keeps its turn and size (CustomerRenderer.renderServed).
      */
     private void serve(Player player, ItemStack held, TrayPose at) {
         Line line = wanted.stream().filter(l -> l.matches(held)).findFirst().orElseThrow();

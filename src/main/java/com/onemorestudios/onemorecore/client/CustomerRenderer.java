@@ -12,7 +12,6 @@ import com.onemorestudios.onemorecore.Config;
 import com.onemorestudios.onemorecore.Customer;
 import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.TrayPose;
-import com.onemorestudios.onemorecore.compat.GrillingSkewers;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -39,7 +38,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Matrix4f;
-import org.joml.Quaternionf;
 
 /** A player model with a default skin, the patience bar, the order icons and the served food. */
 public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<Customer>> {
@@ -337,83 +335,29 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         double dx = x / len, dz = z / len;
         float facing = (float) (Mth.atan2(dx, dz) * Mth.RAD_TO_DEG);
         int light = LevelRenderer.getLightColor(customer.level(), surface.above());
+        // foodScale (config) sizes every served dish; 1 is its size on the tray.
         float scale = Config.FOOD_SCALE.get().floatValue();
-        // Food served on a tray stays as it was put on the tray: the tray's bed lies on the table in front of the guest, its
-        // front (the label's side, where the player stood to fill it) towards the guest.
-        for (int i = 0; i < served.size(); i++) {
-            List<TrayPose> at = served.get(i).get(OneMoreCore.TRAY_POSES.get());
-            if (at == null || at.isEmpty()) continue;
+        // Every served dish lies as a tray holds it: the turn and size it had on the tray (a dish from the hand: the tray's
+        // rest pose), not its place. The dishes stand in one row across the guest's place, the first (the main dish, as the
+        // server puts it first) in the middle, each on the bed (not stacked); the row is laid out like a tray's bed, its front
+        // towards the guest.
+        for (int i = 0; i < served.size() && i < ROW.length; i++) {
+            ItemStack dish = served.get(i);
+            List<TrayPose> at = dish.get(OneMoreCore.TRAY_POSES.get());
+            TrayPose rest = TrayPose.legacy(0);
+            TrayPose own = at == null || at.isEmpty() ? rest : at.get(0);
+            TrayPose place = new TrayPose(ROW[i], rest.y(), rest.z(), own.lift(), own.rotation(), own.scale() * scale, -1, own.wanted());
             pose.pushPose();
             pose.translate(x - dx * TRAY_IN, y - TrayPose.BED / 16f, z - dz * TRAY_IN);
             pose.mulPose(Axis.YP.rotationDegrees(facing));
             pose.translate(-0.5, 0, -0.5);
-            TrayRenderer.drawDish(served.get(i), at.get(0), pose, buffers, light, customer.getId() + i);
-            pose.popPose();
-        }
-        // Food from the hand: the first item (the main dish, as the server puts it first) stands big right in front of the
-        // guest; the others are smaller, to the left and right of it and a little further in.
-        List<ItemStack> loose = served.stream().filter(s -> !s.has(OneMoreCore.TRAY_POSES.get())).toList();
-        for (int i = 0; i < loose.size(); i++) {
-            ItemStack stack = loose.get(i);
-            int k = i == 0 ? 0 : (i + 1) / 2 * (i % 2 == 1 ? 1 : -1);
-            double side = k * 0.27, in = i == 0 ? 0.22 : 0.08;
-            pose.pushPose();
-            pose.translate(x - dx * in - dz * side, y, z - dz * in + dx * side);
-            pose.mulPose(Axis.YP.rotationDegrees(facing));
-            renderFood(stack, customer.level(), pose, buffers, light, scale * (i == 0 ? 1.15f : 0.75f), customer.getId() + i);
+            TrayRenderer.drawDish(dish, place, pose, buffers, light, customer.getId() + i);
             pose.popPose();
         }
     }
 
-    /**
-     * Draws a food with the middle of its bottom at the origin, as on a table: the placed block of a food item at 0.4
-     * size, a 3D item standing, or a 2D item or grilling skewer lying flat.
-     */
-    public static void renderFood(ItemStack stack, net.minecraft.world.level.Level level, PoseStack pose, MultiBufferSource buffers, int light, float scale, int seed) {
-        if (GrillingSkewers.matches(stack)) {
-            renderSkewer(stack, level, pose, buffers, light, scale, seed);
-            return;
-        }
-        var items = Minecraft.getInstance().getItemRenderer();
-        pose.pushPose();
-        String display = display(stack, level);
-        if (display.equals("block")) {
-            pose.scale(0.4f * scale, 0.4f * scale, 0.4f * scale);
-            pose.translate(-0.5, 0, -0.5);
-            Minecraft.getInstance().getBlockRenderer().renderSingleBlock(FoodModels.block(stack), pose, buffers, light, OverlayTexture.NO_OVERLAY);
-        } else {
-            if (display.equals("flat")) {
-                pose.translate(0, 0.5f * scale / 32, 0);
-                pose.mulPose(Axis.XP.rotationDegrees(90));
-                pose.scale(0.5f * scale, 0.5f * scale, 0.5f * scale);
-            } else {
-                // A block model in the FIXED context is a half block that is centred on the origin.
-                pose.translate(0, 0.25f * scale, 0);
-                pose.scale(scale, scale, scale);
-            }
-            items.renderStatic(stack, ItemDisplayContext.FIXED, light, OverlayTexture.NO_OVERLAY, pose, buffers, level, seed);
-        }
-        pose.popPose();
-    }
-
-    private static void renderSkewer(ItemStack stack, net.minecraft.world.level.Level level, PoseStack pose,
-            MultiBufferSource buffers, int light, float scale, int seed) {
-        var items = Minecraft.getInstance().getItemRenderer();
-        var bounds = new TrayRenderer.DishBounds();
-        items.renderStatic(stack, ItemDisplayContext.NONE, light, OverlayTexture.NO_OVERLAY,
-                new PoseStack(), type -> bounds.consumer(), level, seed);
-        var half = bounds.half();
-        var turn = SkewerPose.lyingTurn(new Quaternionf(), half);
-        var center = bounds.center();
-        float size = 0.5f * scale;
-        pose.pushPose();
-        pose.scale(size, size, size);
-        pose.translate(0, TrayRenderer.rotatedHalf(half, turn).y, 0);
-        pose.mulPose(turn);
-        pose.translate(-center.x, -center.y, -center.z);
-        items.renderStatic(stack, ItemDisplayContext.NONE, light, OverlayTexture.NO_OVERLAY, pose, buffers, level, seed);
-        pose.popPose();
-    }
+    /** The row's places in tray pixels across the guest, the middle first (a customer orders at most 3 things). */
+    private static final float[] ROW = {8, 3, 13};
 
     /** Whether a dish shows as the block it places (see display). */
     static boolean showsBlock(ItemStack stack) {
