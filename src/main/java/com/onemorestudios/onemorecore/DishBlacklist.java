@@ -68,16 +68,17 @@ public final class DishBlacklist {
         return false;
     }
 
-    /** Reads the file again, or writes it with the defaults when it is missing. A broken entry is left out. */
-    public static void reload() {
+    /** Reads the file (the defaults when it is missing). Only the server writes a missing file: see tagsLoaded. */
+    public static void reload() { reload(false); }
+
+    /** Reads the file again, or (write) writes it with the defaults when it is missing. A broken entry is left out. */
+    static void reload(boolean write) {
         Path path = FMLPaths.CONFIGDIR.get().resolve(OneMoreCore.MODID).resolve(FILE);
         List<String> entries = DEFAULTS;
         try {
             if (Files.exists(path)) {
-                entries = new ArrayList<>();
-                JsonArray array = JsonParser.parseString(Files.readString(path)).getAsJsonArray();
-                for (var e : array) entries.add(e.getAsString());
-            } else {
+                entries = parse(Files.readString(path));
+            } else if (write) {
                 Files.createDirectories(path.getParent());
                 JsonArray array = new JsonArray();
                 DEFAULTS.forEach(array::add);
@@ -88,6 +89,16 @@ public final class DishBlacklist {
             entries = DEFAULTS;
         }
         set(entries);
+    }
+
+    /** The file's entries: a JSON list of strings. An entry that is no string is left out, the others stay. */
+    public static List<String> parse(String json) {
+        List<String> entries = new ArrayList<>();
+        for (var e : JsonParser.parseString(json).getAsJsonArray()) {
+            if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) entries.add(e.getAsString());
+            else LogUtils.getLogger().warn("{}: {} is no item id or #tag", FILE, e);
+        }
+        return entries;
     }
 
     /** Uses these entries: "namespace:item" or "#namespace:tag". */
@@ -108,8 +119,9 @@ public final class DishBlacklist {
         items = Set.copyOf(ids);
     }
 
+    /** The server's data load reads the file again (and writes a missing one); a client that gets tags from a server does not. */
     @SubscribeEvent
     static void tagsLoaded(TagsUpdatedEvent event) {
-        reload();
+        if (event.getUpdateCause() == TagsUpdatedEvent.UpdateCause.SERVER_DATA_LOAD) reload(true);
     }
 }

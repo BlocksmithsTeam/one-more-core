@@ -27,6 +27,9 @@ public final class DishBlacklistGameTests {
             DishBlacklist.set(List.of("#minecraft:fishes", "not an id!"));
             helper.assertFalse(DishBlacklist.isDish(new ItemStack(Items.COOKED_COD)), "a blacklisted tag is no dish");
             helper.assertTrue(DishBlacklist.isDish(new ItemStack(Items.SPLASH_POTION)), "an id that left the list is a dish again");
+            // A broken entry in the file is left out; the other entries stay (the list does not fall back to the defaults).
+            helper.assertValueEqual(DishBlacklist.parse("[\"minecraft:stone\", null, {}, 3, \"#minecraft:fishes\"]"),
+                    List.of("minecraft:stone", "#minecraft:fishes"), "entries kept around broken ones");
         } finally {
             DishBlacklist.reload();
         }

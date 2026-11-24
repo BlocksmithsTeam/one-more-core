@@ -42,6 +42,12 @@ public final class FixesGameTests {
             String tables = java.nio.file.Files.readString(file.findResource("data/onemorecore/tags/block/serving_surfaces.json"));
             helper.assertFalse(seats.contains("minecraft:"), "seats name vanilla blocks");
             helper.assertFalse(tables.contains("minecraft:"), "serving surfaces name vanilla blocks");
+            // The GameTests get stairs and slabs back from gametest_pack. OneMoreCore adds that pack only when
+            // GameTestHooks.isGametestServer(), which is false whenever FMLLoader.isProduction() (every player's game).
+            helper.assertTrue(helper.getLevel().getServer().getPackRepository().getSelectedIds().stream().anyMatch(id -> id.contains("gametest_pack")),
+                    "the test pack is on in the GameTest server");
+            helper.assertTrue(net.minecraft.world.level.block.Blocks.OAK_STAIRS.defaultBlockState().is(OneMoreCore.SEATS),
+                    "the test pack makes stairs seats here");
         } catch (java.io.IOException ex) {
             helper.fail("tag file: " + ex);
         }
@@ -96,6 +102,38 @@ public final class FixesGameTests {
             chat.putAll(saved);
             names.set(oldNames);
         }
+        helper.succeed();
+    }
+
+    /** A broken tray drops with its ticket; the rack keeps only a tray's kind, so it refuses a tray with a ticket (and keeps the ticket safe). */
+    @GameTest(template = "empty")
+    public static void ticketSurvivesBreakAndRack(GameTestHelper helper) {
+        BlockPos at = new BlockPos(1, 2, 1);
+        helper.setBlock(at.below(), net.minecraft.world.level.block.Blocks.STONE);
+        helper.setBlock(at, OneMoreCore.TRAY.get());
+        var tray = (com.onemorestudios.onemorecore.TrayBlockEntity) helper.getBlockEntity(at);
+        var ticket = new net.minecraft.world.item.ItemStack(OneMoreCore.TICKET.get());
+        ticket.set(OneMoreCore.LABEL.get(), "4");
+        tray.putTicket(ticket);
+        BlockPos pos = helper.absolutePos(at);
+        helper.getLevel().destroyBlock(pos, true);
+        var drops = helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, new net.minecraft.world.phys.AABB(pos).inflate(2));
+        var item = drops.stream().map(net.minecraft.world.entity.item.ItemEntity::getItem).filter(s -> s.is(OneMoreCore.TRAY_ITEM.get())).findFirst().orElse(null);
+        helper.assertTrue(item != null && item.has(OneMoreCore.TRAY_TICKET.get()), "The broken tray drops with its ticket: " + item);
+        drops.forEach(net.minecraft.world.entity.Entity::discard);
+
+        BlockPos rack = new BlockPos(3, 2, 1);
+        helper.setBlock(rack, OneMoreCore.TRAY_RACK.get().defaultBlockState().setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH));
+        var player = GameTestSupport.player(helper);
+        player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, item);
+        BlockPos rackPos = helper.absolutePos(rack);
+        var hit = new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(rackPos), Direction.NORTH, rackPos, false);
+        var result = helper.getLevel().getBlockState(rackPos).useItemOn(item, helper.getLevel(), player, net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+        helper.assertTrue(result == net.minecraft.world.ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION, "The rack refuses a tray with a ticket: " + result);
+        helper.assertTrue(item.getCount() == 1 && item.has(OneMoreCore.TRAY_TICKET.get()), "The tray keeps its ticket");
+        var plain = new net.minecraft.world.item.ItemStack(OneMoreCore.TRAY_ITEM.get());
+        result = helper.getLevel().getBlockState(rackPos).useItemOn(plain, helper.getLevel(), player, net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+        helper.assertTrue(plain.isEmpty(), "The rack takes a plain tray: " + result);
         helper.succeed();
     }
 

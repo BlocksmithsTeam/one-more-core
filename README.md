@@ -96,6 +96,11 @@ For example, `ingredients.json` can contain
 }
 ```
 
+No vanilla block is a seat or a table: stairs, slabs, trapdoors and fences are not furniture. In a world made with an older
+version, a restaurant built of them has no seats or tables after the update, so no customer comes. To get them back, add a
+datapack with `data/onemorecore/tags/block/seats.json` and `data/onemorecore/tags/block/serving_surfaces.json`, for example
+`{"values": ["#minecraft:stairs"]}` and `{"values": ["#minecraft:slabs", "#minecraft:trapdoors", "#minecraft:fences"]}`.
+
 Kaleidoscope Cookery chairs, stools, benches and tables use the furniture tags shipped with this mod.
 Kaleidoscope Tavern tables and bar counters also work as serving surfaces.
 A customer blocks player interaction with its occupied seat. Free seats keep their normal furniture interaction.

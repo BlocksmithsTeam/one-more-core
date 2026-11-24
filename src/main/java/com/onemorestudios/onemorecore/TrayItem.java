@@ -53,7 +53,10 @@ public class TrayItem extends BlockItem {
         return extras;
     }
 
-    /** Serves each wanted dish with the pose it has on the tray (slots without a saved pose: the old fixed places). */
+    /**
+     * Serves each wanted dish with the pose it has on the tray (slots without a saved pose: the old fixed places; past the
+     * tray's places: no pose).
+     */
     static void serveDishes(ItemStack tray, Predicate<ItemStack> wanted, BiConsumer<ItemStack, TrayPose> serve) {
         var contents = tray.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY);
         List<TrayPose> poses = tray.getOrDefault(OneMoreCore.TRAY_POSES.get(), List.of());
@@ -61,7 +64,8 @@ public class TrayItem extends BlockItem {
         for (int i = 0; i < left.size(); i++) {
             ItemStack dish = left.get(i);
             if (dish.isEmpty() || !wanted.test(dish)) continue;
-            serve.accept(dish, TrayPose.inSlot(poses, i));
+            // A dish past the tray's places (an old tray) has no place on it: it is served as from the hand.
+            serve.accept(dish, i < TrayBlockEntity.SIZE ? TrayPose.inSlot(poses, i) : null);
             left.set(i, ItemStack.EMPTY);
         }
         tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(left));
