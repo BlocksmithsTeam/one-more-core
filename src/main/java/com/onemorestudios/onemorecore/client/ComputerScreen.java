@@ -120,6 +120,7 @@ public class ComputerScreen extends Screen {
     private int bootShown;
     /** The key that skipped the boot also types a character: it is dropped. */
     private boolean swallowChar;
+    private boolean waitForEscapeRelease;
     private boolean leaveQueued;
 
     private record Hit(int x, int y, int w, int h, Runnable action) {
@@ -361,21 +362,20 @@ public class ComputerScreen extends Screen {
         lines.add(text("boot.title").getString());
         lines.add(text("boot.memory").getString());
         if (state.found()) lines.add(text("boot.register", state.balance(), state.currency().getHoverName()).getString());
-        int day = day();
-        if (day > 0) lines.add(text("boot.day", day).getString());
-        if (!state.surfaces().isEmpty()) lines.add(text("boot.tables", state.surfaces().size()).getString());
+        if (state.day() > 0) lines.add(text("boot.day", state.day()).getString());
         lines.add(text("boot.ready").getString());
         return lines;
     }
 
-    /** The restaurant's day from the HUD's status, if the client has it for this computer's restaurant; otherwise -1. */
+    /** The computer state supplies the day, and the HUD can advance it while the computer stays open. */
     private int day() {
-        if (!state.found() || state.sign().isEmpty()) return -1;
+        int day = state.day();
+        if (state.sign().isEmpty()) return day;
         BlockPos sign = state.sign().get();
         Status.Received near = Status.near(sign, false);
-        if (near != null && sign.equals(near.status().sign())) return near.status().day();
+        if (near != null && sign.equals(near.status().sign())) return Math.max(day, near.status().day());
         Status last = Status.client;
-        return last != null && sign.equals(last.sign()) ? last.day() : -1;
+        return last != null && sign.equals(last.sign()) ? Math.max(day, last.day()) : day;
     }
 
     private static int argb(float alpha, int rgb) {
@@ -560,10 +560,12 @@ public class ComputerScreen extends Screen {
             if (hover) tileShape(g, tx - 1, y - 1, tile + 2, r + 1, EDGE);
             g.blitSprite(sprite("app_" + KEYS[i]), tx, y, tile, tile);
             if (!on) tileShape(g, tx, y, tile, r, 0xB0000000 | GREY & 0xFFFFFF);
-            String name = font.plainSubstrByWidth(text("app." + KEYS[i]).getString(), (cell + gap) / labelScale);
+            Component name = text("app." + KEYS[i]);
+            int nameWidth = font.width(name);
+            float scale = Math.min(labelScale, (cell + gap) / (float) Math.max(1, nameWidth));
             g.pose().pushPose();
-            g.pose().translate(x + cell / 2f - font.width(name) * labelScale / 2f, y + tile + labelGap, 0);
-            g.pose().scale(labelScale, labelScale, 1);
+            g.pose().translate(x + cell / 2f - nameWidth * scale / 2f, y + tile + labelGap, 0);
+            g.pose().scale(scale, scale, 1);
             g.drawString(font, name, 0, 0, hover ? AMBER : on ? TEXT : GREY, false);
             g.pose().popPose();
             if (on) hits.add(new Hit(x, y, cell, rowH, () -> open(bit)));
@@ -1000,10 +1002,7 @@ public class ComputerScreen extends Screen {
             Component unlock = text("ingredients.unlock");
             int bw = Math.min(w - 8, font.width(unlock) + 12);
             button(g, x + (w - bw) / 2, y + 64, bw, 13, Component.literal(ellipsize(unlock, bw - 8)),
-                    AMBER, AMBER_HOVER, true, mouseX, mouseY, () -> {
-                        send(Computer.UNLOCK_INGREDIENT, line.id().toString());
-                        send(Computer.REFRESH_MENU, "");
-                    });
+                    AMBER, AMBER_HOVER, true, mouseX, mouseY, () -> send(Computer.UNLOCK_INGREDIENT, line.id().toString()));
         }
         return over && mouseY < y + 43;
     }
@@ -1566,18 +1565,22 @@ public class ComputerScreen extends Screen {
 
     /**
      * Escape: the picker, then the window, then the computer (the CRT turns off first). Typing goes to the search bar.
-     * During the boot any key but a movement key skips to the desktop.
+     * During the boot movement keys and the game's screenshot and fullscreen shortcuts keep their usual behavior.
      */
     @Override
     public boolean keyPressed(int key, int scanCode, int modifiers) {
         if (shutdownStart >= 0) return true;
         if (booting) {
             if (movementKey(key, scanCode)) return false;
+            var options = minecraft.options;
+            if (options.keyScreenshot.matches(key, scanCode) || options.keyFullscreen.matches(key, scanCode)) return true;
+            waitForEscapeRelease = key == GLFW.GLFW_KEY_ESCAPE;
             skipBoot();
-            swallowChar = true;
+            swallowChar = !waitForEscapeRelease;
             return true;
         }
         if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (waitForEscapeRelease) return true;
             if (adding || building != null || app != 0) back();
             else {
                 shutdownStart = Util.getMillis();
@@ -1589,6 +1592,15 @@ public class ComputerScreen extends Screen {
         if (hasSearch() && search.keyPressed(key, scanCode, modifiers)) return true;
         for (EditBox box : streamBoxes()) if (box.isFocused() && box.keyPressed(key, scanCode, modifiers)) return true;
         return super.keyPressed(key, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean keyReleased(int key, int scanCode, int modifiers) {
+        if (key == GLFW.GLFW_KEY_ESCAPE && waitForEscapeRelease) {
+            waitForEscapeRelease = false;
+            return true;
+        }
+        return super.keyReleased(key, scanCode, modifiers);
     }
 
     private boolean movementKey(int key, int scanCode) {
