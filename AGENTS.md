@@ -53,11 +53,11 @@ change how one of them works, change its lines here in the same commit.
   (`TrayBlock.onLabel`: middle of the front rim) gives the ticket back and does not open the close-up, and a new ticket hands
   the old one back (dropped on the tray up close). The ticket goes with the last dish served from the tray, as the label did
   before (on purpose). Tests: `TrayPlacementGameTests.labelTicketComesBack`, `FixesGameTests.ticketSurvivesBreakAndRack`.
-  Served from a tray, each dish keeps its tray pose on the table (`TrayItem.serveDishes` passes it, `Customer.serve` puts it
-  on the served copy as `tray_poses`, `CustomerRenderer.renderServed` draws it as the tray does, the tray's front towards
-  the guest). Food served from the hand keeps the old row, and so do a second tray's dishes for the same guest (they would lie on
-  the first tray's) and a dish past the 3 places of an old tray. Tests: `MoneyGameTests` (serveBread,
-  `secondTrayIsServedLoose`, `dishPastTheTraysPlacesHasNoPose`).
+  Every served dish lies on the table as a tray holds it: the turn and size it had on the tray (`TrayItem.serveDishes` passes
+  the pose, `Customer.serve` puts it on the served copy as `tray_poses`), a dish from the hand or past an old tray's 3 places
+  the tray's rest pose. Not its place: `CustomerRenderer.renderServed` draws the guest's dishes in one row (tray pixels 8, 3,
+  13, the main dish in the middle) with `TrayRenderer.drawDish`, so two trays for one guest never overlap. `foodScale`
+  sizes them (1 = the tray's size). Tests: `MoneyGameTests` (serveBread, `dishPastTheTraysPlacesHasNoPose`).
   The carried tray's hands and dishes move on springs (`TrayCarryRenderer.CarrySway`), stepped once per frame so a second
   render of the player in the same frame (the inventory's player picture) does not push them.
 - **Grilling skewers** (`compat/GrillingSkewers`): Kaleidoscope Grilling items in `onemorecore:lying_dishes` or with an ID

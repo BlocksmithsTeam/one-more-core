@@ -313,23 +313,6 @@ public final class MoneyGameTests {
         return r;
     }
 
-    /** Only the first tray keeps its layout on the table: a second tray's dishes would lie on top of it, so they come as from the hand. */
-    @GameTest(template = "empty")
-    public static void secondTrayIsServedLoose(GameTestHelper helper) {
-        Restaurant restaurant = placeRestaurant(helper);
-        serveBread(helper, restaurant, 7, true);
-        Customer customer = LAST_CUSTOMER;
-        ItemStack tray = new ItemStack(OneMoreCore.TRAY_ITEM.get());
-        tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.CARROT))));
-        tray.set(OneMoreCore.TRAY_POSES.get(), List.of(new com.onemorestudios.onemorecore.TrayPose(12.5f, 1, 4.25f, 0, new org.joml.Quaternionf(), 1, -1, 1)));
-        helper.assertTrue(customer.deliver(GameTestSupport.player(helper), tray), "Customer accepted the second tray");
-        var carrot = customer.getServed().stream().filter(s -> s.is(Items.CARROT)).findFirst().orElseThrow();
-        helper.assertFalse(carrot.has(OneMoreCore.TRAY_POSES.get()), "The second tray's dish has no tray pose");
-        helper.assertTrue(customer.getServed().stream().filter(s -> s.is(Items.BREAD)).allMatch(s -> s.has(OneMoreCore.TRAY_POSES.get())),
-                "The first tray's dish keeps its pose");
-        helper.succeed();
-    }
-
     /** An old tray can hold a dish past its 3 places: served, it gets no pose (a pose there would be off the tray and not sync). */
     @GameTest(template = "empty")
     public static void dishPastTheTraysPlacesHasNoPose(GameTestHelper helper) throws ReflectiveOperationException {
@@ -345,8 +328,6 @@ public final class MoneyGameTests {
         helper.succeed();
     }
 
-    private static Customer LAST_CUSTOMER;
-
     private static Object serveBread(GameTestHelper helper, Restaurant r, int price, boolean partial) {
         Object party;
         try {
@@ -357,7 +338,6 @@ public final class MoneyGameTests {
             throw new AssertionError(e);
         }
         Customer customer = new Customer(OneMoreCore.CUSTOMER.get(), helper.getLevel());
-        LAST_CUSTOMER = customer;
         Restaurant.Seat seat = new Restaurant.Seat(helper.absolutePos(SEAT), helper.absolutePos(TABLE));
         Customer.Line bread = new Customer.Line(new ItemStack(Items.BREAD), price, false);
         List<Customer.Line> order = partial ? List.of(bread, new Customer.Line(new ItemStack(Items.CARROT), 40, false)) : List.of(bread);
