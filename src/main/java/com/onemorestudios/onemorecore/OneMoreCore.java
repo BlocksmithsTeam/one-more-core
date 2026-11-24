@@ -4,7 +4,6 @@ import java.util.List;
 
 import org.slf4j.Logger;
 
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.logging.LogUtils;
@@ -12,6 +11,7 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataSerializer;
@@ -24,6 +24,8 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.flag.FeatureFlags;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -45,6 +47,8 @@ import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ChunkWatchEvent;
+import net.neoforged.neoforge.event.OnDatapackSyncEvent;
+import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -63,6 +67,7 @@ public class OneMoreCore {
     private static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(MODID);
     private static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
     private static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(Registries.ENTITY_TYPE, MODID);
+    private static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(Registries.MENU, MODID);
     private static final DeferredRegister<EntityDataSerializer<?>> SERIALIZERS = DeferredRegister.create(NeoForgeRegistries.Keys.ENTITY_DATA_SERIALIZERS, MODID);
 
     public static final DeferredBlock<OpenSignBlock> OPEN_SIGN = BLOCKS.register("open_sign",
@@ -111,6 +116,22 @@ public class OneMoreCore {
             () -> new MenuBookBlock(BlockBehaviour.Properties.of().strength(0.4f).noOcclusion().sound(SoundType.WOOL).pushReaction(PushReaction.DESTROY)));
     public static final DeferredItem<BlockItem> MENU_BOOK_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOOK);
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
+    public static final DeferredBlock<CardboardBoxBlock> CARDBOARD_BOX = BLOCKS.register("cardboard_box",
+            () -> new CardboardBoxBlock(BlockBehaviour.Properties.of().strength(0.4f).noOcclusion().sound(SoundType.WOOL).pushReaction(PushReaction.BLOCK)));
+    public static final DeferredItem<BlockItem> CARDBOARD_BOX_ITEM = ITEMS.register("cardboard_box",
+            () -> new BlockItem(CARDBOARD_BOX.get(), new Item.Properties().stacksTo(1)) {
+                @Override
+                public boolean canFitInsideContainerItems() {
+                    return false;
+                }
+            });
+    public static final DeferredHolder<MenuType<?>, MenuType<CardboardBoxMenu>> CARDBOARD_BOX_MENU =
+            MENUS.register("cardboard_box", () -> new MenuType<>(CardboardBoxMenu::new, FeatureFlags.VANILLA_SET));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CardboardBoxBlockEntity>> CARDBOARD_BOX_ENTITY = BLOCK_ENTITIES.register("cardboard_box",
+            () -> BlockEntityType.Builder.of(CardboardBoxBlockEntity::new, CARDBOARD_BOX.get()).build(null));
+    public static final DeferredHolder<EntityType<?>, EntityType<Courier>> COURIER = ENTITIES.register("courier",
+            () -> EntityType.Builder.<Courier>of(Courier::new, MobCategory.MISC).sized(0.6f, 1.8f)
+                    .noSummon().clientTrackingRange(8).build("courier"));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OpenSignBlockEntity>> OPEN_SIGN_ENTITY = BLOCK_ENTITIES.register("open_sign",
             () -> BlockEntityType.Builder.of(OpenSignBlockEntity::new, OPEN_SIGN.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBoardBlockEntity>> MENU_BOARD_ENTITY = BLOCK_ENTITIES.register("menu_board",
@@ -139,6 +160,7 @@ public class OneMoreCore {
                 output.accept(MENU_BOARD_ITEM);
                 output.accept(MENU_BOOK_ITEM);
                 output.accept(TRAY_RACK_ITEM);
+                output.accept(CARDBOARD_BOX_ITEM);
                 output.accept(TRAY_ITEM);
                 output.accept(IRON_TRAY_ITEM);
                 output.accept(COIN);
@@ -161,13 +183,23 @@ public class OneMoreCore {
         BLOCKS.register(bus);
         ITEMS.register(bus);
         ENTITIES.register(bus);
+        MENUS.register(bus);
         SERIALIZERS.register(bus);
         TABS.register(bus);
         COMPONENTS.register(bus);
         BLOCK_ENTITIES.register(bus);
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
-        bus.addListener((EntityAttributeCreationEvent e) -> e.put(CUSTOMER.get(), Customer.createAttributes().build()));
-        NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> Menu.load(e.getServer().registryAccess()));
+        bus.addListener((EntityAttributeCreationEvent e) -> {
+            e.put(CUSTOMER.get(), Customer.createAttributes().build());
+            e.put(COURIER.get(), Courier.createAttributes().build());
+        });
+        NeoForge.EVENT_BUS.addListener((ServerAboutToStartEvent e) -> {
+            Menu.load(e.getServer().registryAccess());
+            Ingredients.rebuild(e.getServer());
+        });
+        NeoForge.EVENT_BUS.addListener((OnDatapackSyncEvent e) -> {
+            if (e.getPlayer() == null) Ingredients.rebuild(e.getPlayerList().getServer());
+        });
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> SkinPool.start(e.getServer()));
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStoppingEvent e) -> SkinPool.stop());
         NeoForge.EVENT_BUS.addListener((LevelTickEvent.Post e) -> {
@@ -332,12 +364,13 @@ public class OneMoreCore {
     private static void registerCommands(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal(MODID)
                 .then(Commands.literal("menu").executes(OneMoreCore::listMenu))
-                .then(Commands.literal("unlock").then(Commands.argument("id", StringArgumentType.word())
-                        .suggests((c, b) -> SharedSuggestionProvider.suggest(Menu.entries.stream().map(Menu.Entry::id), b))
+                .then(Commands.literal("unlock").then(Commands.argument("id", ResourceLocationArgument.id())
+                        .suggests((c, b) -> SharedSuggestionProvider.suggest(Ingredients.current().raw.stream().map(ResourceLocation::toString), b))
                         .executes(OneMoreCore::unlock)))
                 .then(Commands.literal("reload").requires(s -> s.hasPermission(2)).executes(c -> {
                     Menu.load(c.getSource().registryAccess());
                     Shop.load(c.getSource().registryAccess());
+                    Ingredients.rebuild(c.getSource().getServer());
                     c.getSource().sendSuccess(() -> Component.translatable("onemorecore.cmd.reloaded", Menu.entries.size()), true);
                     return Menu.entries.size();
                 })));
@@ -353,28 +386,31 @@ public class OneMoreCore {
     private static int listMenu(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         Restaurant r = restaurantOf(c);
         if (r == null) return 0;
-        for (Menu.Entry e : Menu.entries)
-            c.getSource().sendSuccess(() -> Component.translatable("onemorecore.cmd.menu_line", e.id(), e.price(), e.day(), e.cost(),
-                    r.isAvailable(e) ? "available" : "locked"), false);
-        return Menu.entries.size();
+        List<Menu.Entry> dishes = r.dishes();
+        for (Menu.Entry dish : dishes)
+            c.getSource().sendSuccess(() -> Component.translatable("onemorecore.cmd.menu_line", dish.id(), dish.price(),
+                    r.orderable(dish) ? "available" : "unavailable"), false);
+        return dishes.size();
     }
 
     private static int unlock(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {
         Restaurant r = restaurantOf(c);
         if (r == null) return 0;
-        String id = StringArgumentType.getString(c, "id");
-        Menu.Entry e = Menu.byId(id);
-        if (e == null) {
-            c.getSource().sendFailure(Component.translatable("onemorecore.cmd.unknown", id));
-            return 0;
-        }
-        Component message = switch (r.unlock(e)) {
+        ResourceLocation item = ResourceLocationArgument.getId(c, "id");
+        if (!c.getSource().getLevel().mayInteract(c.getSource().getPlayerOrException(), r.sign)) return 0;
+        Restaurant.Unlock result = r.unlockIngredient(item);
+        Component message = unlockMessage(r, item.toString(), item, result);
+        if (result == Restaurant.Unlock.OK) c.getSource().sendSuccess(() -> message, false);
+        else c.getSource().sendFailure(message);
+        return result == Restaurant.Unlock.OK ? 1 : 0;
+    }
+
+    static Component unlockMessage(Restaurant r, String id, ResourceLocation item, Restaurant.Unlock result) {
+        return switch (result) {
             case OK -> Component.translatable("onemorecore.cmd.unlocked", id);
             case ALREADY -> Component.translatable("onemorecore.cmd.already", id);
-            case DAY -> Component.translatable("onemorecore.cmd.day", id, e.day());
-            case COST -> Component.translatable("onemorecore.cmd.cost", id, e.cost(), r.register());
+            case UNKNOWN -> Component.translatable("onemorecore.cmd.unknown", id);
+            case COST -> Component.translatable("onemorecore.cmd.cost", id, Ingredients.current().unlockCost(item), r.register());
         };
-        c.getSource().sendSuccess(() -> message, false);
-        return 1;
     }
 }

@@ -6,6 +6,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.mojang.authlib.GameProfile;
+import com.onemorestudios.onemorecore.Restaurant;
 import io.netty.channel.embedded.EmbeddedChannel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -15,6 +16,7 @@ import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -32,6 +34,24 @@ public final class GameTestSupport {
     private static final AtomicLong NEXT_PLAYER = new AtomicLong();
 
     private GameTestSupport() {}
+
+    static void setRegister(Restaurant restaurant, int balance) {
+        try {
+            var field = Restaurant.class.getDeclaredField("register");
+            field.setAccessible(true);
+            field.setInt(restaurant, balance);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    static void unlock(GameTestHelper helper, Restaurant restaurant, String... ingredients) {
+        for (String ingredient : ingredients) {
+            var result = restaurant.unlockIngredient(ResourceLocation.withDefaultNamespace(ingredient));
+            helper.assertTrue(result == Restaurant.Unlock.OK || result == Restaurant.Unlock.ALREADY,
+                    "Could not unlock " + ingredient + ": " + result);
+        }
+    }
 
     /** A fake player whose server listener records outgoing payloads and vanilla packets. */
     static final class TestPlayer extends FakePlayer {

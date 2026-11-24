@@ -157,11 +157,10 @@ public class OpenSignBlock extends Block implements EntityBlock {
 
     static ItemStack signItem(Restaurant r) {
         ItemStack item = new ItemStack(OneMoreCore.OPEN_SIGN_ITEM.get());
-        if (r.hasProgress()) {
-            CompoundTag data = new CompoundTag();
-            data.put("restaurant", r.progress());
-            item.set(DataComponents.CUSTOM_DATA, CustomData.of(data));
-        }
+        // Even an empty register has already received its starting balance.
+        CompoundTag data = new CompoundTag();
+        data.put("restaurant", r.progress());
+        item.set(DataComponents.CUSTOM_DATA, CustomData.of(data));
         return item;
     }
 

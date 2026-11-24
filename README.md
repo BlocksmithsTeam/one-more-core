@@ -6,7 +6,7 @@ The mod does not add food. It works with the items of any mod.
 ## How to play
 
 1. Place an **Open/Closed Sign** on the floor, on a wall or under a ceiling. It shows CLOSED or OPEN and turns when the restaurant opens or closes.
-2. Place a **Restaurant Computer** where it will be inside the restaurant area. Before setting the area, you can use a computer at most 32 blocks from the sign in each direction. Open the **Manager** app and select "Edit". The camera flies through walls. Press Use to set the first corner of the area. The box grows to where you look, and a second press sets it. Hold Alt to point in the air (the wheel changes the distance). Keys 1, 2 and 3 change to the customer spawn point and the delivery container. Escape returns to the computer.
+2. Place a **Restaurant Computer** where it will be inside the restaurant area. Before setting the area, you can use a computer at most 32 blocks from the sign in each direction. Open the **Manager** app and select "Edit". The camera flies through walls. Press Use to set the first corner of the area. The box grows to where you look, and a second press sets it. Hold Alt to point in the air (the wheel changes the distance). Keys 1, 2 and 3 change to the customer spawn point and the delivery point. Escape returns to the computer.
 3. Put seats next to serving surfaces inside the area. Serving surfaces that touch each other are one table: one group sits at a table, a group takes the smallest free table that fits it, and a table rests for a moment after its group left. Sneak-click a table with an empty hand while the restaurant is closed to turn it off (customers do not use it) or on again; the Manager's tool 4 does the same.
    Place a **Menu Screen** on a wall: a television that shows the dishes that customers can order now, by kind, and the combos, like the menu over a fast food counter. Look up while you place a screen to hang it turned down (22.5 or 45 degrees); sneak-click it with an empty hand to set the angle, mode, menu categories, text size and automatic paging. TVs occupy three blocks across and two high. A Monitor occupies one block. Matching screens in a rectangle share one picture.
 4. Click the sign. A player alone in the area starts the day at once. With more players, the ready panel opens for the players inside. Clicking the sign from outside can also start the check for them. The panel follows the restaurant you are in. Hold **R** (key "Get ready (hold)") to get ready. Hold **R** again to withdraw your ready status before the countdown starts. When everyone is ready, a short countdown starts the day. Ready input is locked during the countdown.
@@ -18,7 +18,7 @@ The mod does not add food. It works with the items of any mod.
    A party with a bill above zero leaves **Coins** on the table. Click the table with an empty hand to put the coins in the register. With Diegesis, use any connected surface of the table with an empty hand to open the close-up, then click the coins. Coins left over when the register fills stay on the table. A table with coins gets no new party. `collectPayments = false` pays straight into the register. Any excess from a direct payment drops at the sign.
    After a restart, dishes already served to an interrupted party become a bill on its table. If the table is gone, the bill goes to the register and any excess drops at the sign.
 8. The sign is the register. Sneak-click it with an empty hand to take one stack of money. Click it with money to put the money in. The computer pays shop orders from the register.
-   Breaking the sign clears the coins from the tables and puts their value in the dropped sign's register. Any excess drops at the sign as currency. The sign item keeps the money, the day, the unlocks and the paid orders, like a shulker box. Place it again and set the area again.
+   Breaking the sign clears the coins from the tables and puts their value in the dropped sign's register. Any excess drops at the sign as currency. The sign item keeps the money, the day, the ingredient unlocks and the paid orders, like a shulker box. Place it again and set the area again.
 9. A party leaves stains where it ate; a stain can go over the joins of a table's blocks. A table is one thing to clean: it gets no customer until `dirtCleanFraction` of all its dirt is wiped, then all of it is clean. Cleaning progress survives a restart.
 10. A **Menu Book** on a table shows the menu on pages. With Diegesis it opens over the table using the Hands On Delight recipe book, with a tab for each kind, a page for each dish (a combo shows its dishes) with its price, search and page turning. Without Diegesis it opens as a book screen.
     Menu Screens and Menu Books show up to 256 dishes and combos in total, with space for available combos. They show each dish's item variant.
@@ -48,13 +48,18 @@ One click takes the orders of the whole group. Each member gets its own food. Th
 
 Use a **Restaurant Computer** inside the restaurant area. Before setting the area, you can use a computer at most 32 blocks from the sign in each direction. The camera moves to the monitor, the monitor boots (a power-on line, the boot text, the logo; a click or a key skips it) and the desktop opens. You need permission to use the computer block. Stay within reach of it while using its apps. Click an app icon to open its window; the × closes it. Escape closes the window, then turns the monitor off and leaves the computer.
 
-- **Menu**: a searchable catalog of the restaurant's dishes, filtered by kind (main, drink, starter, dessert). Put a dish on the menu or take it off, unlock a dish with money from the register, add any food or drink with your own price (`maxDishPrice`), and change the kind of a dish with its label. Each customer orders up to three items. Individual dishes are limited to one per kind. Customers order only dishes that are on the menu.
-  **Combos**: 2 to 3 places for one price; a place is one dish or a whole kind ("Any drink"), for example a burger + any drink + any starter (for example a skewer, a cola and a salad). A customer orders a combo with the chance `comboChance` when all its dishes are on the menu. The Menu app marks saved four-place combos unavailable until you edit them down to two or three places.
-- **Shop**: a searchable catalog of the items of `shop.json`. Add items to the cart, change the counts in the cart, and check out. The register pays for the whole cart at once. If money is missing, the cart shows how much. Checkout allows up to 32 listings and 1,024 characters of cart data. If checkout fails, the Shop keeps the cart and shows the reason. If prices change, review the updated total and check out again.
+- The **Menu** app lists the restaurant's dishes and filters them by kind (main, drink, starter, dessert). Put a dish on the menu or take it off, add any food or drink with your own price (`maxDishPrice`), and change the kind of a dish with its label. Recipe-discovered dishes start at their food value and can be repriced per restaurant. Recipes from Minecraft and installed mods add foods and drinks to the catalog. Customers can order an enabled dish when all ingredients in at least one recipe are available. An item tag accepts any one of its items. Tools and containers such as bowls are free, and the recipe check follows up to three levels of intermediate ingredients. For example, sugar cane makes sugar available for pumpkin pie.
+  A new restaurant starts with no purchased ingredients and receives 60 coins once (`startingBalance`). Use `/onemorecore unlock <item id>` inside the restaurant to buy a raw ingredient from the register, for example `/onemorecore unlock minecraft:wheat`. Breaking and re-placing the sign keeps the existing balance and unlocks. Existing saves receive the ingredients for their previously available dishes through a one-time migration, subject to the recipe rules below.
+  **Combos** offer 2 to 3 places for one price. A place is one dish or a whole kind ("Any drink"), for example a burger + any drink + any starter (for example a skewer, a cola and a salad). A customer orders a combo with the chance `comboChance` when every place can be filled with an orderable dish. The Menu app marks saved four-place combos unavailable until you edit them down to two or three places.
+- The **Shop** app lists the items from `shop.json` and the ingredients the restaurant has unlocked. Each ingredient listing delivers 16 items or one full stack if its limit is smaller. Add items to the cart, change the counts in the cart, and check out. The register pays for the whole cart at once. If money is missing, the cart shows how much. Checkout allows up to 32 listings and 1,024 characters of cart data. If checkout fails, the Shop keeps the cart and shows the reason. If prices change, review the updated total and check out again.
 - **Upgrades**: Decor (guests wait longer), Fast delivery (shop orders arrive sooner) and Call bell (use a Minecraft bell in the area while the day runs: the next group comes now). The prices are `upgradeDecorCosts`, `upgradeDeliveryCosts` and `upgradeBellCosts`.
-- **Manager**: shows the state of the restaurant and edits the area, the customer spawn point and the delivery container with a free camera (keys 1, 2, 3 choose the tool, 4 turns tables off, 5 sets televisions; WASD, Space and Shift fly; Ctrl flies fast). Each press of Use applies one edit. Points must be at most 48 blocks from the computer.
+- **Manager**: shows the state of the restaurant and edits the area, the customer spawn point and the delivery point with a free camera (keys 1, 2, 3 choose the tool, 4 turns tables off, 5 sets televisions; WASD, Space and Shift fly; Ctrl flies fast). Each press of Use applies one edit. Points must be at most 48 blocks from the computer.
 
-Shop orders arrive after a delay at the delivery point set at checkout. Large orders can arrive in batches. If the container is full or gone, the items drop there.
+After the Shop delay, a courier walks from the customer spawn point to the delivery point set at checkout. Without a customer spawn, the courier looks for space roughly eight blocks away, outside the restaurant if possible. The restaurant saves the remaining items and destination until the order is complete, so it can replace a missing courier. Each restaurant starts at most one courier per tick and delivers up to 16 stacks per tick across containers, boxes, and packed item drops.
+
+Set the delivery point to a container or a block with room for boxes nearby. The courier fills the container, packs the rest into **Cardboard Boxes**, and drops packed box items if there is no room to place them. A courier that cannot find a route leaves its parcel near the restaurant or at its starting point. An unloaded spawn or a 60-second route timeout triggers stand-in delivery at the saved destination. If the destination is unloaded, the order stays pending and checks once a second for it to load. A legacy order without a saved destination comes to the sign.
+
+Use a box to open its 27 slots. The slots refuse cardboard boxes and shulker boxes, including when shift-clicking. Sneak-click with empty hands to pick up the box with its contents. Closing an empty box removes it. Breaking a box drops its contents.
 
 ## Configuration
 
@@ -63,19 +68,33 @@ Shop orders arrive after a delay at the delivery point set at checkout. Large or
 - `readyCountdownTicks`: ticks between "everyone is ready" and the start of the day, when more than one player is in the area. Default: 60. 0 starts at once.
 - `maxLostPerDay`: lost customers that fail the day. Default: 0 (off). A failed day repeats; earned money stays.
 - `screenBlocks`: televisions of other mods, `"mod:block=x0,y0,x1,y1,z,flip"`: the picture's corners and plane in model pixels of the block facing south, and `flip = 1` when the picture is on the side opposite to the block's facing.
-- `config/onemorecore/menu.json`: the orderable items. `/onemorecore reload` reads it again.
+- `config/onemorecore/menu.json` supplies additional dishes and sets their prices, kinds and item variants. The old `unlock` field is deprecated and only read for old-save migration.
+- `config/onemorecore/ingredients.json` is created with defaults on the first server start. It overrides ingredient prices, free and ignored items, and dish recipes. `/onemorecore reload` rereads both files and rebuilds the recipe index. The index also updates after a datapack reload.
 - `config/onemorecore/shop.json`: the items of the Shop app. `/onemorecore reload` reads it again.
 
 ```json
 [
   {"id": "bread", "item": "minecraft:bread", "price": 2},
-  {"id": "soup", "item": "#c:foods/soup", "price": 4, "unlock": {"day": 2}},
-  {"id": "pie", "item": {"id": "minecraft:pumpkin_pie", "count": 1}, "price": 6, "match": "exact", "unlock": {"day": 3, "cost": 10}}
+  {"id": "soup", "item": "#c:foods/soup", "price": 4, "category": "starter"},
+  {"id": "pie", "item": {"id": "minecraft:pumpkin_pie", "count": 1}, "price": 6, "match": "exact"}
 ]
 ```
 
 `item` is an item id, a `#tag`, or a full item stack with components. `match` is `ignore` (default) or `exact` (components must be equal).
-An entry with `cost` is bought with `/onemorecore unlock <id>` or in the Menu app; the money comes from the register. `category` (`main`, `drink`, `starter`, `dessert`) is optional; without it the kind comes from the item.
+The optional `category` sets the kind (`main`, `drink`, `starter` or `dessert`). Otherwise the kind comes from the item. A configured or custom dish with no indexed recipe is available without ingredient purchases unless `ingredients.json` supplies its recipe. A dish with only recipes that expose no ingredients or have a slot with no usable candidates stays locked until it has a valid override. A slot with a free candidate counts as satisfied. The server logs the number of dishes blocked by unreadable or unusable recipes when it rebuilds the index.
+
+The default unlock cost is 4 coins plus 2 per dish the ingredient helps make and 15% of those dishes' total worth (nutrition plus rounded saturation). The result is rounded and clamped to 5–40 coins. The shop price is one fifth of the unlock cost, rounded to at least 1 coin per bundle. The `prices` object accepts a numeric unlock price or an object with `unlock` and `shop` prices. Exact item prices take precedence over tag prices. The `free` list supplies containers and tools that are always available. The `ignore` list excludes items from ingredient purchases and recipe alternatives. Each `dishes` override supplies one recipe with one slot per array entry, where an item tag offers alternatives for that slot.
+
+For example, `ingredients.json` can contain
+
+```json
+{
+  "prices": {"minecraft:wheat": 8, "#c:crops/tomato": {"unlock": 12, "shop": 3}},
+  "free": ["minecraft:bowl", "minecraft:glass_bottle", "minecraft:bucket", "minecraft:water_bucket", "minecraft:stick", "#c:tools/knife"],
+  "ignore": [],
+  "dishes": {"minecraft:mushroom_stew": ["minecraft:bowl", "minecraft:red_mushroom", "minecraft:brown_mushroom"]}
+}
+```
 
 Kaleidoscope Cookery chairs, stools, benches and tables use the furniture tags shipped with this mod.
 Kaleidoscope Tavern tables and bar counters also work as serving surfaces.
