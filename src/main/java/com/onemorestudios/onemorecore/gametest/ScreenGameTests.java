@@ -168,11 +168,13 @@ public final class ScreenGameTests {
     @GameTest(template = "empty")
     public static void componentHeavyMenuFitsPayload(GameTestHelper helper) throws ReflectiveOperationException, IOException {
         var restaurant = placeRestaurant(helper);
+        GameTestSupport.setRegister(restaurant, 100);
+        GameTestSupport.unlock(helper, restaurant, "wheat");
         ItemStack stack = Items.BREAD.getDefaultInstance();
         CompoundTag components = new CompoundTag();
         components.putByteArray("large", new byte[16 * 1024]);
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(components));
-        for (int i = 0; i < 80; i++) addDish(restaurant, new Menu.Entry("test:heavy" + i, stack, null, 2, true, 0, 0));
+        for (int i = 0; i < 80; i++) addDish(restaurant, new Menu.Entry("test:heavy" + i, stack, null, 2, true));
 
         CompoundTag tag = menuTag(helper, restaurant);
         var bytes = new ByteArrayOutputStream();
@@ -306,7 +308,7 @@ public final class ScreenGameTests {
     public static void tagDishComboUsesRepresentativeStack(GameTestHelper helper) throws ReflectiveOperationException {
         var restaurant = placeRestaurant(helper);
         disableConfiguredDishes(restaurant);
-        var tag = new Menu.Entry("test:tag", null, ItemTags.FISHES, 4, false, 0, 0, "starter");
+        var tag = new Menu.Entry("test:tag", null, ItemTags.FISHES, 4, false, "starter");
         var custom = field(Restaurant.class, "custom", restaurant, List.class);
         custom.add(tag);
         try {
@@ -329,6 +331,8 @@ public final class ScreenGameTests {
     @GameTest(template = "empty")
     public static void menuRowLimitKeepsCombos(GameTestHelper helper) throws ReflectiveOperationException {
         var restaurant = placeRestaurant(helper);
+        GameTestSupport.setRegister(restaurant, 100);
+        GameTestSupport.unlock(helper, restaurant, "wheat");
         disableConfiguredDishes(restaurant);
         for (int i = 0; i < 64; i++) addDish(restaurant, bread(i));
         addCombo(restaurant, new Restaurant.Combo("combo:test", List.of("test:bread0", "test:bread1"), 4));
@@ -348,12 +352,14 @@ public final class ScreenGameTests {
     @GameTest(template = "empty")
     public static void menuDistinguishesComponentVariants(GameTestHelper helper) throws ReflectiveOperationException {
         var restaurant = placeRestaurant(helper);
+        GameTestSupport.setRegister(restaurant, 100);
+        GameTestSupport.unlock(helper, restaurant, "wheat");
         ItemStack first = Items.BREAD.getDefaultInstance();
         first.set(DataComponents.CUSTOM_NAME, Component.literal("Rye bread"));
         ItemStack second = Items.BREAD.getDefaultInstance();
         second.set(DataComponents.CUSTOM_NAME, Component.literal("Milk bread"));
-        addDish(restaurant, new Menu.Entry("test:rye", first, null, 4, true, 0, 0));
-        addDish(restaurant, new Menu.Entry("test:milk", second, null, 7, true, 0, 0));
+        addDish(restaurant, new Menu.Entry("test:rye", first, null, 4, true));
+        addDish(restaurant, new Menu.Entry("test:milk", second, null, 7, true));
 
         var lines = menu(helper, restaurant);
         var rye = lines.stream().filter(line -> line.id().equals("test:rye")).findFirst().orElseThrow();
@@ -437,7 +443,7 @@ public final class ScreenGameTests {
     }
 
     private static Menu.Entry bread(int index) {
-        return new Menu.Entry("test:bread" + index, Items.BREAD.getDefaultInstance(), null, 2, false, 0, 0);
+        return new Menu.Entry("test:bread" + index, Items.BREAD.getDefaultInstance(), null, 2, false);
     }
 
     private static void addDish(Restaurant restaurant, Menu.Entry entry) throws ReflectiveOperationException {
@@ -449,7 +455,7 @@ public final class ScreenGameTests {
     }
 
     private static void disableConfiguredDishes(Restaurant restaurant) throws ReflectiveOperationException {
-        field(Restaurant.class, "off", restaurant, java.util.Set.class).addAll(Menu.entries.stream().map(Menu.Entry::id).toList());
+        field(Restaurant.class, "off", restaurant, java.util.Set.class).addAll(restaurant.dishes().stream().map(Menu.Entry::id).toList());
     }
 
     private static List<MenuBoardBlockEntity.Line> menu(GameTestHelper helper, Restaurant restaurant) throws ReflectiveOperationException {

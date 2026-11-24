@@ -5,7 +5,6 @@ import java.util.List;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -72,14 +71,14 @@ public class MenuBoardBlockEntity extends BlockEntity {
                     // A kind place shows one dish of that kind.
                     String kind = Restaurant.slotKind(id);
                     Menu.Entry e = kind == null ? r.dish(id) : r.ofKind(kind).stream().findFirst().orElse(null);
-                    items.add(icon(e));
+                    items.add(e == null ? ItemStack.EMPTY : r.orderableVariant(e, null));
                 }
                 remaining = append(combos, line(c.id(), "combo", items, c.price(), registries), remaining);
             }
             for (Menu.Entry e : r.dishes()) {
                 if (list.size() + combos.size() >= MAX_ROWS) break;
-                if (!r.canOrder(e)) continue;
-                ItemStack icon = icon(e);
+                if (!r.orderable(e)) continue;
+                ItemStack icon = r.orderableVariant(e, null);
                 if (icon.isEmpty()) continue;
                 remaining = append(list, line(e.id(), r.kind(e), List.of(icon), e.price(), registries), remaining);
             }
@@ -87,12 +86,6 @@ public class MenuBoardBlockEntity extends BlockEntity {
         list.addAll(combos);
         tag.put("lines", list);
         return tag;
-    }
-
-    private static ItemStack icon(Menu.Entry entry) {
-        if (entry == null) return ItemStack.EMPTY;
-        return entry.tag() == null ? entry.stack() : BuiltInRegistries.ITEM.getTag(entry.tag())
-                .flatMap(set -> set.stream().findFirst()).map(ItemStack::new).orElse(ItemStack.EMPTY);
     }
 
     private static int append(ListTag lines, CompoundTag line, int remaining) {

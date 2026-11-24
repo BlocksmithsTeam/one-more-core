@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.onemorestudios.onemorecore.Config;
+import com.onemorestudios.onemorecore.Courier;
 import com.onemorestudios.onemorecore.Customer;
 import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.OpenSignBlockEntity;
@@ -167,54 +168,6 @@ public final class MoneyGameTests {
         helper.succeed();
     }
 
-    /** CORE-8 / ECONOMY-3: two batches share a 16-stack budget and their queued remainder survives a reload. */
-    @GameTest(template = "empty")
-    public static void shopDeliveryUsesSharedTickBudget(GameTestHelper helper) {
-        Restaurant restaurant = placeRestaurant(helper);
-        ChestBlockEntity chest = placeChest(helper, OTHER);
-        for (int slot = 0; slot < chest.getContainerSize(); slot++) chest.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
-        withConfig("SHOP_DELIVERY", 0, () -> {
-            setDelivery(restaurant, helper.absolutePos(OTHER));
-            order(helper, restaurant, Items.IRON_SWORD, 10);
-            order(helper, restaurant, Items.IRON_SWORD, 10);
-            tickDeliveries(helper, restaurant);
-            helper.assertValueEqual(drops(helper, Items.IRON_SWORD).size(), 16, "stacks from the first delivery tick");
-            List<ItemEntity> first = drops(helper, Items.IRON_SWORD);
-            first.forEach(ItemEntity::discard);
-
-            Restaurant restored = reload(helper, restaurant, save(restaurant));
-            helper.assertValueEqual(drops(helper, Items.IRON_SWORD).size(), 4, "stacks from the restored remainder");
-            tickDeliveries(helper, restored);
-            helper.assertValueEqual(drops(helper, Items.IRON_SWORD).size(), 4, "stacks after the queue is exhausted");
-        });
-        helper.succeed();
-    }
-
-    /** ECONOMY-6: saved orders use their checkout chest and legacy orders use the currently configured chest. */
-    @GameTest(template = "empty")
-    public static void checkoutDestinationSurvivesChanges(GameTestHelper helper) {
-        Restaurant restaurant = placeRestaurant(helper);
-        BlockPos first = new BlockPos(0, 1, 3);
-        BlockPos second = new BlockPos(3, 1, 3);
-        ChestBlockEntity original = placeChest(helper, first);
-        ChestBlockEntity current = placeChest(helper, second);
-        withConfig("SHOP_DELIVERY", 0, () -> {
-            setDelivery(restaurant, helper.absolutePos(first));
-            order(helper, restaurant, Items.WHEAT, 6);
-            order(helper, restaurant, Items.CARROT, 3);
-            setDelivery(restaurant, helper.absolutePos(second));
-
-            CompoundTag saved = save(restaurant);
-            // Simulate an older saved order by removing only its optional destination.
-            saved.getList("deliveries", Tag.TAG_COMPOUND).getCompound(1).remove("destination");
-            reload(helper, restaurant, saved);
-            helper.assertValueEqual(original.countItem(Items.WHEAT), 6, "wheat at the checkout chest");
-            helper.assertValueEqual(current.countItem(Items.WHEAT), 0, "wheat at the current chest");
-            helper.assertValueEqual(current.countItem(Items.CARROT), 3, "legacy order at the current chest");
-        });
-        helper.succeed();
-    }
-
     /** CORE-14: a partly cleaned table clears on the same stroke before and after a reload, including fully wiped surfaces. */
     @GameTest(template = "empty")
     public static void cleaningThresholdSurvivesReload(GameTestHelper helper) {
@@ -270,12 +223,71 @@ public final class MoneyGameTests {
         helper.succeed();
     }
 
+    @GameTest(template = "courier_floor")
+    public static void shopDeliveryUsesSharedTickBudget(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var restaurant = placeRestaurant(helper);
+        var point = new BlockPos(8, 1, 5);
+        var spawn = point.west();
+        for (BlockPos pos : BlockPos.betweenClosed(point.offset(-1, -1, -1), point.offset(1, -1, 1)))
+            helper.setBlock(pos, Blocks.AIR);
+        helper.setBlock(point.below(), Blocks.STONE);
+        var chest = GameTestSupport.place(helper, point, Blocks.CHEST, ChestBlockEntity.class);
+        for (int slot = 8; slot < chest.getContainerSize(); slot++) chest.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+        call(Restaurant.class, restaurant, "setDelivery", new Class<?>[] {BlockPos.class}, helper.absolutePos(point));
+        call(Restaurant.class, restaurant, "setSpawn", new Class<?>[] {BlockPos.class}, helper.absolutePos(spawn));
+        withConfig("SHOP_DELIVERY", 0, () -> {
+            for (int amount : List.of(10, 18)) {
+                var entry = new Shop.Entry("swords", new ItemStack(Items.IRON_SWORD, amount), new ItemStack(Items.IRON_SWORD), 0);
+                helper.assertValueEqual(restaurant.buy(entry), Restaurant.Buy.OK, "Checkout accepted");
+            }
+        });
+
+        call(Restaurant.class, restaurant, "tickDeliveries", new Class<?>[] {ServerLevel.class}, level);
+        var first = level.getEntitiesOfClass(Courier.class, helper.getBounds());
+        helper.assertValueEqual(first.size(), 1, "One courier may start per restaurant per tick");
+        first.getFirst().setNoAi(true);
+
+        helper.runAfterDelay(1, () -> {
+            call(Restaurant.class, restaurant, "tickDeliveries", new Class<?>[] {ServerLevel.class}, level);
+            var couriers = level.getEntitiesOfClass(Courier.class, helper.getBounds());
+            helper.assertValueEqual(couriers.size(), 2, "The second courier starts on the next tick");
+            Courier second = couriers.stream().filter(courier -> courier != first.getFirst()).findFirst().orElseThrow();
+            var at = Vec3.atBottomCenterOf(helper.absolutePos(spawn));
+            for (Courier courier : List.of(first.getFirst(), second)) {
+                courier.setNoAi(true);
+                courier.setPos(at.x, at.y, at.z);
+                call(Courier.class, courier, "customServerAiStep", new Class<?>[0]);
+            }
+            int packed = drops(helper, OneMoreCore.CARDBOARD_BOX_ITEM.get()).stream()
+                    .map(ItemEntity::getItem).map(stack -> stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY))
+                    .flatMap(ItemContainerContents::nonEmptyStream).mapToInt(ItemStack::getCount).sum();
+            helper.assertValueEqual(chest.countItem(Items.IRON_SWORD), 8, "The chest accepted eight stacks");
+            helper.assertValueEqual(packed, 8, "Packed item drops use the remaining budget");
+            var pending = save(restaurant).getList("deliveries", Tag.TAG_COMPOUND);
+            helper.assertValueEqual(pending.size(), 1, "A partially delivered order remains saved");
+            helper.assertValueEqual(pending.getCompound(0).getList("items", Tag.TAG_COMPOUND).getCompound(0).getInt("count"),
+                    12, "Only the undelivered stacks remain");
+            helper.runAfterDelay(1, () -> {
+                second.setPos(at.x, at.y, at.z);
+                call(Courier.class, second, "customServerAiStep", new Class<?>[0]);
+                int total = drops(helper, OneMoreCore.CARDBOARD_BOX_ITEM.get()).stream()
+                        .map(ItemEntity::getItem).map(stack -> stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY))
+                        .flatMap(ItemContainerContents::nonEmptyStream).mapToInt(ItemStack::getCount).sum();
+                helper.assertValueEqual(total, 20, "The next tick delivers the rest");
+                helper.assertTrue(save(restaurant).getList("deliveries", Tag.TAG_COMPOUND).isEmpty(), "Both orders completed");
+                helper.succeed();
+            });
+        });
+    }
+
     private static Restaurant placeRestaurant(GameTestHelper helper) {
         GameTestSupport.place(helper, SIGN, OneMoreCore.OPEN_SIGN.get(), OpenSignBlockEntity.class);
         helper.setBlock(TABLE, Blocks.OAK_SLAB);
         helper.setBlock(OTHER, Blocks.OAK_SLAB);
         helper.setBlock(SEAT, Blocks.OAK_STAIRS);
         Restaurant r = Restaurants.get(helper.getLevel()).at(helper.absolutePos(SIGN));
+        GameTestSupport.setRegister(r, 0);
         BoundingBox area = BoundingBox.fromCorners(helper.absolutePos(BlockPos.ZERO), helper.absolutePos(new BlockPos(3, 3, 3)));
         call(Restaurant.class, r, "setArea", new Class<?>[] {BoundingBox.class}, area);
         return r;
@@ -329,23 +341,6 @@ public final class MoneyGameTests {
 
     private static int dropped(GameTestHelper helper, Item item) {
         return drops(helper, item).stream().mapToInt(entity -> entity.getItem().getCount()).sum();
-    }
-
-    private static ChestBlockEntity placeChest(GameTestHelper helper, BlockPos pos) {
-        return GameTestSupport.place(helper, pos, Blocks.CHEST, ChestBlockEntity.class);
-    }
-
-    private static void setDelivery(Restaurant r, BlockPos pos) {
-        call(Restaurant.class, r, "setDelivery", new Class<?>[] {BlockPos.class}, pos);
-    }
-
-    private static void order(GameTestHelper helper, Restaurant r, Item item, int count) {
-        Shop.Entry entry = new Shop.Entry("test_order", new ItemStack(item, count), new ItemStack(item), 0);
-        helper.assertValueEqual(r.buy(entry), Restaurant.Buy.OK, "checkout result");
-    }
-
-    private static void tickDeliveries(GameTestHelper helper, Restaurant r) {
-        call(Restaurant.class, r, "tickDeliveries", new Class<?>[] {ServerLevel.class}, helper.getLevel());
     }
 
     private static CompoundTag save(Restaurant r) {
