@@ -442,7 +442,7 @@ public class Customer extends PathfinderMob {
         if (held.getItem() instanceof TrayItem) {
             TrayItem.returnOverflow(player, held);
             if (!wants(held)) return false;
-            TrayItem.serveDishes(held, this::wants, dish -> serve(player, dish));
+            TrayItem.serveDishes(held, this::wants, (dish, at) -> serve(player, dish, at));
             checkServed();
             return true;
         }
@@ -451,14 +451,17 @@ public class Customer extends PathfinderMob {
             player.displayClientMessage(Component.translatable("onemorecore.customer.use_tray"), true);
             return false;
         }
-        serve(player, held);
+        serve(player, held, null);
         held.consume(1, player);
         checkServed();
         return true;
     }
 
-    /** Serves one item of the stack (the stack itself is not changed). */
-    private void serve(Player player, ItemStack held) {
+    /**
+     * Serves one item of the stack (the stack itself is not changed). From a tray (at: its pose there) the served copy
+     * carries that pose as its tray_poses component: on the table it keeps its turn and size (CustomerRenderer.renderServed).
+     */
+    private void serve(Player player, ItemStack held, TrayPose at) {
         Line line = wanted.stream().filter(l -> l.matches(held)).findFirst().orElseThrow();
         wanted.remove(line);
         bill += line.price();
@@ -469,7 +472,9 @@ public class Customer extends PathfinderMob {
         // The main dish goes first: it stands big right in front of the guest, the rest smaller beside it.
         boolean main = restaurant != null && Menu.entries.stream().anyMatch(e -> "main".equals(restaurant.kind(e))
                 && (e.tag() != null ? held.is(e.tag()) : ItemStack.isSameItem(held, e.stack())));
-        if (main) served.add(0, held.copyWithCount(1)); else served.add(held.copyWithCount(1));
+        ItemStack shown = held.copyWithCount(1);
+        if (at != null) shown.set(OneMoreCore.TRAY_POSES.get(), List.of(at));
+        if (main) served.add(0, shown); else served.add(shown);
         entityData.set(SERVED, served);
         syncOrder();
         effect(SoundEvents.ITEM_PICKUP, null);

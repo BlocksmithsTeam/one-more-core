@@ -56,23 +56,29 @@ public final class WipingStation implements StationLogic {
             if (r != null) r.collect(cl, player, station.pos());
             return;
         }
+        // The stroke rate first: the checks after it search the table.
         if (!"wipe".equals(action) || !(station.level() instanceof ServerLevel level)
+                || level.getGameTime() - lastWipe.getOrDefault(player.getUUID(), level.getGameTime() - 1) < 1
                 || player.level() != level || !station.users().contains(player)
                 || !opens(player, station.pos(), station.blockState())
                 || !data.contains("x", Tag.TAG_FLOAT) || !data.contains("z", Tag.TAG_FLOAT)) return;
         float x = data.getFloat("x"), z = data.getFloat("z");
+        // A stroke runs from where the cloth was in the last tick (x0, z0) to where it is; without them it is one point.
+        float x0 = data.contains("x0", Tag.TAG_FLOAT) ? data.getFloat("x0") : x, z0 = data.contains("z0", Tag.TAG_FLOAT) ? data.getFloat("z0") : z;
         // The view shows the whole table: x and z are scene pixels from this block, up to 8 blocks away.
-        if (!Float.isFinite(x) || !Float.isFinite(z) || Math.abs(x) > 128 || Math.abs(z) > 128) return;
+        if (!Float.isFinite(x) || !Float.isFinite(z) || Math.abs(x) > 128 || Math.abs(z) > 128
+                || !Float.isFinite(x0) || !Float.isFinite(z0) || Math.abs(x0) > 128 || Math.abs(z0) > 128) return;
         BlockPos pos = station.pos();
         Restaurant r = Restaurants.get(level).containing(pos);
         var table = r.tableAt(level, pos);
         int cx = pos.getX() * 8 + (int) Math.floor(x / 2), cz = pos.getZ() * 8 + (int) Math.floor(z / 2);
         // A point off the table is no stroke: it does not use up the stroke rate either.
         if (!table.contains(new BlockPos(Math.floorDiv(cx, 8), pos.getY(), Math.floorDiv(cz, 8)))) return;
-        long now = level.getGameTime();
-        if (now - lastWipe.getOrDefault(player.getUUID(), now - 4) < 4) return;
-        lastWipe.put(player.getUUID(), now);
-        r.wipeCells(level, table, cx, cz, new Vec3(cx / 8.0 + 1 / 16.0, pos.getY() + Dirt.top(level, pos), cz / 8.0 + 1 / 16.0));
+        // A stroke longer than a block in one tick is a jump, not a wipe: only its end counts.
+        int sx = pos.getX() * 8 + (int) Math.floor(x0 / 2), sz = pos.getZ() * 8 + (int) Math.floor(z0 / 2);
+        if (Math.max(Math.abs(sx - cx), Math.abs(sz - cz)) > 8) { sx = cx; sz = cz; }
+        lastWipe.put(player.getUUID(), level.getGameTime());
+        r.wipeCells(level, table, sx, sz, cx, cz, new Vec3(cx / 8.0 + 1 / 16.0, pos.getY() + Dirt.top(level, pos), cz / 8.0 + 1 / 16.0));
     }
 
     @Override

@@ -1463,14 +1463,30 @@ public class Restaurant {
      * dirtCleanFraction of the table's dirt is gone, all of it is clean.
      */
     boolean wipeCells(ServerLevel level, Set<BlockPos> table, int cx, int cz, Vec3 hit) {
+        return wipeCells(level, table, cx, cz, cx, cz, hit);
+    }
+
+    private long lastWipeSound = Long.MIN_VALUE / 2;
+
+    /** Wipes along a stroke from cell (x0, z0) to (x1, z1): every cell on the way and its 8 neighbours, as wipeCells does. */
+    boolean wipeCells(ServerLevel level, Set<BlockPos> table, int x0, int z0, int x1, int z1, Vec3 hit) {
         boolean changed = false;
+        int steps = Math.max(Math.abs(x1 - x0), Math.abs(z1 - z0));
+        // Only the blocks under the stroke (and its 1-cell border) can change.
+        int bx0 = Math.floorDiv(Math.min(x0, x1) - 1, 8), bx1 = Math.floorDiv(Math.max(x0, x1) + 1, 8);
+        int bz0 = Math.floorDiv(Math.min(z0, z1) - 1, 8), bz1 = Math.floorDiv(Math.max(z0, z1) + 1, 8);
         for (BlockPos p : table) {
+            if (p.getX() < bx0 || p.getX() > bx1 || p.getZ() < bz0 || p.getZ() > bz1) continue;
             Long cells = dirt.get(p);
             if (cells == null) continue;
             long left = cells;
-            for (int z = cz - 1; z <= cz + 1; z++)
-                for (int x = cx - 1; x <= cx + 1; x++)
-                    if (Math.floorDiv(x, 8) == p.getX() && Math.floorDiv(z, 8) == p.getZ()) left &= ~(1L << (Math.floorMod(z, 8) * 8 + Math.floorMod(x, 8)));
+            for (int i = 0; i <= steps; i++) {
+                // Offsets from the start, not whole coordinates: a float cannot hold a cell coordinate far from the origin.
+                int cx = steps == 0 ? x0 : x0 + Math.round((x1 - x0) * (float) i / steps), cz = steps == 0 ? z0 : z0 + Math.round((z1 - z0) * (float) i / steps);
+                for (int z = cz - 1; z <= cz + 1; z++)
+                    for (int x = cx - 1; x <= cx + 1; x++)
+                        if (Math.floorDiv(x, 8) == p.getX() && Math.floorDiv(z, 8) == p.getZ()) left &= ~(1L << (Math.floorMod(z, 8) * 8 + Math.floorMod(x, 8)));
+            }
             if (left != cells) {
                 dirtStart.putIfAbsent(p, Long.bitCount(cells));
                 setDirtKeepStart(level, p, left);
@@ -1485,8 +1501,12 @@ public class Restaurant {
             }
             if (left == 0 || left <= (1 - Config.DIRT_CLEAN_FRACTION.get()) * start)
                 for (BlockPos p : table) if (dirt.containsKey(p) || dirtStart.containsKey(p)) setDirt(level, p, 0);
-            level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.BRUSH_GENERIC,
-                    SoundSource.BLOCKS, 0.35f, 1.2f);
+            // A stroke comes every tick while the cloth moves: the brush sounds at most every 4 ticks.
+            if (level.getGameTime() - lastWipeSound >= 4) {
+                lastWipeSound = level.getGameTime();
+                level.playSound(null, hit.x, hit.y, hit.z, SoundEvents.BRUSH_GENERIC,
+                        SoundSource.BLOCKS, 0.35f, 1.2f);
+            }
             level.sendParticles(ParticleTypes.SPLASH,
                     hit.x, hit.y + 0.03, hit.z, 3, 0.06, 0.01, 0.06, 0.01);
         }
