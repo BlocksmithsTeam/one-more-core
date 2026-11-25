@@ -73,7 +73,7 @@ final class Ingredients {
                                     .map(Ingredients::id).forEach(ids::add);
                             return ids;
                         }).toList();
-                var machines = Machines.forType(BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType()));
+                var machines = Machines.forType(Machines.kind(recipe));
                 if (addRecipe(alternatives, slots, machines)) this.machines.addAll(machines);
             } catch (RuntimeException e) {
                 skipped++;
