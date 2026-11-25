@@ -88,8 +88,8 @@ change how one of them works, change its lines here in the same commit.
 - **Dish blacklist** (`DishBlacklist`): anything eaten or drunk can be a dish (food component, eat or drink use, `#c:foods`,
   `#c:drinks`) unless `config/onemorecore/dish_blacklist.json` names it, like JEI's blacklist: item ids and `#tags`, read again on
   `/reload`; a missing file gets the pack's sauces, fruit buckets and thrown potions (only the server writes it). An entry that is
-  no string is left out, the others stay. `DishBlacklist.isDish` is meant to be the rule for `Restaurant.isFood`, which the menu
-  side wires after this lands; until then `isFood` does not use it. Test: `DishBlacklistGameTests`.
+  no string is left out, the others stay. `Restaurant.isFood` is `DishBlacklist.isDish`, so the menu catalog and ingredient
+  recipes follow the list. Test: `DishBlacklistGameTests`.
 - **Table Number card**: its place on the block is saved as `offset_x`/`offset_z` (a block entity's save writes its own
   position as `x`, `y`, `z`; never use those names in a block entity). Test: `ModelGameTests.tableNumberOffsetSurvivesSave`.
 - **Ingredient unlocks** use `Ingredients`, `IngredientConfig` and `Restaurant.orderable`. Recipes and `ingredients.json` determine what customers, combos, menu screens and menu books can offer. A recipe needs at least one readable slot and a usable candidate in every slot. Free candidates satisfy a slot. Dishes whose indexed recipes are all unreadable or unusable need a valid override. The server rebuilds the index and logs their count on startup and reload. The sign carries purchased ingredient IDs and the remaining register balance. Legacy saves migrate ingredient purchases once. The Shop prices purchases on the server and the computer sends the capped ingredient lists on Menu requests. See `IngredientGameTests`.
