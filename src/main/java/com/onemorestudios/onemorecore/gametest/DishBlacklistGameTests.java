@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.onemorestudios.onemorecore.DishBlacklist;
 import com.onemorestudios.onemorecore.OneMoreCore;
+import com.onemorestudios.onemorecore.Restaurant;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.item.ItemStack;
@@ -23,6 +24,10 @@ public final class DishBlacklistGameTests {
             helper.assertTrue(DishBlacklist.isDish(new ItemStack(Items.COOKED_COD)), "food is a dish");
             helper.assertFalse(DishBlacklist.isDish(new ItemStack(Items.SPLASH_POTION)), "a blacklisted id is no dish");
             helper.assertFalse(DishBlacklist.isDish(new ItemStack(Items.STONE)), "stone is no dish");
+            // The menu uses the same rule.
+            DishBlacklist.set(List.of("minecraft:bread"));
+            helper.assertFalse(Restaurant.isFood(new ItemStack(Items.BREAD)), "a blacklisted food is no menu dish");
+            helper.assertTrue(Restaurant.isFood(new ItemStack(Items.MILK_BUCKET)), "a drink is a menu dish");
             // A tag entry, added later, takes out the whole tag.
             DishBlacklist.set(List.of("#minecraft:fishes", "not an id!"));
             helper.assertFalse(DishBlacklist.isDish(new ItemStack(Items.COOKED_COD)), "a blacklisted tag is no dish");
