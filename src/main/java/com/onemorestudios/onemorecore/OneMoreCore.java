@@ -242,6 +242,7 @@ public class OneMoreCore {
                 .playToClient(ScreenData.TYPE, ScreenData.CODEC, (t, context) -> ScreenData.receive(t))
                 .playToClient(MenuBookBlockEntity.Open.TYPE, MenuBookBlockEntity.Open.CODEC, (o, context) -> MenuBookBlockEntity.Open.handler.accept(o))
                 .playToClient(TableItems.Collected.TYPE, TableItems.Collected.CODEC, (c, context) -> TableItems.Collected.receive(c))
+                .playToServer(Machines.Found.TYPE, Machines.Found.CODEC, (found, context) -> Machines.Found.handle(found, (ServerPlayer) context.player()))
                 .playToServer(ReadyRequest.TYPE, ReadyRequest.CODEC, (request, context) -> ReadyRequest.handle(request, (ServerPlayer) context.player()))
                 .playToServer(ScreenClick.TYPE, ScreenClick.CODEC, (click, context) -> ScreenClick.handle(click, (ServerPlayer) context.player()))
                 .playToClient(TableCards.Edit.TYPE, TableCards.Edit.CODEC, (edit, context) -> TableCards.Edit.handler.accept(edit))

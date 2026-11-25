@@ -28,6 +28,7 @@ sourceSets.main.resources {
 
 repositories {
     maven { url = "https://cursemaven.com"; content { includeGroup "curse.maven" } }
+    maven { url = "https://maven.blamejared.com"; content { includeGroup "mezz.jei" } }
 }
 
 base {
@@ -127,12 +128,9 @@ dependencies {
     if (!providers.gradleProperty('noDiegesis').isPresent()) {
         localRuntime diegesis
     }
-    // Example optional mod dependency with JEI
-    // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
-    // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
-    // compileOnly "mezz.jei:jei-${mc_version}-neoforge-api:${jei_version}"
-    // We add the full version to localRuntime, not runtimeOnly, so that we do not publish a dependency on it
-    // localRuntime "mezz.jei:jei-${mc_version}-neoforge:${jei_version}"
+    // JEI is optional: its plugin reports the machines of each recipe type (Machines).
+    compileOnly "mezz.jei:jei-1.21.1-common-api:19.70.0.469"
+    compileOnly "mezz.jei:jei-1.21.1-neoforge-api:19.70.0.469"
 
     // Example mod dependency using a mod jar from ./libs with a flat dir repository
     // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar
