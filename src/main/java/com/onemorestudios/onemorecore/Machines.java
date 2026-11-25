@@ -26,6 +26,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -33,22 +34,17 @@ import net.neoforged.fml.loading.FMLPaths;
 
 /**
  * The machines of each recipe type: config/onemorecore/machines.json, {"recipe type": ["block", ...]}. One of the blocks
- * in the restaurant area is enough. JEI fills the file: a client with JEI sends the machines it lists, and an operator's
- * (or the singleplayer owner's) list adds the types and blocks the file does not have yet. A type the file does not name
- * uses the block with the same id, else it needs no machine.
+ * in the restaurant area is enough. The mod has a list for vanilla and the mods of the One More Order pack
+ * (onemorecore/machines.json in the jar); the file overrides it per type. JEI adds to the file: a client with JEI sends the
+ * machines it lists, and an operator's (or the singleplayer owner's) list adds the types no list has yet. A named type keeps
+ * its blocks, so a heat source that JEI lists (a stove) does not stand in for the machine. A type no list names uses the
+ * block with the same id, else it needs no machine.
  */
 public final class Machines {
     private Machines() {}
 
     static final String FILE = "machines.json";
-    static final Map<String, List<String>> DEFAULTS = Map.of(
-            "minecraft:crafting", List.of("minecraft:crafting_table"),
-            "minecraft:smelting", List.of("minecraft:furnace"),
-            "minecraft:smoking", List.of("minecraft:smoker"),
-            "minecraft:blasting", List.of("minecraft:blast_furnace"),
-            "minecraft:campfire_cooking", List.of("minecraft:campfire", "minecraft:soul_campfire"),
-            "minecraft:stonecutting", List.of("minecraft:stonecutter"),
-            "minecraft:smithing", List.of("minecraft:smithing_table"));
+    private static Map<ResourceLocation, Set<ResourceLocation>> defaults;
 
     private static volatile Map<ResourceLocation, Set<ResourceLocation>> byType;
     private static final Set<ResourceLocation> UNKNOWN_LOGGED = ConcurrentHashMap.newKeySet();
@@ -64,17 +60,37 @@ public final class Machines {
         return Set.of();
     }
 
-    /** Reads the file, or (write) writes the defaults when it is missing. A broken file falls back to the defaults. */
+    /** The type id a recipe is listed under: its registered type; a type that is not registered gives its name, else the serializer's id. */
+    public static ResourceLocation kind(Recipe<?> recipe) {
+        ResourceLocation key = BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType());
+        if (key == null) key = ResourceLocation.tryParse(String.valueOf(recipe.getType()));
+        return key != null ? key : BuiltInRegistries.RECIPE_SERIALIZER.getKey(recipe.getSerializer());
+    }
+
+    /** The list in the jar. */
+    static synchronized Map<ResourceLocation, Set<ResourceLocation>> defaults() {
+        if (defaults == null) {
+            try (var in = Machines.class.getResourceAsStream("/onemorecore/" + FILE)) {
+                defaults = parse(new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+            } catch (IOException | RuntimeException e) {
+                OneMoreCore.LOGGER.error("The built-in machine list cannot be read", e);
+                defaults = Map.of();
+            }
+        }
+        return defaults;
+    }
+
+    /** Reads the file over the built-in list, or (write) writes the list when the file is missing. A broken file is not used. */
     static synchronized void reload(boolean write) {
         Path path = path();
-        Map<ResourceLocation, Set<ResourceLocation>> map = parse(toJson(DEFAULTS));
+        Map<ResourceLocation, Set<ResourceLocation>> map = new HashMap<>(defaults());
         try {
-            if (Files.exists(path)) map = parse(Files.readString(path));
+            if (Files.exists(path)) map.putAll(parse(Files.readString(path)));
             else if (write) save(map);
         } catch (IOException | RuntimeException e) {
-            OneMoreCore.LOGGER.warn("{}: {}; the default machines are used", path, e.toString());
+            OneMoreCore.LOGGER.warn("{}: {}; the built-in machines are used", path, e.toString());
         }
-        byType = map;
+        byType = Map.copyOf(map);
     }
 
     /** {"type": ["block", ...]}. An entry that is no id or no list of ids is left out. */
@@ -93,13 +109,13 @@ public final class Machines {
         return map;
     }
 
-    /** The file's map with every type and block of found added. Only registered recipe types and blocks are taken. */
+    /** The map with the types of found that it does not name added; a named type keeps its blocks. Only registered blocks are taken. */
     public static Map<ResourceLocation, Set<ResourceLocation>> merge(Map<ResourceLocation, Set<ResourceLocation>> current,
             Map<ResourceLocation, ? extends Iterable<ResourceLocation>> found) {
         Map<ResourceLocation, Set<ResourceLocation>> merged = new HashMap<>();
         current.forEach((type, blocks) -> merged.put(type, new HashSet<>(blocks)));
         found.forEach((type, blocks) -> {
-            if (!BuiltInRegistries.RECIPE_TYPE.containsKey(type)) return;
+            if (current.containsKey(type)) return;
             for (ResourceLocation block : blocks) {
                 if (BuiltInRegistries.BLOCK.containsKey(block)) merged.computeIfAbsent(type, key -> new HashSet<>()).add(block);
             }
@@ -114,7 +130,7 @@ public final class Machines {
         if (byType == null) reload(true);
         var merged = merge(byType, found);
         if (merged.equals(byType)) return false;
-        byType = merged;
+        byType = Map.copyOf(merged);
         try {
             save(merged);
         } catch (IOException e) {
@@ -164,7 +180,7 @@ public final class Machines {
 
     private static String toJson(Map<String, List<String>> map) {
         JsonObject json = new JsonObject();
-        new TreeMap<>(map).forEach((type, blocks) -> {
+        map.forEach((type, blocks) -> {
             JsonArray array = new JsonArray();
             blocks.forEach(array::add);
             json.add(type, array);
