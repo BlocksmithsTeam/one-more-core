@@ -8,6 +8,9 @@ change how one of them works, change its lines here in the same commit.
 - Pull before you start (`main`). Commit small, one topic per commit, with a clear message (what and why).
 - Run the GameTests before you push: `./gradlew runGameTestServer` must end with "All N required tests passed". A test that
   fails after your change shows a behaviour someone relies on: fix the cause, do not delete or loosen the test.
+- No vanilla block is a seat or table (`onemorecore:seats`, `onemorecore:serving_surfaces`). The GameTests still
+  build with them: `src/main/resources/gametest_pack` adds them back, loaded only on the GameTest server (`OneMoreCore`,
+  `GameTestHooks.isGametestServer`, always false in production). Test: `FixesGameTests.vanillaBlocksAreNoFurniture`.
 - When you change a behaviour on purpose, change its test in the same commit and say so in the message.
 
 ## Systems and what must keep working
@@ -36,7 +39,8 @@ change how one of them works, change its lines here in the same commit.
   buffer mixed them with the text). Text and items are cut at the scrolled area's edges by `ClipBuffers` (quads along the
   canvas axes are cut with their texture), so a row coming in shows its part in view.
   A floor or ceiling Screen turns in 16 directions (`TURN`), like a sign; a turned one joins no other.
-- **Tray Rack**: holds up to six trays that players put in (`slot0..slot5` state); an empty rack gives nothing. Its hitbox is a
+- **Tray Rack**: holds up to six trays that players put in (`slot0..slot5` state); an empty rack gives nothing. A level keeps only
+  the tray's kind, so a tray with dishes or a ticket is refused (`FixesGameTests.ticketSurvivesBreakAndRack`). Its hitbox is a
   shell 1 px thick, open at the front, the back and inside, so every level can be clicked. Tests:
   `ModelGameTests.rackHoldsTheTraysPutIn`, `FixesGameTests.trayRackIsAnOpenShell`.
 - **Trays**: dishes with a block form (Display Delight plates, cakes) draw as that block, also with Diegesis
@@ -44,6 +48,16 @@ change how one of them works, change its lines here in the same commit.
   rest pose up close (optional mixin, `required: false`). Up close the tray has one place more than its dishes: a ticket put
   anywhere on it becomes the label and takes no dish's place (`KitchenStations.TicketSlot`; test
   `TrayPlacementGameTests.diegesisTrayUsesAndPersistsPlacedPoses`).
+  The tray keeps the whole ticket (`TrayBlockEntity.ticket`, item component `tray_ticket`), not only its table text: looking
+  at the label shows the ticket's tooltip (table and dishes, `ClientSetup.renderOrderTooltip`), an empty-hand click on the label
+  (`TrayBlock.onLabel`: middle of the front rim) gives the ticket back and does not open the close-up, and a new ticket hands
+  the old one back (dropped on the tray up close). The ticket goes with the last dish served from the tray, as the label did
+  before (on purpose). Tests: `TrayPlacementGameTests.labelTicketComesBack`, `FixesGameTests.ticketSurvivesBreakAndRack`.
+  Every served dish lies on the table as a tray holds it: the turn and size it had on the tray (`TrayItem.serveDishes` passes
+  the pose, `Customer.serve` puts it on the served copy as `tray_poses`), a dish from the hand or past an old tray's 3 places
+  the tray's rest pose. Not its place: `CustomerRenderer.renderServed` draws the guest's dishes in one row (tray pixels 8, 3,
+  13, the main dish in the middle) with `TrayRenderer.drawDish`, so two trays for one guest never overlap. `foodScale`
+  sizes them (1 = the tray's size). Tests: `MoneyGameTests` (serveBread, `dishPastTheTraysPlacesHasNoPose`).
   The carried tray's hands and dishes move on springs (`TrayCarryRenderer.CarrySway`), stepped once per frame so a second
   render of the player in the same frame (the inventory's player picture) does not push them.
 - **Grilling skewers** (`compat/GrillingSkewers`): Kaleidoscope Grilling items in `onemorecore:lying_dishes` or with an ID
@@ -60,6 +74,19 @@ change how one of them works, change its lines here in the same commit.
   above, or after a screwdriver click, a wall sign is the small chalkboard flat on the wall (`CHALK`).
 - **Menu book**: a printed menu over both pages (a heading per kind, a line per dish with dots to the price; `RecipeBook.MenuRows`,
   a spread is two list pages). The kinds are bookmarks along the head of both pages, the search last (`RecipeBook.tabSlot`).
+- **Wiping** (Diegesis close-up): the client sends a stroke every tick, from where the cloth touched in the last tick to where
+  it touches now (`WipingBehavior`); the server cleans every cell on the way and its neighbours (`Restaurant.wipeCells` with two
+  ends, a stroke longer than a block counts as its end only), so the dirt goes as soon as the cloth passes. On purpose, the
+  cloth reaches the whole table the close-up shows (up to 8 blocks from the station block), not only the player's reach. One
+  stroke per tick, checked before the table search; a stroke touches only the blocks under it. Test:
+  `MoneyGameTests.strokeWipesEveryCellOnItsWay`.
+- **Order bubble**: a named customer (a chat viewer) shows its name in a row on top of the bubble, over a thin line, while the
+  bubble shows; the vanilla name tag is hidden then (`CustomerRenderer.renderBubble`, `renderNameTag`).
+- **Dish blacklist** (`DishBlacklist`): anything eaten or drunk can be a dish (food component, eat or drink use, `#c:foods`,
+  `#c:drinks`) unless `config/onemorecore/dish_blacklist.json` names it, like JEI's blacklist: item ids and `#tags`, read again on
+  `/reload`; a missing file gets the pack's sauces, fruit buckets and thrown potions (only the server writes it). An entry that is
+  no string is left out, the others stay. `DishBlacklist.isDish` is meant to be the rule for `Restaurant.isFood`, which the menu
+  side wires after this lands; until then `isFood` does not use it. Test: `DishBlacklistGameTests`.
 - **Table Number card**: its place on the block is saved as `offset_x`/`offset_z` (a block entity's save writes its own
   position as `x`, `y`, `z`; never use those names in a block entity). Test: `ModelGameTests.tableNumberOffsetSurvivesSave`.
 - **Ingredient unlocks** use `Ingredients`, `IngredientConfig` and `Restaurant.orderable`. Recipes and `ingredients.json` determine what customers, combos, menu screens and menu books can offer. A recipe needs at least one readable slot and a usable candidate in every slot. Free candidates satisfy a slot. Dishes whose indexed recipes are all unreadable or unusable need a valid override. The server rebuilds the index and logs their count on startup and reload. The sign carries purchased ingredient IDs and the remaining register balance. Legacy saves migrate ingredient purchases once. The Shop prices purchases on the server and the computer sends the capped ingredient lists on Menu requests. See `IngredientGameTests`.

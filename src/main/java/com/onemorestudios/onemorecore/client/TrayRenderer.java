@@ -78,6 +78,12 @@ public class TrayRenderer implements BlockEntityRenderer<TrayBlockEntity> {
         }
     }
 
+    /** One dish at its tray pose, in the tray's block space (0..1, the bed at TrayPose.BED), as the tray draws it. */
+    static void drawDish(ItemStack dish, TrayPose at, PoseStack pose, MultiBufferSource buffers, int light, int seed) {
+        if (DiegesisHook.LOADED) TrayDiegesis.drawDish(dish, at, Sway.NONE, pose, buffers, light, seed);
+        else drawStandalone(dish, at, Sway.NONE, pose, buffers, light, seed);
+    }
+
     private static void drawStandalone(ItemStack dish, TrayPose at, Sway sway, PoseStack pose, MultiBufferSource buffers, int light, int seed) {
         Minecraft mc = Minecraft.getInstance();
         var items = mc.getItemRenderer();

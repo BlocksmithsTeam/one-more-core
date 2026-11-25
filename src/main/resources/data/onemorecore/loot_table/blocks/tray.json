@@ -14,7 +14,8 @@
        "include": [
         "minecraft:container",
         "onemorecore:table_label",
-        "onemorecore:tray_poses"
+        "onemorecore:tray_poses",
+        "onemorecore:tray_ticket"
        ]
       }
      ]

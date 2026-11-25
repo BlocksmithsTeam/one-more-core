@@ -11,7 +11,7 @@ import com.mojang.math.Axis;
 import com.onemorestudios.onemorecore.Config;
 import com.onemorestudios.onemorecore.Customer;
 import com.onemorestudios.onemorecore.OneMoreCore;
-import com.onemorestudios.onemorecore.compat.GrillingSkewers;
+import com.onemorestudios.onemorecore.TrayPose;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -38,7 +38,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Matrix4f;
-import org.joml.Quaternionf;
 
 /** A player model with a default skin, the patience bar, the order icons and the served food. */
 public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<Customer>> {
@@ -173,9 +172,11 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         return skin == null ? fallback : skin;
     }
 
-    // The vanilla name tag is at the height of the patience bar. This puts it above the order icons.
+    // The vanilla name tag is at the height of the patience bar. This puts it above the order icons. While the order bubble
+    // shows, the name is in the bubble's top row instead (renderBubble).
     @Override
     protected void renderNameTag(Customer customer, Component name, PoseStack pose, MultiBufferSource buffers, int light, float partialTick) {
+        if (showsBubble(customer)) return;
         pose.pushPose();
         pose.translate(0, 0.75, 0);
         super.renderNameTag(customer, name, pose, buffers, light, partialTick);
@@ -203,22 +204,45 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
      * A speech bubble above the head: a "!" while the customer waits for a player to take the order, then the ordered
      * items. A patience bar at the bottom of the bubble.
      */
-    private void renderBubble(Customer customer, PoseStack pose, MultiBufferSource buffers) {
+    private static boolean showsBubble(Customer customer) {
         Customer.State state = customer.getState();
-        if (state != Customer.State.WAITING_ORDER && state != Customer.State.WAITING_FOOD) return;
+        return state == Customer.State.WAITING_ORDER || state == Customer.State.WAITING_FOOD;
+    }
+
+    /** The name row on top of the bubble (a chat viewer's name), in blocks, and the size of its letters. */
+    private static final float NAME_H = 0.2f, NAME_SCALE = 0.018f;
+    private static final int NAME_MAX_PX = 150, NAME_COLOR = 0xFFFFE2A0;
+
+    private void renderBubble(Customer customer, PoseStack pose, MultiBufferSource buffers) {
+        if (!showsBubble(customer)) return;
         List<ItemStack> order = customer.getOrder();
         int slots = Math.max(1, order.size());
         float half = Math.max(CAP, (slots * SLOT + 0.16f) / 2);
+        // A named customer (a chat viewer) has its name in a row on top of the bubble; the bubble grows up for it.
+        Font nameFont = getFont();
+        String name = customer.hasCustomName() ? customer.getCustomName().getString() : "";
+        if (nameFont.width(name) > NAME_MAX_PX) name = nameFont.plainSubstrByWidth(name, NAME_MAX_PX - nameFont.width("...")) + "...";
+        float nameH = name.isEmpty() ? 0 : NAME_H;
+        if (!name.isEmpty()) half = Math.max(half, nameFont.width(name) * NAME_SCALE / 2 + 0.14f);
         pose.pushPose();
         pose.translate(0, customer.getBbHeight() + 0.75, 0);
         pose.mulPose(entityRenderDispatcher.cameraOrientation());
         Matrix4f m = pose.last().pose();
         VertexConsumer vc = buffers.getBuffer(RenderType.text(BUBBLE));
-        float top = BODY_H / 2, bottom = -BODY_H / 2, z = -0.04f;
+        float top = BODY_H / 2, bottom = -BODY_H / 2, z = -0.04f, outer = top + nameH;
         // Body: left cap, stretched middle, right cap. Tail under the middle.
-        quad(vc, m, -half, bottom, -half + CAP, top, z, 0, 0, 8, 20, 0xFFFFFFFF);
-        quad(vc, m, -half + CAP, bottom, half - CAP, top, z, 8, 0, 24, 20, 0xFFFFFFFF);
-        quad(vc, m, half - CAP, bottom, half, top, z, 24, 0, 32, 20, 0xFFFFFFFF);
+        quad(vc, m, -half, bottom, -half + CAP, outer, z, 0, 0, 8, 20, 0xFFFFFFFF);
+        quad(vc, m, -half + CAP, bottom, half - CAP, outer, z, 8, 0, 24, 20, 0xFFFFFFFF);
+        quad(vc, m, half - CAP, bottom, half, outer, z, 24, 0, 32, 20, 0xFFFFFFFF);
+        if (!name.isEmpty()) {
+            // A thin line under the name parts it from the order.
+            quad(vc, m, -half + 0.1f, top - 0.005f, half - 0.1f, top + 0.005f, z + 0.005f, 28, 28, 32, 32, 0x40FFFFFF);
+            pose.pushPose();
+            pose.translate(0, top + nameH / 2 + 4.5f * NAME_SCALE - 0.01f, 0);
+            pose.scale(NAME_SCALE, -NAME_SCALE, NAME_SCALE);
+            nameFont.drawInBatch(name, -nameFont.width(name) / 2f, 0, NAME_COLOR, false, pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
+            pose.popPose();
+        }
         quad(vc, m, -CAP / 2, bottom - CAP, CAP / 2, bottom, z, 12, 20, 20, 28, 0xFFFFFFFF);
         // Patience bar: a dark track and a coloured fill, from red (0) over yellow to green (1).
         float left = Mth.clamp(customer.getPatience(), 0, 1);
@@ -238,7 +262,7 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
             int color = guest == Customer.Type.VIP ? 0xFFFFD24A : guest == Customer.Type.REGULAR ? 0xFFFF6B7A : 0xFF8FD3FF;
             Font font = getFont();
             pose.pushPose();
-            pose.translate(-half + 0.06f, top - 0.03f, 0);
+            pose.translate(-half + 0.06f, outer - 0.03f, 0);
             pose.scale(0.022f, -0.022f, 0.022f);
             font.drawInBatch(mark, 0, 0, color, false, pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
             pose.popPose();
@@ -293,6 +317,9 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         vc.addVertex(m, x0, y1, z).setColor(argb).setUv(a0, b0).setLight(light);
     }
 
+    /** How far the middle of a served tray's layout lies from the surface centre towards the guest, in blocks. */
+    private static final double TRAY_IN = 0.12;
+
     /** Draws the delivered items on top of the serving surface, between the customer and the surface centre. */
     private void renderServed(Customer customer, float partialTick, PoseStack pose, MultiBufferSource buffers) {
         List<ItemStack> served = customer.getServed();
@@ -308,70 +335,29 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         double dx = x / len, dz = z / len;
         float facing = (float) (Mth.atan2(dx, dz) * Mth.RAD_TO_DEG);
         int light = LevelRenderer.getLightColor(customer.level(), surface.above());
+        // foodScale (config) sizes every served dish; 1 is its size on the tray.
         float scale = Config.FOOD_SCALE.get().floatValue();
-        // The first item (the main dish, as the server puts it first) stands big right in front of the guest; the others are
-        // smaller, to the left and right of it and a little further in.
-        for (int i = 0; i < served.size(); i++) {
-            ItemStack stack = served.get(i);
-            int k = i == 0 ? 0 : (i + 1) / 2 * (i % 2 == 1 ? 1 : -1);
-            double side = k * 0.27, in = i == 0 ? 0.22 : 0.08;
+        // Every served dish lies as a tray holds it: the turn and size it had on the tray (a dish from the hand: the tray's
+        // rest pose), not its place. The dishes stand in one row across the guest's place, the first (the main dish, as the
+        // server puts it first) in the middle, each on the bed (not stacked); the row is laid out like a tray's bed, its front
+        // towards the guest.
+        for (int i = 0; i < served.size() && i < ROW.length; i++) {
+            ItemStack dish = served.get(i);
+            List<TrayPose> at = dish.get(OneMoreCore.TRAY_POSES.get());
+            TrayPose rest = TrayPose.legacy(0);
+            TrayPose own = at == null || at.isEmpty() ? rest : at.get(0);
+            TrayPose place = new TrayPose(ROW[i], rest.y(), rest.z(), own.lift(), own.rotation(), own.scale() * scale, -1, own.wanted());
             pose.pushPose();
-            pose.translate(x - dx * in - dz * side, y, z - dz * in + dx * side);
+            pose.translate(x - dx * TRAY_IN, y - TrayPose.BED / 16f, z - dz * TRAY_IN);
             pose.mulPose(Axis.YP.rotationDegrees(facing));
-            renderFood(stack, customer.level(), pose, buffers, light, scale * (i == 0 ? 1.15f : 0.75f), customer.getId() + i);
+            pose.translate(-0.5, 0, -0.5);
+            TrayRenderer.drawDish(dish, place, pose, buffers, light, customer.getId() + i);
             pose.popPose();
         }
     }
 
-    /**
-     * Draws a food with the middle of its bottom at the origin, as on a table: the placed block of a food item at 0.4
-     * size, a 3D item standing, or a 2D item or grilling skewer lying flat.
-     */
-    public static void renderFood(ItemStack stack, net.minecraft.world.level.Level level, PoseStack pose, MultiBufferSource buffers, int light, float scale, int seed) {
-        if (GrillingSkewers.matches(stack)) {
-            renderSkewer(stack, level, pose, buffers, light, scale, seed);
-            return;
-        }
-        var items = Minecraft.getInstance().getItemRenderer();
-        pose.pushPose();
-        String display = display(stack, level);
-        if (display.equals("block")) {
-            pose.scale(0.4f * scale, 0.4f * scale, 0.4f * scale);
-            pose.translate(-0.5, 0, -0.5);
-            Minecraft.getInstance().getBlockRenderer().renderSingleBlock(FoodModels.block(stack), pose, buffers, light, OverlayTexture.NO_OVERLAY);
-        } else {
-            if (display.equals("flat")) {
-                pose.translate(0, 0.5f * scale / 32, 0);
-                pose.mulPose(Axis.XP.rotationDegrees(90));
-                pose.scale(0.5f * scale, 0.5f * scale, 0.5f * scale);
-            } else {
-                // A block model in the FIXED context is a half block that is centred on the origin.
-                pose.translate(0, 0.25f * scale, 0);
-                pose.scale(scale, scale, scale);
-            }
-            items.renderStatic(stack, ItemDisplayContext.FIXED, light, OverlayTexture.NO_OVERLAY, pose, buffers, level, seed);
-        }
-        pose.popPose();
-    }
-
-    private static void renderSkewer(ItemStack stack, net.minecraft.world.level.Level level, PoseStack pose,
-            MultiBufferSource buffers, int light, float scale, int seed) {
-        var items = Minecraft.getInstance().getItemRenderer();
-        var bounds = new TrayRenderer.DishBounds();
-        items.renderStatic(stack, ItemDisplayContext.NONE, light, OverlayTexture.NO_OVERLAY,
-                new PoseStack(), type -> bounds.consumer(), level, seed);
-        var half = bounds.half();
-        var turn = SkewerPose.lyingTurn(new Quaternionf(), half);
-        var center = bounds.center();
-        float size = 0.5f * scale;
-        pose.pushPose();
-        pose.scale(size, size, size);
-        pose.translate(0, TrayRenderer.rotatedHalf(half, turn).y, 0);
-        pose.mulPose(turn);
-        pose.translate(-center.x, -center.y, -center.z);
-        items.renderStatic(stack, ItemDisplayContext.NONE, light, OverlayTexture.NO_OVERLAY, pose, buffers, level, seed);
-        pose.popPose();
-    }
+    /** The row's places in tray pixels across the guest, the middle first (a customer orders at most 3 things). */
+    private static final float[] ROW = {8, 3, 13};
 
     /** Whether a dish shows as the block it places (see display). */
     static boolean showsBlock(ItemStack stack) {

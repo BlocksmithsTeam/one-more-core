@@ -197,6 +197,26 @@ public final class MoneyGameTests {
         helper.succeed();
     }
 
+    /**
+     * One stroke of the cloth cleans every cell it passes over at once: a stroke across the middle row of a fully dirty surface
+     * leaves only the rows more than one cell away from it, with no need to rest the cloth on each spot.
+     */
+    @GameTest(template = "empty")
+    public static void strokeWipesEveryCellOnItsWay(GameTestHelper helper) {
+        Restaurant restaurant = placeRestaurant(helper);
+        BlockPos a = helper.absolutePos(TABLE);
+        withConfig("DIRT_CLEAN_FRACTION", 1.0, () -> {
+            dirt(helper, restaurant, a, -1L);
+            int row = a.getZ() * 8 + 4;
+            call(Restaurant.class, restaurant, "wipeCells", new Class<?>[] {ServerLevel.class, Set.class, int.class, int.class, int.class, int.class, Vec3.class},
+                    helper.getLevel(), Set.of(a), a.getX() * 8, row, a.getX() * 8 + 7, row, Vec3.atCenterOf(a));
+            long left = (Long) dirt(restaurant).get(a);
+            // Rows 3, 4 and 5 (the stroke and its neighbours) are clean in all 8 columns; the other 5 rows stay.
+            helper.assertValueEqual(left, -1L & ~(0xFFFFFFL << 24), "cells left after the stroke");
+        });
+        helper.succeed();
+    }
+
     /** CORE-15: removing the sign sends exactly one zero-coin update per bill to a tracking player. */
     @GameTest(template = "empty")
     public static void removingSignClearsTrackedBills(GameTestHelper helper) {
@@ -293,6 +313,21 @@ public final class MoneyGameTests {
         return r;
     }
 
+    /** An old tray can hold a dish past its 3 places: served, it gets no pose (a pose there would be off the tray and not sync). */
+    @GameTest(template = "empty")
+    public static void dishPastTheTraysPlacesHasNoPose(GameTestHelper helper) throws ReflectiveOperationException {
+        ItemStack tray = new ItemStack(OneMoreCore.TRAY_ITEM.get());
+        tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY, new ItemStack(Items.BREAD))));
+        var serve = com.onemorestudios.onemorecore.TrayItem.class.getDeclaredMethod("serveDishes", ItemStack.class,
+                java.util.function.Predicate.class, java.util.function.BiConsumer.class);
+        serve.setAccessible(true);
+        List<Object> poses = new java.util.ArrayList<>();
+        serve.invoke(null, tray, (java.util.function.Predicate<ItemStack>) s -> true,
+                (java.util.function.BiConsumer<ItemStack, Object>) (dish, at) -> poses.add(at == null ? "none" : at));
+        helper.assertValueEqual(poses, List.<Object>of("none"), "the pose of the 4th slot's dish");
+        helper.succeed();
+    }
+
     private static Object serveBread(GameTestHelper helper, Restaurant r, int price, boolean partial) {
         Object party;
         try {
@@ -312,7 +347,13 @@ public final class MoneyGameTests {
         call(Customer.class, customer, "mobInteract", new Class<?>[] {Player.class, InteractionHand.class}, player, InteractionHand.MAIN_HAND);
         ItemStack tray = new ItemStack(OneMoreCore.TRAY_ITEM.get());
         tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.BREAD))));
+        // The bread lies turned in a corner of the tray: it reaches the table with that pose.
+        var placed = new com.onemorestudios.onemorecore.TrayPose(12.5f, 1, 4.25f, 0, new org.joml.Quaternionf().rotationY(0.9f), 1.1f, -1, 1);
+        tray.set(OneMoreCore.TRAY_POSES.get(), List.of(placed));
         helper.assertTrue(customer.deliver(player, tray), "Customer accepted the dish on the tray");
+        var shown = customer.getServed().get(0);
+        helper.assertTrue(shown.is(Items.BREAD) && List.of(placed).equals(shown.get(OneMoreCore.TRAY_POSES.get())),
+                "The served bread keeps its tray pose: " + shown.get(OneMoreCore.TRAY_POSES.get()));
         helper.assertTrue(Customer.State.EATING == customer.getState() || partial && Customer.State.WAITING_FOOD == customer.getState(),
                 "Customer reached the expected service state");
         return party;

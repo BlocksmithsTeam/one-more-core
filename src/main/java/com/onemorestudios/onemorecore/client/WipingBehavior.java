@@ -14,7 +14,6 @@ final class WipingBehavior implements StationBehavior {
     private boolean touching;
     /** The serving surfaces of the table this station stands on. */
     private java.util.Set<net.minecraft.core.BlockPos> table = java.util.Set.of();
-    private int ticks;
     private float height;
 
     static void register() { DiegesisClient.registerBehavior(WipingStation.ID, view -> new WipingBehavior()); }
@@ -132,16 +131,25 @@ final class WipingBehavior implements StationBehavior {
             return;
         }
         cleanTicks = 0;
-        if (!view.isFocused() || ++ticks % 4 != 0) return;
-        view.node("cloth").filter(node -> node.isHeld()).ifPresent(node -> {
+        boolean stroked = view.isFocused() && view.node("cloth").filter(node -> node.isHeld()).map(node -> {
             var at = view.node("cloth_model").orElse(node).scenePosition();
             // On this block the trigger tells the contact; on the other blocks of the table, the cloth is over them.
             var over = view.pos().offset(Math.floorDiv((int) Math.floor(at.x()), 16), 0, Math.floorDiv((int) Math.floor(at.z()), 16));
-            if (!(touching || !over.equals(view.pos()) && table.contains(over))) return;
+            if (!(touching || !over.equals(view.pos()) && table.contains(over))) return false;
+            // Every tick a stroke from where the cloth was to where it is: the dirt goes as soon as the cloth passes.
             CompoundTag data = new CompoundTag();
+            data.putFloat("x0", Float.isNaN(lastX) ? at.x() : lastX);
+            data.putFloat("z0", Float.isNaN(lastX) ? at.z() : lastZ);
             data.putFloat("x", at.x());
             data.putFloat("z", at.z());
             view.sendAction("wipe", data);
-        });
+            lastX = at.x();
+            lastZ = at.z();
+            return true;
+        }).orElse(false);
+        if (!stroked) lastX = Float.NaN;
     }
+
+    /** Where the cloth touched the table in the last tick, in scene pixels (NaN: it did not). */
+    private float lastX = Float.NaN, lastZ;
 }

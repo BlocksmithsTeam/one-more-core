@@ -37,8 +37,9 @@ public final class KitchenStations {
             // One place more than the dishes: an order ticket put on the tray becomes its label and takes no dish's place (TicketSlot).
             .schema(StationSchema.builder().slots(TRAY_DISHES, TrayBlockEntity.SIZE + 1, SlotRules.DEFAULT.maxStack(1).placed().kept()).build())
             // An empty hand opens it; with an item the tray takes the dish or the ticket as without Diegesis; sneaking picks it up.
+            // A click on the label takes the ticket off instead (TrayBlock.useWithoutItem).
             .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown()
-                    && mayUseTray(player, pos))
+                    && mayUseTray(player, pos) && !TrayBlock.looksAtLabel(player, pos))
             .logic(context -> new StationLogic() {
                 private final TrayBlockEntity tray = context.blockEntity() instanceof TrayBlockEntity entity ? entity : null;
                 private final ItemPose[] stationPoses = new ItemPose[TrayBlockEntity.SIZE];
@@ -132,8 +133,11 @@ public final class KitchenStations {
         @Override
         public void set(int index, ItemStack stack) {
             if (stack.is(OneMoreCore.TICKET.get())) {
-                tray.label = TableCards.clean(stack.getOrDefault(OneMoreCore.LABEL.get(), ""));
-                tray.changed();
+                // The ticket it replaces drops on the tray, so no order is lost.
+                ItemStack old = tray.putTicket(stack);
+                if (!old.isEmpty() && tray.getLevel() != null)
+                    net.minecraft.world.Containers.dropItemStack(tray.getLevel(), tray.getBlockPos().getX() + 0.5,
+                            tray.getBlockPos().getY() + 0.3, tray.getBlockPos().getZ() + 0.5, old);
                 if (tray.getLevel() != null) tray.getLevel().playSound(null, tray.getBlockPos(), net.minecraft.sounds.SoundEvents.BOOK_PAGE_TURN,
                         net.minecraft.sounds.SoundSource.BLOCKS, 0.8f, 1.3f);
                 return;

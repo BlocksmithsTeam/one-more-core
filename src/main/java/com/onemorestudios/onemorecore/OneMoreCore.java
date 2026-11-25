@@ -88,6 +88,10 @@ public class OneMoreCore {
     /** The table card text of an order ticket and of a tray's label. */
     public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<String>> LABEL =
             COMPONENTS.registerComponentType("table_label", b -> b.persistent(com.mojang.serialization.Codec.STRING).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.stringUtf8(16)));
+    /** The order ticket stuck to a tray item, kept whole so it comes back with its dishes (one item; an ItemStack is no component). */
+    public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<net.minecraft.world.item.component.ItemContainerContents>> TRAY_TICKET =
+            COMPONENTS.registerComponentType("tray_ticket", b -> b.persistent(net.minecraft.world.item.component.ItemContainerContents.CODEC)
+                    .networkSynchronized(net.minecraft.world.item.component.ItemContainerContents.STREAM_CODEC));
     public static final DeferredHolder<net.minecraft.core.component.DataComponentType<?>, net.minecraft.core.component.DataComponentType<java.util.List<TrayPose>>> TRAY_POSES =
             COMPONENTS.registerComponentType("tray_poses", b -> b.persistent(TrayPose.SLOTS_CODEC)
                     .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.fromCodec(TrayPose.SLOTS_CODEC)));
@@ -189,6 +193,14 @@ public class OneMoreCore {
         COMPONENTS.register(bus);
         BLOCK_ENTITIES.register(bus);
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        // The GameTests build restaurants of vanilla stairs (seats) and slabs (tables); players' worlds do not get this pack.
+        if (net.neoforged.neoforge.gametest.GameTestHooks.isGametestServer())
+            bus.addListener((net.neoforged.neoforge.event.AddPackFindersEvent e) -> {
+                if (e.getPackType() == net.minecraft.server.packs.PackType.SERVER_DATA)
+                    e.addPackFinders(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(MODID, "gametest_pack"),
+                            net.minecraft.server.packs.PackType.SERVER_DATA, net.minecraft.network.chat.Component.literal("One More Core GameTests"),
+                            net.minecraft.server.packs.repository.PackSource.BUILT_IN, true, net.minecraft.server.packs.repository.Pack.Position.TOP);
+            });
         bus.addListener((EntityAttributeCreationEvent e) -> {
             e.put(CUSTOMER.get(), Customer.createAttributes().build());
             e.put(COURIER.get(), Courier.createAttributes().build());

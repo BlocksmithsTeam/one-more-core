@@ -2,6 +2,7 @@ package com.onemorestudios.onemorecore;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -52,18 +53,25 @@ public class TrayItem extends BlockItem {
         return extras;
     }
 
-    static void serveDishes(ItemStack tray, Predicate<ItemStack> wanted, Consumer<ItemStack> serve) {
+    /**
+     * Serves each wanted dish with the pose it has on the tray (slots without a saved pose: the old fixed places; past the
+     * tray's places: no pose).
+     */
+    static void serveDishes(ItemStack tray, Predicate<ItemStack> wanted, BiConsumer<ItemStack, TrayPose> serve) {
         var contents = tray.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY);
+        List<TrayPose> poses = tray.getOrDefault(OneMoreCore.TRAY_POSES.get(), List.of());
         List<ItemStack> left = new ArrayList<>(contents.stream().toList());
         for (int i = 0; i < left.size(); i++) {
             ItemStack dish = left.get(i);
             if (dish.isEmpty() || !wanted.test(dish)) continue;
-            serve.accept(dish);
+            // A dish past the tray's places (an old tray) has no place on it: it is served as from the hand.
+            serve.accept(dish, i < TrayBlockEntity.SIZE ? TrayPose.inSlot(poses, i) : null);
             left.set(i, ItemStack.EMPTY);
         }
         tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(left));
         if (left.stream().allMatch(ItemStack::isEmpty)) {
             tray.remove(OneMoreCore.LABEL.get());
+            tray.remove(OneMoreCore.TRAY_TICKET.get());
             tray.remove(OneMoreCore.TRAY_POSES.get());
         }
     }
