@@ -1,0 +1,31 @@
+name: Dev build
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew build
+      - name: Prerelease and Discord post
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          sha=$(git rev-parse --short HEAD)
+          ver=$(grep '^mod_version=' gradle.properties | cut -d= -f2)
+          jar=onemorecore-$ver-$sha.jar
+          cp build/libs/onemorecore-$ver.jar "$jar"
+          gh release create "dev-$sha" "$jar" --prerelease --title "Dev build $sha" --generate-notes --target "$GITHUB_SHA"
+          [ -n "$WEBHOOK" ] || exit 0
+          url=$(gh release view "dev-$sha" --json url --jq .url)
+          text=$(printf '**Dev build %s**\n%s\n%s' "$sha" "$(git log -1 --format='%s%n%b' | sed '/^$/d')" "$url")
+          jq -n --arg c "$text" '{username: "omo notlar", content: $c}' | curl -fsS -H 'Content-Type: application/json' -d @- "$WEBHOOK"

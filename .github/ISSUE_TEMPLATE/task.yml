@@ -1,0 +1,10 @@
+name: Task
+description: Work that is not a bug or a feature (cleanup, art, docs).
+type: Task
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What to do
+    validations:
+      required: true

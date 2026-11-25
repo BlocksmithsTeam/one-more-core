@@ -5,7 +5,10 @@ change how one of them works, change its lines here in the same commit.
 
 ## How to work together
 
-- Pull before you start (`main`). Commit small, one topic per commit, with a clear message (what and why).
+- Work lives in GitHub Issues. Assign yourself, branch from `main`, open a draft PR early, write `Closes #N`.
+- `main` takes only PRs: CI runs the GameTests with and without Diegesis, and someone else approves. Use auto-merge.
+  Each push to `main` makes a `dev-<sha>` prerelease and a Discord post.
+- Commit small, one topic per commit, with a clear message (what and why).
 - Run the GameTests before you push: `./gradlew runGameTestServer` must end with "All N required tests passed". A test that
   fails after your change shows a behaviour someone relies on: fix the cause, do not delete or loosen the test.
 - No vanilla block is a seat or table (`onemorecore:seats`, `onemorecore:serving_surfaces`). The GameTests still
