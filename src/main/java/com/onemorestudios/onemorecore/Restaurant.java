@@ -391,10 +391,7 @@ public class Restaurant {
     }
 
     public static boolean isFood(ItemStack stack) {
-        return stack.has(net.minecraft.core.component.DataComponents.FOOD)
-                || stack.getUseAnimation() == net.minecraft.world.item.UseAnim.DRINK
-                || stack.is(net.minecraft.tags.ItemTags.create(net.minecraft.resources.ResourceLocation.parse("c:foods")))
-                || stack.is(net.minecraft.tags.ItemTags.create(net.minecraft.resources.ResourceLocation.parse("c:drinks")));
+        return DishBlacklist.isDish(stack);
     }
 
     boolean priceEditable(Menu.Entry entry) {
