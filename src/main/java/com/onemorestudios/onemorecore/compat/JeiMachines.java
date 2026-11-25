@@ -34,6 +34,7 @@ public final class JeiMachines implements IModPlugin {
         if (minecraft.level == null || minecraft.getConnection() == null) return;
         var jei = runtime.getRecipeManager();
         RecipeManager recipes = minecraft.level.getRecipeManager();
+        kinds = null;
         Map<ResourceLocation, Set<ResourceLocation>> found = new HashMap<>();
         jei.createRecipeCategoryLookup().get().forEach(category -> collect(jei, category, recipes, found));
         Map<ResourceLocation, List<ResourceLocation>> types = new HashMap<>();
@@ -44,6 +45,14 @@ public final class JeiMachines implements IModPlugin {
         } catch (RuntimeException e) {
             OneMoreCore.LOGGER.debug("The server does not take the machine list", e);
         }
+    }
+
+    private static Set<ResourceLocation> kinds;
+
+    /** The type ids of all recipes the client has. */
+    private static Set<ResourceLocation> kinds(RecipeManager recipes) {
+        if (kinds == null) kinds = recipes.getRecipes().stream().map(holder -> Machines.kind(holder.value())).collect(Collectors.toSet());
+        return kinds;
     }
 
     private static <T> void collect(IRecipeManager jei, IRecipeCategory<T> category, RecipeManager recipes,
@@ -57,12 +66,11 @@ public final class JeiMachines implements IModPlugin {
         Set<ResourceLocation> types = new HashSet<>();
         jei.createRecipeLookup(category.getRecipeType()).get().forEach(recipe -> {
             for (ResourceLocation id : category.getSourceRecipeIds(recipe)) {
-                // A recipe type that is not registered has no id.
-                recipes.byKey(id).map(holder -> BuiltInRegistries.RECIPE_TYPE.getKey(holder.value().getType())).ifPresent(types::add);
+                recipes.byKey(id).map(holder -> Machines.kind(holder.value())).ifPresent(types::add);
             }
         });
         ResourceLocation uid = category.getRecipeType().getUid();
-        if (types.isEmpty() && BuiltInRegistries.RECIPE_TYPE.containsKey(uid)) types.add(uid);
+        if (types.isEmpty() && kinds(recipes).contains(uid)) types.add(uid);
         types.forEach(type -> found.computeIfAbsent(type, key -> new HashSet<>()).addAll(blocks));
     }
 }
