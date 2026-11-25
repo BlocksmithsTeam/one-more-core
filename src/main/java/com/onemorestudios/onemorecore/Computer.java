@@ -607,7 +607,7 @@ public class Computer extends Block {
     }
 
     private record DishSettings(boolean on, String kind) {}
-    private record IngredientMenuKey(Ingredients index, Set<ResourceLocation> unlocked,
+    private record IngredientMenuKey(Ingredients index, Set<ResourceLocation> unlocked, Set<ResourceLocation> machines,
             List<Menu.Entry> dishes, List<DishSettings> settings) {}
     private record CachedIngredientData(IngredientMenuKey key, IngredientData data) {}
 
@@ -617,7 +617,7 @@ public class Computer extends Block {
 
     private static IngredientData ingredientData(RegistryAccess registries, Restaurant r, List<Menu.Entry> dishes, List<MenuLine> menu) {
         // The index is replaced when recipes, tags or ingredients.json are reloaded.
-        var key = new IngredientMenuKey(Ingredients.current(), r.unlockedIngredients(), dishes,
+        var key = new IngredientMenuKey(Ingredients.current(), r.unlockedIngredients(), r.machines(), dishes,
                 menu.stream().map(line -> new DishSettings(line.on(), line.kind())).toList());
         var cached = INGREDIENT_MENUS.get(r);
         if (cached != null && cached.key.equals(key)) return cached.data;
@@ -650,7 +650,7 @@ public class Computer extends Block {
                 if (!candidates.isEmpty()) {
                     Set<ResourceLocation> withItem = new java.util.HashSet<>(unlocked);
                     withItem.add(item);
-                    var after = index.availability(withItem);
+                    var after = r.availabilityWith(withItem);
                     newlyOrderable = (int) candidates.stream().filter(dish -> Ingredients.variants(dish)
                             .anyMatch(stack -> after.dish(Ingredients.id(stack)))).count();
                 }
