@@ -8,6 +8,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.WeakHashMap;
 
@@ -59,6 +60,11 @@ public class Restaurant {
     private final Set<ResourceLocation> unlockedIngredients = new HashSet<>();
     private Ingredients ingredientIndex;
     private Ingredients.Availability ingredientAvailability;
+    private boolean availabilityNeedsMachines;
+    /** The machine blocks found in the area at the last scan. */
+    private final Set<ResourceLocation> machines = new TreeSet<>();
+    private Ingredients machinesIndex;
+    private BoundingBox machinesArea;
     /** Ids of dishes that the players took off the menu. */
     final Set<String> off = new HashSet<>();
     /** The kind of a dish, set by a player; without an entry the dish keeps its own kind. */
@@ -307,11 +313,34 @@ public class Restaurant {
 
     Ingredients.Availability ingredientAvailability() {
         Ingredients index = Ingredients.current();
-        if (ingredientAvailability == null || ingredientIndex != index) {
+        boolean needsMachines = Config.REQUIRE_MACHINES.get();
+        if (ingredientAvailability == null || ingredientIndex != index || availabilityNeedsMachines != needsMachines) {
             ingredientIndex = index;
-            ingredientAvailability = index.availability(unlockedIngredients);
+            availabilityNeedsMachines = needsMachines;
+            ingredientAvailability = availabilityWith(unlockedIngredients);
         }
         return ingredientAvailability;
+    }
+
+    /** What these unlocked ingredients would make here, with the machines of this area. */
+    Ingredients.Availability availabilityWith(Set<ResourceLocation> unlocked) {
+        return Ingredients.current().availability(unlocked, Config.REQUIRE_MACHINES.get() ? Set.copyOf(machines) : null);
+    }
+
+    /** The machine blocks found in the area. */
+    public Set<ResourceLocation> machines() { return Set.copyOf(machines); }
+
+    /** Looks for the machines in the area again. A part of the area that is not loaded keeps the last result. */
+    public void refreshMachines(ServerLevel level) {
+        Ingredients index = Ingredients.current();
+        machinesIndex = index;
+        machinesArea = area;
+        Set<ResourceLocation> found = area == null ? Set.of() : Machines.scan(level, area, index.machines);
+        if (found == null || found.equals(machines)) return;
+        machines.clear();
+        machines.addAll(found);
+        ingredientAvailability = null;
+        owner.setDirty();
     }
 
     public Set<ResourceLocation> unlockedIngredients() {
@@ -904,6 +933,8 @@ public class Restaurant {
         if (!open && readyCheckActive) tickReadyCheck(level);
         if (area != null && level.getGameTime() % 10 == 0) sendStatus(level);
         if (area != null && level.getGameTime() % 100 == Math.floorMod(sign.asLong(), 100)) numberTables(level);
+        if (Config.REQUIRE_MACHINES.get() && (machinesIndex != Ingredients.current() || machinesArea != area
+                || level.getGameTime() % 100 == Math.floorMod(sign.asLong() + 50, 100))) refreshMachines(level);
         if (!open) return;
         scanSeats(level);
         if (!hasEnabledTable()) {
@@ -1545,6 +1576,9 @@ public class Restaurant {
         ListTag list = new ListTag();
         unlockedIngredients.stream().sorted().forEach(id -> list.add(StringTag.valueOf(id.toString())));
         tag.put("unlockedIngredients", list);
+        ListTag machineList = new ListTag();
+        machines.forEach(id -> machineList.add(StringTag.valueOf(id.toString())));
+        tag.put("machines", machineList);
         ListTag offList = new ListTag();
         for (String id : off) offList.add(StringTag.valueOf(id));
         tag.put("off", offList);
@@ -1651,6 +1685,10 @@ public class Restaurant {
         for (Tag t : tag.getList("unlockedIngredients", Tag.TAG_STRING)) {
             ResourceLocation item = ResourceLocation.tryParse(t.getAsString());
             if (item != null) r.unlockedIngredients.add(item);
+        }
+        for (Tag t : tag.getList("machines", Tag.TAG_STRING)) {
+            ResourceLocation block = ResourceLocation.tryParse(t.getAsString());
+            if (block != null) r.machines.add(block);
         }
         for (Tag t : tag.getList("off", Tag.TAG_STRING)) r.off.add(t.getAsString());
         CompoundTag prices = tag.getCompound("dishPrices");

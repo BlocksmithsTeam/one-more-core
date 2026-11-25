@@ -23,22 +23,28 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
 
-/** The server's recipe index. Each recipe is a list of slots, each with alternative item IDs. */
+/** The server's recipe index. Each recipe is a list of slots, each with alternative item IDs, and its machines. */
 final class Ingredients {
+    /** One way to make an item. One of the machines must be in the area; none means no machine is needed. */
+    record Recipe(List<Set<ResourceLocation>> slots, Set<ResourceLocation> machines) {}
+
     private static final int DEPTH = 3;
     private static Ingredients current = new Ingredients(List.of(), IngredientConfig.parse("{}"), List.of(), null);
 
     private final IngredientConfig config;
-    private final Map<ResourceLocation, List<List<Set<ResourceLocation>>>> recipes = new HashMap<>();
+    private final Map<ResourceLocation, List<Recipe>> recipes = new HashMap<>();
     private final Map<ResourceLocation, Set<ResourceLocation>> dishesByIngredient = new HashMap<>();
     private final Map<ResourceLocation, Integer> unlockCosts = new HashMap<>();
     private final Map<ResourceLocation, Integer> dishWorth = new HashMap<>();
     final List<ResourceLocation> raw;
     final List<Menu.Entry> automatic;
+    /** Every machine block a recipe can need: what a restaurant looks for in its area. */
+    final Set<ResourceLocation> machines = new TreeSet<>();
 
     static Ingredients current() { return current; }
 
     static void rebuild(MinecraftServer server) {
+        Machines.reload(true);
         current = new Ingredients(server.getRecipeManager().getRecipes(), IngredientConfig.load(), Menu.entries,
                 server.registryAccess());
     }
@@ -67,15 +73,16 @@ final class Ingredients {
                                     .map(Ingredients::id).forEach(ids::add);
                             return ids;
                         }).toList();
-                addRecipe(alternatives, slots);
+                var machines = Machines.forType(BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType()));
+                if (addRecipe(alternatives, slots, machines)) this.machines.addAll(machines);
             } catch (RuntimeException e) {
                 skipped++;
                 OneMoreCore.LOGGER.debug("Recipe {} does not expose its result or ingredients", holder.id(), e);
             }
         }
         config.dishes().forEach((id, slots) -> {
-            var alternatives = new ArrayList<List<Set<ResourceLocation>>>();
-            addRecipe(alternatives, slots);
+            var alternatives = new ArrayList<Recipe>();
+            addRecipe(alternatives, slots, Set.of());
             recipes.put(id, alternatives);
             foodResults.computeIfAbsent(id, Ingredients::stack);
         });
@@ -101,7 +108,7 @@ final class Ingredients {
             else withIngredients++;
             Map<ResourceLocation, Integer> seen = new HashMap<>();
             for (var recipe : alternatives) {
-                for (var slot : recipe) {
+                for (var slot : recipe.slots()) {
                     for (ResourceLocation item : slot) {
                         if (config.free().contains(item) || config.ignore().contains(item)) continue;
                         Set<ResourceLocation> sources = sources(item, DEPTH, new HashSet<>());
@@ -120,14 +127,16 @@ final class Ingredients {
     }
 
     // An empty recipe list marks a known result with no usable alternative. An absent result has no indexed recipe.
-    private void addRecipe(List<List<Set<ResourceLocation>>> alternatives, List<Set<ResourceLocation>> slots) {
-        if (slots.isEmpty()) return;
+    private boolean addRecipe(List<Recipe> alternatives, List<Set<ResourceLocation>> slots, Set<ResourceLocation> machines) {
+        if (slots.isEmpty()) return false;
         var candidates = slots.stream().map(slot -> {
             Set<ResourceLocation> usable = new TreeSet<>(slot);
             usable.removeIf(item -> config.ignore().contains(item) && !config.free().contains(item));
             return usable;
         }).toList();
-        if (candidates.stream().noneMatch(Set::isEmpty)) alternatives.add(candidates);
+        if (candidates.stream().anyMatch(Set::isEmpty)) return false;
+        alternatives.add(new Recipe(candidates, machines));
+        return true;
     }
 
     private static boolean realIngredient(ItemStack stack) {
@@ -143,7 +152,7 @@ final class Ingredients {
         dishesByIngredient.computeIfAbsent(item, key -> new HashSet<>()).add(dish);
         if (depth == 0 || config.free().contains(item) || config.ignore().contains(item)) return;
         for (var recipe : recipes.getOrDefault(item, List.of())) {
-            for (var slot : recipe) {
+            for (var slot : recipe.slots()) {
                 for (ResourceLocation input : slot) indexDependencies(input, dish, depth - 1, seen);
             }
         }
@@ -160,7 +169,7 @@ final class Ingredients {
         for (var recipe : alternatives) {
             Set<ResourceLocation> inputs = new HashSet<>();
             boolean possible = true;
-            for (var slot : recipe) {
+            for (var slot : recipe.slots()) {
                 boolean satisfied = false;
                 for (ResourceLocation candidate : slot) {
                     Set<ResourceLocation> sources = sources(candidate, depth - 1, path);
@@ -215,21 +224,32 @@ final class Ingredients {
         variants(dish).forEach(stack -> {
             var alternatives = recipes.getOrDefault(id(stack), List.of());
             for (var recipe : alternatives) {
-                for (var slot : recipe) {
+                for (var slot : recipe.slots()) {
                     for (var item : slot) if (!config.free().contains(item) && !config.ignore().contains(item)) unlocked.add(item);
                 }
             }
         });
     }
 
-    Availability availability(Set<ResourceLocation> unlocked) { return new Availability(unlocked); }
+    Availability availability(Set<ResourceLocation> unlocked) { return new Availability(unlocked, null); }
+
+    /** With machines null, recipes need no machine; otherwise one of a recipe's machines must be in the set. */
+    Availability availability(Set<ResourceLocation> unlocked, Set<ResourceLocation> machines) { return new Availability(unlocked, machines); }
 
     final class Availability {
         private record AtDepth(ResourceLocation item, int depth) {}
         private final Set<ResourceLocation> unlocked;
+        private final Set<ResourceLocation> present;
         private final Map<AtDepth, Boolean> available = new HashMap<>();
 
-        private Availability(Set<ResourceLocation> unlocked) { this.unlocked = unlocked; }
+        private Availability(Set<ResourceLocation> unlocked, Set<ResourceLocation> present) {
+            this.unlocked = unlocked;
+            this.present = present;
+        }
+
+        private boolean machine(Recipe recipe) {
+            return present == null || recipe.machines().isEmpty() || recipe.machines().stream().anyMatch(present::contains);
+        }
 
         boolean dish(ResourceLocation id) {
             var alternatives = recipes.get(id);
@@ -250,8 +270,8 @@ final class Ingredients {
             return result;
         }
 
-        private boolean satisfied(List<Set<ResourceLocation>> recipe, int depth) {
-            return recipe.stream().allMatch(slot -> slot.stream().anyMatch(item -> item(item, depth)));
+        private boolean satisfied(Recipe recipe, int depth) {
+            return machine(recipe) && recipe.slots().stream().allMatch(slot -> slot.stream().anyMatch(item -> item(item, depth)));
         }
 
         List<ResourceLocation> missing(Menu.Entry entry) {
@@ -265,8 +285,12 @@ final class Ingredients {
             Set<ResourceLocation> best = null;
             for (var recipe : recipes.getOrDefault(id, List.of())) {
                 Set<ResourceLocation> requirements = new LinkedHashSet<>();
+                // A missing machine shows as its item, before the ingredients.
+                if (!machine(recipe)) recipe.machines().stream().sorted().findFirst()
+                        .map(block -> BuiltInRegistries.ITEM.getKey(BuiltInRegistries.BLOCK.get(block).asItem()))
+                        .filter(item -> !item.equals(BuiltInRegistries.ITEM.getDefaultKey())).ifPresent(requirements::add);
                 boolean possible = true;
-                for (var slot : recipe) {
+                for (var slot : recipe.slots()) {
                     Set<ResourceLocation> fewest = null;
                     for (ResourceLocation candidate : slot) {
                         Set<ResourceLocation> needed = item(candidate, depth) ? Set.of()
