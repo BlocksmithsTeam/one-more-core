@@ -93,6 +93,10 @@ change how one of them works, change its lines here in the same commit.
 - **Table Number card**: its place on the block is saved as `offset_x`/`offset_z` (a block entity's save writes its own
   position as `x`, `y`, `z`; never use those names in a block entity). Test: `ModelGameTests.tableNumberOffsetSurvivesSave`.
 - **Ingredient unlocks** use `Ingredients`, `IngredientConfig` and `Restaurant.orderable`. Recipes and `ingredients.json` determine what customers, combos, menu screens and menu books can offer. A recipe needs at least one readable slot and a usable candidate in every slot. Free candidates satisfy a slot. Dishes whose indexed recipes are all unreadable or unusable need a valid override. The server rebuilds the index and logs their count on startup and reload. The sign carries purchased ingredient IDs and the remaining register balance. Legacy saves migrate ingredient purchases once. The Shop prices purchases on the server and the computer sends the capped ingredient lists on Menu requests. See `IngredientGameTests`.
+- **Hidden inputs** (`Ingredients.hidden`): a mod recipe's data (its codec as JSON) is read for inputs outside
+  `getIngredients()`: every item, tag or fluid no visible slot has, except result/output, tool and look fields. A fluid is
+  its bucket, or a `fluid/` key for a fluid with no bucket that only a recipe makes (never bought). A recipe with no item
+  result makes its fluid (pressing tub: grapes to grape juice), so wine needs grapes. See `HiddenInputGameTests`.
 - **Machines** (`Machines`, `requireMachines`, off by default): a recipe counts only when one of its recipe type's blocks
   is in the area, intermediate recipes too. Types to blocks: the built-in `onemorecore/machines.json` (vanilla and the pack's
   mods), overridden per type by `config/onemorecore/machines.json`; `compat/JeiMachines` sends JEI's catalysts and an operator's
