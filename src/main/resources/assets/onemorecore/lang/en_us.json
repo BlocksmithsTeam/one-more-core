@@ -18,6 +18,8 @@
   "onemorecore.day.penalty": "  Penalties: %s",
   "onemorecore.register.withdraw": "You took %s from the register.",
   "onemorecore.register.empty": "The register is empty.",
+  "block.onemorecore.cash_register": "Cash Register",
+  "onemorecore.register.missing": "Place a cash register in the restaurant area before opening.",
   "onemorecore.register.deposit": "You put %s into the register.",
   "onemorecore.customer.wrong": "The customer did not order this.",
   "onemorecore.cmd.no_restaurant": "You are not inside a restaurant area.",

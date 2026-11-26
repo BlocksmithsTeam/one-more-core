@@ -149,6 +149,9 @@ public class Config {
     static final ModConfigSpec.BooleanValue REQUIRE_TRAY = B
             .comment("Food is served on a tray (from a tray rack): one tray per customer, all its dishes at once. False also takes single dishes from the hand.")
             .define("requireTray", true);
+    public static final ModConfigSpec.BooleanValue REQUIRE_REGISTER = B
+            .comment("A cash register must be in the restaurant area before a day can start.")
+            .define("requireRegister", false);
     public static final ModConfigSpec.BooleanValue REQUIRE_MACHINES = B
             .comment("A recipe counts only when one of its machines (the blocks JEI lists for it) is in the restaurant area.",
                     "The machines of each recipe type are in config/onemorecore/machines.json; JEI adds the missing ones.")

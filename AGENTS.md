@@ -74,6 +74,7 @@ change how one of them works, change its lines here in the same commit.
   again at once (`SkinPool.configure`; a pasted Kick or Twitch link works). A chat viewer comes once (`SkinPool.pick` takes the
   entry out); with no free name a customer keeps a default skin, so no two customers share one. Test:
   `FixesGameTests.chatViewerComesOnce`. Mods > One More Core > Config shows every option.
+- **Cash register** (`CashRegisterBlock`, `CashRegisterBlockEntity`): inside its area, uses `Restaurant.register`; outside, saves its own balance and drops it on break. `Restaurant.setArea` transfers only what fits below the int cap; each block keeps the remainder. `requireRegister` defaults to false; opening validation scans the area when enabled. The sign keeps its money controls. See `RegisterGameTests`.
 - **Open sign**: chalkboard on a floor, Art Deco blade on a wall (two blocks high: its upper half is a `screen_part`; blue when
   open, red when closed), plaque under a ceiling (`OpenSignRenderer`, models from `art/models/open_sign.bbmodel`). Without room
   above, or after a screwdriver click, a wall sign is the small chalkboard flat on the wall (`CHALK`).

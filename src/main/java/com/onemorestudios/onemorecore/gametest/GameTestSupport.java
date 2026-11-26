@@ -12,6 +12,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
@@ -56,7 +57,13 @@ public final class GameTestSupport {
     /** A fake player whose server listener records outgoing payloads and vanilla packets. */
     static final class TestPlayer extends FakePlayer {
         final List<Object> packets = new ArrayList<>();
+        final List<Component> messages = new ArrayList<>();
         boolean operator;
+
+        @Override
+        public void displayClientMessage(Component message, boolean actionBar) {
+            messages.add(message);
+        }
 
         @Override
         public boolean hasPermissions(int level) {

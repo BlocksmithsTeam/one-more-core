@@ -1,0 +1,425 @@
+{
+  "meta": {
+    "format_version": "5.0",
+    "model_format": "java_block",
+    "box_uv": false
+  },
+  "name": "cash_register",
+  "parent": "minecraft:block/block",
+  "resolution": {
+    "width": 16,
+    "height": 16
+  },
+  "elements": [
+    {
+      "name": "base",
+      "type": "cube",
+      "from": [
+        2,
+        0,
+        3
+      ],
+      "to": [
+        14,
+        3,
+        13
+      ],
+      "origin": [
+        8,
+        0,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "uuid": "55a202dd-a858-4b77-af94-2b670c1a55e0",
+      "box_uv": false,
+      "autouv": 0,
+      "export": true,
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "slanted_top",
+      "type": "cube",
+      "from": [
+        3,
+        3,
+        5
+      ],
+      "to": [
+        13,
+        5,
+        12
+      ],
+      "origin": [
+        8,
+        3,
+        8
+      ],
+      "rotation": [
+        -22.5,
+        0,
+        0
+      ],
+      "uuid": "bec822c9-2568-41b1-ac42-581236ed874f",
+      "box_uv": false,
+      "autouv": 0,
+      "export": true,
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        }
+      }
+    },
+    {
+      "name": "drawer_line",
+      "type": "cube",
+      "from": [
+        3,
+        1,
+        2.9
+      ],
+      "to": [
+        13,
+        1.5,
+        3.1
+      ],
+      "origin": [
+        8,
+        0,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "uuid": "3475eee9-f8db-475e-9a14-6c2b75f280df",
+      "box_uv": false,
+      "autouv": 0,
+      "export": true,
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 1
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 1
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 1
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 1
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 1
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 1
+        }
+      }
+    }
+  ],
+  "outliner": [
+    "55a202dd-a858-4b77-af94-2b670c1a55e0",
+    "bec822c9-2568-41b1-ac42-581236ed874f",
+    "3475eee9-f8db-475e-9a14-6c2b75f280df"
+  ],
+  "textures": [
+    {
+      "name": "iron_tray_side.png",
+      "relative_path": "../../src/main/resources/assets/onemorecore/textures/block/iron_tray_side.png",
+      "folder": "block",
+      "namespace": "onemorecore",
+      "id": "0",
+      "uuid": "3603e441-e451-4ae8-9fa9-7158ed688680",
+      "internal": true,
+      "saved": true,
+      "width": 16,
+      "height": 16,
+      "uv_width": 16,
+      "uv_height": 16,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAARUlEQVR42mOwsHL+7+YdCsehsWlgjCyGC4P0MoAUp+aXg3FlWy8cw8TQMcwCGGbAZjtJLkDWjM0V+AwdNWDUgFEDEAYAAF/+FtFBHXH6AAAAAElFTkSuQmCC"
+    },
+    {
+      "name": "modern_tray_rack_frame.png",
+      "relative_path": "../../src/main/resources/assets/onemorecore/textures/block/modern_tray_rack_frame.png",
+      "folder": "block",
+      "namespace": "onemorecore",
+      "id": "1",
+      "uuid": "1a3e0378-4070-4b3e-bc96-3fd4f15b55ea",
+      "internal": true,
+      "saved": true,
+      "width": 16,
+      "height": 16,
+      "uv_width": 16,
+      "uv_height": 16,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAeElEQVR42mNw9wn5TwlmMLV0+K+la4wTK6lowtnoakFyKAbAFBMyFKcBxGgg2gB0xdjUwQ3A5098riHaC+iuwesFbIrxeRPFAFJdQ9ALuJwOswzFAFyKCVkAN4CUFEnQC/icjmwZwTAglMjgBpAbkGADpKTl/1OCAQWsjBnlMZcMAAAAAElFTkSuQmCC"
+    }
+  ],
+  "display": {
+    "gui": {
+      "rotation": [
+        30,
+        225,
+        0
+      ],
+      "translation": [
+        0,
+        2,
+        0
+      ],
+      "scale": [
+        0.9,
+        0.9,
+        0.9
+      ]
+    },
+    "ground": {
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "translation": [
+        0,
+        4,
+        0
+      ],
+      "scale": [
+        0.43,
+        0.43,
+        0.43
+      ]
+    },
+    "fixed": {
+      "rotation": [
+        0,
+        180,
+        0
+      ],
+      "translation": [
+        0,
+        1.5,
+        0
+      ],
+      "scale": [
+        0.88,
+        0.88,
+        0.88
+      ]
+    },
+    "thirdperson_righthand": {
+      "rotation": [
+        75,
+        45,
+        0
+      ],
+      "translation": [
+        0,
+        2.5,
+        0
+      ],
+      "scale": [
+        0.46,
+        0.46,
+        0.46
+      ]
+    },
+    "thirdperson_lefthand": {
+      "rotation": [
+        75,
+        45,
+        0
+      ],
+      "translation": [
+        0,
+        2.5,
+        0
+      ],
+      "scale": [
+        0.46,
+        0.46,
+        0.46
+      ]
+    },
+    "firstperson_righthand": {
+      "rotation": [
+        0,
+        45,
+        0
+      ],
+      "translation": [
+        0,
+        3,
+        0
+      ],
+      "scale": [
+        0.55,
+        0.55,
+        0.55
+      ]
+    },
+    "firstperson_lefthand": {
+      "rotation": [
+        0,
+        225,
+        0
+      ],
+      "translation": [
+        0,
+        3,
+        0
+      ],
+      "scale": [
+        0.55,
+        0.55,
+        0.55
+      ]
+    }
+  }
+}

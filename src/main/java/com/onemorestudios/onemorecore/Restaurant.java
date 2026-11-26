@@ -636,6 +636,11 @@ public class Restaurant {
 
     void setArea(BoundingBox box) {
         area = box;
+        for (BlockPos pos : BlockPos.betweenClosed(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ())) {
+            if (owner.level.getBlockEntity(pos) instanceof CashRegisterBlockEntity cash && cash.balance() > 0) {
+                cash.take(deposit(cash.balance()));
+            }
+        }
         invalidateLayout();
         resetReadyCheck();
         owner.setDirty();
@@ -902,12 +907,19 @@ public class Restaurant {
         setReady(level, player, true);
     }
 
-    /** Why the day cannot start, as a lang key suffix, or null. */
+    /** Why the day cannot start, as a lang key, or null. */
     private String problem(ServerLevel level) {
-        if (area == null) return "no_area";
-        if (spawn == null) return "no_spawn";
-        if (dishes().stream().noneMatch(this::orderable)) return "no_menu";
-        if (scanSeats(level).isEmpty() || Config.DAY_LENGTH.get() == 0 && !hasEnabledTable()) return "no_seats";
+        if (area == null) return "onemorecore.open.no_area";
+        if (Config.REQUIRE_REGISTER.get()) {
+            boolean found = false;
+            for (BlockPos pos : BlockPos.betweenClosed(area.minX(), area.minY(), area.minZ(), area.maxX(), area.maxY(), area.maxZ())) {
+                if (level.getBlockState(pos).is(OneMoreCore.CASH_REGISTER.get())) { found = true; break; }
+            }
+            if (!found) return "onemorecore.register.missing";
+        }
+        if (spawn == null) return "onemorecore.open.no_spawn";
+        if (dishes().stream().noneMatch(this::orderable)) return "onemorecore.open.no_menu";
+        if (scanSeats(level).isEmpty() || Config.DAY_LENGTH.get() == 0 && !hasEnabledTable()) return "onemorecore.open.no_seats";
         return null;
     }
 
@@ -930,7 +942,7 @@ public class Restaurant {
         }
         String problem = problem(level);
         if (problem != null) {
-            player.displayClientMessage(Component.translatable("onemorecore.open." + problem), true);
+            player.displayClientMessage(Component.translatable(problem), true);
             return;
         }
         if (!readyCheckActive) {
@@ -990,7 +1002,7 @@ public class Restaurant {
         resetReadyCheck();
         BoundingBox near = area.inflatedBy(16);
         for (ServerPlayer p : level.players())
-            if (near.isInside(p.blockPosition())) p.displayClientMessage(Component.translatable("onemorecore.open." + problem), true);
+            if (near.isInside(p.blockPosition())) p.displayClientMessage(Component.translatable(problem), true);
     }
 
     /** Starts the service. The seats are scanned already. */

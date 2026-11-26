@@ -203,9 +203,7 @@ public class OpenSignBlock extends Block implements EntityBlock {
         }
         if (stack.is(Config.currency())) {
             if (level instanceof ServerLevel sl) {
-                int n = Restaurants.get(sl).create(pos).deposit(stack.getCount());
-                stack.shrink(n);
-                player.displayClientMessage(Component.translatable("onemorecore.register.deposit", n), true);
+                CashRegisterBlock.depositMoney(stack, player, Restaurants.get(sl).create(pos)::deposit);
             }
             return ItemInteractionResult.sidedSuccess(level.isClientSide);
         }
@@ -217,11 +215,7 @@ public class OpenSignBlock extends Block implements EntityBlock {
         if (!(level instanceof ServerLevel sl)) return InteractionResult.SUCCESS;
         Restaurant r = Restaurants.get(sl).create(pos);
         if (player.isShiftKeyDown()) {
-            ItemStack money = new ItemStack(Config.currency());
-            int n = r.take(money.getMaxStackSize());
-            if (n > 0) player.getInventory().placeItemBackInInventory(money.copyWithCount(n));
-            player.displayClientMessage(n == 0 ? Component.translatable("onemorecore.register.empty")
-                    : Component.translatable("onemorecore.register.withdraw", n), true);
+            CashRegisterBlock.withdrawMoney(player, r::take);
         } else if (!r.isOpen()) {
             r.requestOpen(sl, player);
         }
