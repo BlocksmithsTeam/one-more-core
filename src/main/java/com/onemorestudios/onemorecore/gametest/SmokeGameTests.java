@@ -58,7 +58,7 @@ public final class SmokeGameTests {
         helper.succeed();
     }
 
-    /** Sneak-clicking the register with an empty hand withdraws at most one stack of coins. */
+    /** Sneak-clicking withdraws one coin-stack value, paid as banknotes and the remaining coins. */
     @GameTest(template = "empty")
     public static void registerReturnsOneStack(GameTestHelper helper) {
         Restaurant restaurant = placeRegister(helper);
@@ -79,9 +79,9 @@ public final class SmokeGameTests {
         player.setShiftKeyDown(true);
         helper.assertTrue(GameTestSupport.click(helper, player, POS).consumesAction(), "Withdrawal click was handled");
         helper.assertValueEqual(restaurant.register(), initialBalance + 7, "remaining register balance");
-        helper.assertValueEqual(player.getInventory().countItem(coin), stackSize, "number of coins returned");
-        helper.assertTrue(player.getInventory().items.stream()
-                .anyMatch(stack -> stack.is(coin) && stack.getCount() == stackSize), "The returned coins form one full stack");
+        helper.assertValueEqual(player.getInventory().countItem(OneMoreCore.BANKNOTE.get()), stackSize / 10,
+                "Withdrawal returns banknotes first");
+        helper.assertValueEqual(player.getInventory().countItem(coin), stackSize % 10, "Withdrawal returns the remaining coins");
         helper.succeed();
     }
 

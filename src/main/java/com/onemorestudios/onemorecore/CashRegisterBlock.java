@@ -69,11 +69,11 @@ public class CashRegisterBlock extends Block implements EntityBlock {
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player,
                                               InteractionHand hand, BlockHitResult hit) {
-        if (!stack.is(Config.currency())) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        if (Money.pieceValue(stack) == 0) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         if (level instanceof ServerLevel sl) {
             Restaurant restaurant = Restaurants.get(sl).containing(pos);
-            if (restaurant != null) depositMoney(stack, player, restaurant::deposit);
-            else if (level.getBlockEntity(pos) instanceof CashRegisterBlockEntity cash) depositMoney(stack, player, cash::deposit);
+            if (restaurant != null) depositMoney(stack, player, restaurant.register(), restaurant::deposit);
+            else if (level.getBlockEntity(pos) instanceof CashRegisterBlockEntity cash) depositMoney(stack, player, cash.balance(), cash::deposit);
         }
         return ItemInteractionResult.sidedSuccess(level.isClientSide);
     }
@@ -88,16 +88,14 @@ public class CashRegisterBlock extends Block implements EntityBlock {
         return InteractionResult.SUCCESS;
     }
 
-    static void depositMoney(ItemStack stack, Player player, IntUnaryOperator deposit) {
-        int n = deposit.applyAsInt(stack.getCount());
-        stack.shrink(n);
+    static void depositMoney(ItemStack stack, Player player, int balance, IntUnaryOperator deposit) {
+        int n = Money.deposit(stack, balance, deposit);
         player.displayClientMessage(Component.translatable("onemorecore.register.deposit", n), true);
     }
 
     static void withdrawMoney(Player player, IntUnaryOperator take) {
-        ItemStack money = new ItemStack(Config.currency());
-        int n = take.applyAsInt(money.getMaxStackSize());
-        if (n > 0) player.getInventory().placeItemBackInInventory(money.copyWithCount(n));
+        int n = take.applyAsInt(new ItemStack(Money.coin()).getMaxStackSize());
+        Money.items(n, player.getInventory()::placeItemBackInInventory);
         player.displayClientMessage(n == 0 ? Component.translatable("onemorecore.register.empty")
                 : Component.translatable("onemorecore.register.withdraw", n), true);
     }
@@ -106,13 +104,7 @@ public class CashRegisterBlock extends Block implements EntityBlock {
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState replacement, boolean moving) {
         if (!replacement.is(this) && level instanceof ServerLevel sl && Restaurants.get(sl).containing(pos) == null
                 && level.getBlockEntity(pos) instanceof CashRegisterBlockEntity cash) {
-            int left = cash.take(Integer.MAX_VALUE);
-            ItemStack money = new ItemStack(Config.currency());
-            while (left > 0) {
-                int count = Math.min(left, money.getMaxStackSize());
-                popResource(level, pos, money.copyWithCount(count));
-                left -= count;
-            }
+            Money.items(cash.take(Integer.MAX_VALUE), money -> popResource(level, pos, money));
         }
         super.onRemove(state, level, pos, replacement, moving);
     }

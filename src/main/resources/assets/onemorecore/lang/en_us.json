@@ -314,5 +314,10 @@
   "onemorecore.level.no_money": "The register does not have enough money.",
   "onemorecore.level.no_target": "The target sign must belong to another restaurant with an area.",
   "onemorecore.level.moved": "The restaurant moved to its new place.",
-  "onemorecore.level.bought": "New level bought."
+  "onemorecore.level.bought": "New level bought.",
+  "item.onemorecore.banknote": "Banknote",
+  "onemorecore.register.take_banknote": "Take one banknote",
+  "onemorecore.register.take_coin": "Take one coin",
+  "onemorecore.configuration.banknoteItem": "Banknote item",
+  "onemorecore.configuration.banknoteValue": "Banknote value"
 }

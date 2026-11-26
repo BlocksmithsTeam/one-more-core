@@ -645,7 +645,7 @@ public class Computer extends Block {
     private static State state(ServerLevel level, BlockPos pos, Restaurant r, boolean open, boolean manager, boolean menuRequest, Component message, boolean levelEditor) {
         int apps = (Config.APP_MENU.get() ? APP_MENU : 0) | (Config.APP_SHOP.get() ? APP_SHOP : 0) | (Config.APP_MANAGER.get() ? APP_MANAGER : 0)
                 | (Config.APP_UPGRADES.get() ? APP_UPGRADES : 0) | (Config.APP_STREAM.get() ? APP_STREAM : 0) | (Config.APP_LEVELS.get() ? APP_LEVELS : 0);
-        ItemStack currency = new ItemStack(Config.currency());
+        ItemStack currency = new ItemStack(Money.coin());
         if (r == null) return new State(pos, open, false, apps, currency, 0, List.of(), List.of(), List.of(), message,
                 Optional.empty(), List.of(), Optional.empty(), Optional.empty());
         var registries = level.registryAccess();

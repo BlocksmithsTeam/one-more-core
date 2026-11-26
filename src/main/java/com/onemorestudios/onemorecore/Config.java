@@ -17,6 +17,12 @@ public class Config {
     static final ModConfigSpec.ConfigValue<String> CURRENCY = B
             .comment("Item that customers pay with.")
             .define("currencyItem", "onemorecore:coin");
+    static final ModConfigSpec.ConfigValue<String> BANKNOTE = B
+            .comment("Item used as a banknote; must differ from currencyItem.")
+            .define("banknoteItem", "onemorecore:banknote");
+    static final ModConfigSpec.IntValue BANKNOTE_VALUE = B
+            .comment("Value of one banknote in currency units.")
+            .defineInRange("banknoteValue", 10, 2, Integer.MAX_VALUE);
     static final ModConfigSpec.IntValue MAX_AREA = B
             .comment("Maximum restaurant area size per axis, in blocks.")
             .defineInRange("maxAreaSize", 64, 4, 256);
@@ -212,6 +218,14 @@ public class Config {
         }
         rejectedCurrency = null;
         return item == Items.AIR ? Items.EMERALD : item;
+    }
+
+    public static Item banknote() {
+        ResourceLocation id = ResourceLocation.tryParse(BANKNOTE.get());
+        Item item = id == null ? Items.AIR : BuiltInRegistries.ITEM.get(id);
+        if (item == Items.AIR || item instanceof TrayItem || item == OneMoreCore.TICKET.get())
+            return OneMoreCore.BANKNOTE.get();
+        return item;
     }
 
     static double seatHeight(Block block) {

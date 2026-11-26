@@ -187,8 +187,46 @@ public final class KitchenStations {
             .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown())
             .build();
 
+    public static final ResourceLocation REGISTER_ID = ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "cash_register");
+    public static final StationType REGISTER = Diegesis.station(REGISTER_ID)
+            .block(OneMoreCore.CASH_REGISTER)
+            .orientation(StationType.Orientation.BLOCK)
+            .hidesBlock()
+            .openWhen((player, pos, state) -> player.getMainHandItem().isEmpty() && !player.isShiftKeyDown()
+                    && !player.isSpectator() && player.canInteractWithBlock(pos, 1)
+                    && (!(player.level() instanceof ServerLevel level) || level.mayInteract(player, pos)))
+            .logic(context -> new StationLogic() {
+                private final RegisterTake requests = new RegisterTake();
+
+                @Override
+                public void onOpen(StationContext station, Player player) { tick(station); }
+
+                @Override
+                public void tick(StationContext station) {
+                    if (!(station.level() instanceof ServerLevel level)
+                            || !(station.blockEntity() instanceof CashRegisterBlockEntity cash)) return;
+                    Restaurant restaurant = Restaurants.get(level).containing(station.pos());
+                    Money.Split split = Money.split(restaurant == null ? cash.balance() : restaurant.register());
+                    CompoundTag data = station.state().data();
+                    data.putInt("bills", split.bills());
+                    data.putInt("coins", split.coins());
+                    station.state().setData(data);
+                }
+
+                @Override
+                public void onCustomAction(StationContext station, Player player, String action, CompoundTag data) {
+                    if (station.level() instanceof ServerLevel level && station.users().contains(player))
+                        requests.take(level, player, station.pos(), action);
+                }
+
+                @Override
+                public void onClose(StationContext station, Player player) { requests.close(player); }
+            })
+            .build();
+
     public static void register() {
         Diegesis.register(BOOK);
+        Diegesis.register(REGISTER);
         Diegesis.register(TRAY);
         for (StationType t : SCREEN_BOARD) Diegesis.register(t);
     }

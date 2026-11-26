@@ -4,6 +4,8 @@ import java.util.List;
 
 import com.onemorestudios.onemorecore.CashRegisterBlockEntity;
 import com.onemorestudios.onemorecore.Config;
+import com.onemorestudios.onemorecore.Money;
+import com.onemorestudios.onemorecore.RegisterTake;
 import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.OpenSignBlockEntity;
 import com.onemorestudios.onemorecore.Restaurant;
@@ -61,7 +63,9 @@ public final class RegisterGameTests {
         helper.assertValueEqual(cash.balance(), 0, "Inside register keeps no local money");
         withdraw(helper, player, REGISTER);
         helper.assertValueEqual(restaurant.register(), 7, "Register withdraws one currency stack");
-        helper.assertValueEqual(player.getInventory().countItem(Config.currency()), stackSize, "Player receives one stack");
+        helper.assertValueEqual(inventoryMoney(player), stackSize, "Player receives the withdrawn value as banknotes and coins");
+        helper.assertValueEqual(player.getInventory().countItem(Config.banknote()), stackSize / 10, "Withdrawal gives banknotes first");
+        helper.assertValueEqual(player.getInventory().countItem(Config.currency()), stackSize % 10, "Withdrawal gives coins for the remainder");
         var signPlayer = GameTestSupport.player(helper);
         withdraw(helper, signPlayer, SIGN);
         helper.assertValueEqual(restaurant.register(), 0, "Sign still withdraws the remainder");
@@ -81,7 +85,7 @@ public final class RegisterGameTests {
         deposit(helper, player, REGISTER, 7);
         withdraw(helper, player, REGISTER);
         helper.assertValueEqual(cash.balance(), 7, "Outside withdrawal takes only one stack");
-        helper.assertValueEqual(player.getInventory().countItem(Config.currency()), stackSize, "Withdrawn stack reaches the player");
+        helper.assertValueEqual(inventoryMoney(player), stackSize, "Withdrawn value reaches the player");
         var registries = helper.getLevel().registryAccess();
         var tag = cash.saveWithFullMetadata(registries);
         tag.putInt("balance", Integer.MAX_VALUE - 2);
@@ -211,6 +215,80 @@ public final class RegisterGameTests {
         helper.succeed();
     }
 
+    @GameTest(template = "empty")
+    public static void drawerTakesExactPiecesAndChecksFunds(GameTestHelper helper) throws ReflectiveOperationException {
+        Restaurant restaurant = sign(helper);
+        place(helper, REGISTER);
+        setArea(helper, restaurant, REGISTER);
+        GameTestSupport.setRegister(restaurant, 23);
+        var player = GameTestSupport.player(helper);
+        var requests = new RegisterTake();
+        BlockPos pos = helper.absolutePos(REGISTER);
+        helper.assertTrue(requests.take(helper.getLevel(), player, pos, "take_banknote"), "Banknote request succeeds");
+        helper.assertValueEqual(restaurant.register(), 13, "One banknote costs ten");
+        helper.assertValueEqual(player.getInventory().countItem(OneMoreCore.BANKNOTE.get()), 1, "Player receives one banknote");
+        helper.assertTrue(!requests.take(helper.getLevel(), player, pos, "take_coin"), "Second request in one tick is refused");
+        helper.assertValueEqual(restaurant.register(), 13, "Rate limit preserves the balance");
+        var poor = GameTestSupport.player(helper);
+        GameTestSupport.setRegister(restaurant, 9);
+        helper.assertTrue(!requests.take(helper.getLevel(), poor, pos, "take_banknote"), "Nine cannot buy a banknote");
+        helper.assertValueEqual(restaurant.register(), 9, "Failed request preserves money");
+        helper.assertValueEqual(inventoryMoney(poor), 0, "Failed request gives nothing");
+        var coinPlayer = GameTestSupport.player(helper);
+        helper.assertTrue(requests.take(helper.getLevel(), coinPlayer, pos, "take_coin"), "Coin request succeeds");
+        helper.assertValueEqual(restaurant.register(), 8, "One coin costs one");
+        helper.assertValueEqual(coinPlayer.getInventory().countItem(OneMoreCore.COIN.get()), 1, "Coin request gives a coin");
+        var far = GameTestSupport.player(helper);
+        far.setPos(pos.getX() + 20, pos.getY(), pos.getZ());
+        helper.assertTrue(!requests.take(helper.getLevel(), far, pos, "take_coin"), "Distant request is refused");
+        helper.assertValueEqual(inventoryMoney(far), 0, "Distant request gives nothing");
+        helper.assertValueEqual(restaurant.register(), 8, "Distant request preserves money");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void banknotesDepositAtSignAndOutsideDrawer(GameTestHelper helper) {
+        Restaurant restaurant = sign(helper);
+        CashRegisterBlockEntity cash = place(helper, REGISTER);
+        var player = GameTestSupport.player(helper);
+        GameTestSupport.give(player, new ItemStack(OneMoreCore.BANKNOTE.get()));
+        GameTestSupport.click(helper, player, SIGN);
+        helper.assertValueEqual(restaurant.register(), 10, "Sign values a banknote at ten");
+        helper.assertTrue(player.getMainHandItem().isEmpty(), "Sign consumes the banknote");
+        GameTestSupport.give(player, new ItemStack(OneMoreCore.BANKNOTE.get()));
+        GameTestSupport.click(helper, player, REGISTER);
+        helper.assertValueEqual(cash.balance(), 10, "Outside register values a banknote at ten");
+        helper.assertTrue(player.getMainHandItem().isEmpty(), "Register consumes the banknote");
+        var requests = new RegisterTake();
+        helper.assertTrue(requests.take(helper.getLevel(), player, helper.absolutePos(REGISTER), "take_banknote"),
+                "Outside request uses the local balance");
+        helper.assertValueEqual(cash.balance(), 0, "Outside drawer deducts ten locally");
+        helper.assertValueEqual(restaurant.register(), 10, "Outside drawer leaves the restaurant balance intact");
+        helper.assertValueEqual(player.getInventory().countItem(OneMoreCore.BANKNOTE.get()), 1, "Outside drawer gives a banknote");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void drawerDropsPieceWhenInventoryIsFull(GameTestHelper helper) {
+        CashRegisterBlockEntity cash = place(helper, REGISTER);
+        var player = GameTestSupport.player(helper);
+        GameTestSupport.give(player, new ItemStack(OneMoreCore.BANKNOTE.get()));
+        GameTestSupport.click(helper, player, REGISTER);
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++)
+            player.getInventory().setItem(i, new ItemStack(net.minecraft.world.item.Items.STONE, 64));
+        helper.assertTrue(new RegisterTake().take(helper.getLevel(), player, helper.absolutePos(REGISTER), "take_banknote"),
+                "Full inventory does not block a valid withdrawal");
+        helper.assertValueEqual(cash.balance(), 0, "Dropped banknote costs ten");
+        helper.assertValueEqual(droppedMoney(helper), 10, "Full inventory drops the banknote");
+        helper.succeed();
+    }
+
+    private static int inventoryMoney(GameTestSupport.TestPlayer player) {
+        int value = 0;
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) value += (int) Money.value(player.getInventory().getItem(i));
+        return value;
+    }
+
     private static Restaurant sign(GameTestHelper helper) {
         GameTestSupport.place(helper, SIGN, OneMoreCore.OPEN_SIGN.get(), OpenSignBlockEntity.class);
         Restaurant restaurant = Restaurants.get(helper.getLevel()).at(helper.absolutePos(SIGN));
@@ -265,6 +343,6 @@ public final class RegisterGameTests {
 
     private static int droppedMoney(GameTestHelper helper) {
         return helper.getLevel().getEntitiesOfClass(ItemEntity.class, helper.getBounds(),
-                entity -> entity.getItem().is(Config.currency())).stream().mapToInt(entity -> entity.getItem().getCount()).sum();
+                entity -> Money.value(entity.getItem()) > 0).stream().mapToInt(entity -> (int) Money.value(entity.getItem())).sum();
     }
 }

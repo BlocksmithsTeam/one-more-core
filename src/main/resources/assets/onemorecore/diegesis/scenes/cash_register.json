@@ -1,0 +1,95 @@
+{
+  "camera": {
+    "position": [
+      8,
+      27,
+      -28
+    ],
+    "target": [
+      8,
+      2,
+      0
+    ],
+    "fov": 36,
+    "neighbors": {
+      "enabled": false
+    }
+  },
+  "work_plane": 1,
+  "idle_visible": false,
+  "interface": {
+    "hide_player": true,
+    "inventory_panel": false
+  },
+  "clear_view": {
+    "blocks": false
+  },
+  "nodes": [
+    {
+      "id": "body",
+      "pos": [
+        8,
+        0,
+        8
+      ],
+      "visual": {
+        "model": "onemorecore:diegesis/register_body"
+      },
+      "pickable": false
+    },
+    {
+      "id": "drawer",
+      "pos": [
+        8,
+        0,
+        8
+      ],
+      "visual": {
+        "model": "onemorecore:diegesis/register_drawer"
+      },
+      "pickable": false
+    },
+    {
+      "id": "bills",
+      "pos": [
+        5.25,
+        0.6,
+        -0.5
+      ],
+      "tooltip": "onemorecore.register.take_banknote",
+      "collider": {
+        "from": [
+          -2.6,
+          0,
+          -4.3
+        ],
+        "to": [
+          2.6,
+          5,
+          4.3
+        ]
+      }
+    },
+    {
+      "id": "coins",
+      "pos": [
+        11,
+        0.6,
+        -0.5
+      ],
+      "tooltip": "onemorecore.register.take_coin",
+      "collider": {
+        "from": [
+          -1.5,
+          0,
+          -5
+        ],
+        "to": [
+          1.5,
+          5,
+          5
+        ]
+      }
+    }
+  ]
+}
