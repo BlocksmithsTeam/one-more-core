@@ -83,6 +83,7 @@ public class OneMoreCore {
     public static final DeferredBlock<ScreenPartBlock> SCREEN_PART = BLOCKS.register("screen_part",
             () -> new ScreenPartBlock(BlockBehaviour.Properties.of().strength(1f).noOcclusion().noCollission().noLootTable().sound(SoundType.METAL)));
     /** The default money of the mod (currencyItem). */
+    public static final DeferredItem<Item> BANKNOTE = ITEMS.registerSimpleItem("banknote", new Item.Properties());
     public static final DeferredItem<Item> COIN = ITEMS.registerSimpleItem("coin", new Item.Properties().stacksTo(99));
     private static final DeferredRegister.DataComponents COMPONENTS = DeferredRegister.createDataComponents(Registries.DATA_COMPONENT_TYPE, MODID);
     /** Old: the automatic table number of a ticket or tray (kept so that old items still load). */
@@ -174,6 +175,7 @@ public class OneMoreCore {
                 output.accept(TRAY_ITEM);
                 output.accept(IRON_TRAY_ITEM);
                 output.accept(COIN);
+                output.accept(BANKNOTE);
                 output.accept(TABLE_NUMBER);
                 output.accept(SCREWDRIVER);
             }).build());

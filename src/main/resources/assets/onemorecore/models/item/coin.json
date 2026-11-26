@@ -1,504 +1,124 @@
 {
- "parent": "block/block",
- "textures": {
-  "coin": "onemorecore:block/coin_top",
-  "side": "onemorecore:block/coin_side",
-  "particle": "onemorecore:block/coin_top"
- },
- "elements": [
-  {
-   "from": [
-    2,
-    0.0,
-    5
-   ],
-   "to": [
-    8,
-    1.0,
-    11
-   ],
-   "faces": {
-    "north": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
+  "parent": "onemorecore:block/coin_piece",
+  "display": {
+    "gui": {
+      "rotation": [
+        80,
+        0,
+        0
+      ],
+      "translation": [
+        1.4,
+        3.6466,
+        0
+      ],
+      "scale": [
+        2.8,
+        2.8,
+        2.8
+      ]
     },
-    "south": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
+    "ground": {
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "translation": [
+        0,
+        3,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
     },
-    "east": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
+    "fixed": {
+      "rotation": [
+        90,
+        0,
+        0
+      ],
+      "translation": [
+        0,
+        0,
+        7.5
+      ],
+      "scale": [
+        2.8,
+        2.8,
+        2.8
+      ]
     },
-    "west": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
+    "firstperson_righthand": {
+      "rotation": [
+        65,
+        0,
+        0
+      ],
+      "translation": [
+        0,
+        6,
+        0
+      ],
+      "scale": [
+        1.5,
+        1.5,
+        1.5
+      ]
     },
-    "up": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
+    "thirdperson_righthand": {
+      "rotation": [
+        75,
+        0,
+        0
+      ],
+      "translation": [
+        0,
+        4,
+        0
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
     },
-    "down": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
+    "firstperson_lefthand": {
+      "rotation": [
+        65,
+        0,
+        0
+      ],
+      "translation": [
+        0,
+        6,
+        0
+      ],
+      "scale": [
+        1.5,
+        1.5,
+        1.5
+      ]
+    },
+    "thirdperson_lefthand": {
+      "rotation": [
+        75,
+        0,
+        0
+      ],
+      "translation": [
+        0,
+        4,
+        0
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
     }
-   }
-  },
-  {
-   "from": [
-    2,
-    1.0,
-    5
-   ],
-   "to": [
-    8,
-    2.0,
-    11
-   ],
-   "faces": {
-    "north": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "south": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "east": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "west": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "up": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
-    },
-    "down": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
-    }
-   }
-  },
-  {
-   "from": [
-    2,
-    2.0,
-    5
-   ],
-   "to": [
-    8,
-    3.0,
-    11
-   ],
-   "faces": {
-    "north": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "south": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "east": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "west": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "up": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
-    },
-    "down": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
-    }
-   }
-  },
-  {
-   "from": [
-    2,
-    3.0,
-    5
-   ],
-   "to": [
-    8,
-    4.0,
-    11
-   ],
-   "faces": {
-    "north": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "south": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "east": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "west": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "up": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
-    },
-    "down": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
-    }
-   }
-  },
-  {
-   "from": [
-    2,
-    4.0,
-    5
-   ],
-   "to": [
-    8,
-    5.0,
-    11
-   ],
-   "faces": {
-    "north": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "south": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "east": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "west": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "up": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
-    },
-    "down": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
-    }
-   }
-  },
-  {
-   "from": [
-    9,
-    0,
-    5
-   ],
-   "to": [
-    15,
-    1,
-    11
-   ],
-   "faces": {
-    "north": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "south": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "east": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "west": {
-     "texture": "#side",
-     "uv": [
-      0,
-      1,
-      16,
-      3
-     ]
-    },
-    "up": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
-    },
-    "down": {
-     "texture": "#coin",
-     "uv": [
-      0,
-      0,
-      16,
-      16
-     ]
-    }
-   },
-   "rotation": {
-    "angle": 22.5,
-    "axis": "z",
-    "origin": [
-     9,
-     0,
-     8
-    ]
-   }
   }
- ],
- "display": {
-  "gui": {
-   "rotation": [
-    30,
-    225,
-    0
-   ],
-   "translation": [
-    0,
-    1,
-    0
-   ],
-   "scale": [
-    1.1,
-    1.1,
-    1.1
-   ]
-  },
-  "ground": {
-   "translation": [
-    0,
-    3,
-    0
-   ],
-   "scale": [
-    0.5,
-    0.5,
-    0.5
-   ]
-  },
-  "fixed": {
-   "rotation": [
-    0,
-    180,
-    0
-   ],
-   "scale": [
-    1,
-    1,
-    1
-   ]
-  },
-  "firstperson_righthand": {
-   "rotation": [
-    0,
-    45,
-    0
-   ],
-   "translation": [
-    0,
-    3,
-    0
-   ],
-   "scale": [
-    0.6,
-    0.6,
-    0.6
-   ]
-  },
-  "thirdperson_righthand": {
-   "rotation": [
-    75,
-    45,
-    0
-   ],
-   "translation": [
-    0,
-    2.5,
-    0
-   ],
-   "scale": [
-    0.5,
-    0.5,
-    0.5
-   ]
-  }
- }
 }

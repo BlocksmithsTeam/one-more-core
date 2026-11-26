@@ -42,11 +42,9 @@ class DirtRenderer {
 
     private static final Map<BlockPos, Surface> SURFACES = new HashMap<>();
 
-    private static final ModelResourceLocation COINS = ModelResourceLocation.standalone(ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "diegesis/coins"));
-
     static void registerModels(ModelEvent.RegisterAdditional event) {
         event.register(CLOTH);
-        event.register(COINS);
+        MoneyRenderer.registerModels(event);
     }
 
     /** The coins and dirty dishes that customers left on the tables, in the world. */
@@ -57,12 +55,12 @@ class DirtRenderer {
             int light = LevelRenderer.getLightColor(mc.level, pos.above());
             pose.pushPose();
             pose.translate(pos.getX() - cam.x, pos.getY() + Dirt.top(mc.level, pos) + 0.004 - cam.y, pos.getZ() - cam.z);
-            var renderer = mc.getBlockRenderer().getModelRenderer();
-            // Keep the pile in the table's southeast corner, inside the wiping scene's coins collider.
-            pose.translate(0.35, 0, 0.35);
-            pose.scale(0.65f, 0.65f, 0.65f);
-            if (t.coins() > 0) renderer.renderModel(pose.last(), buffers.getBuffer(Sheets.cutoutBlockSheet()), null, mc.getModelManager().getModel(COINS),
-                    1, 1, 1, light, OverlayTexture.NO_OVERLAY, ModelData.EMPTY, RenderType.cutout());
+            var split = com.onemorestudios.onemorecore.Money.split(t.coins());
+            // The world also draws these pieces in the wiping close-up; its node is only a click target.
+            pose.translate(9.5 / 16, 0, 8.0 / 16);
+            MoneyRenderer.banknotes(pose, buffers, light, split.bills());
+            pose.translate(1.5 / 16, 0, 5.5 / 16);
+            MoneyRenderer.coins(pose, buffers, light, split.coins());
             pose.popPose();
         });
         buffers.endBatch(Sheets.cutoutBlockSheet());

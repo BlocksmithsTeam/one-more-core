@@ -194,14 +194,11 @@ public class Restaurant {
         if (amount <= 0) return;
         long left = amount - deposit((int) Math.min(Integer.MAX_VALUE, amount));
         if (left == 0) return;
-        ItemStack currency = new ItemStack(Config.currency());
-        while (left > 0) {
-            int count = (int) Math.min(currency.getMaxStackSize(), left);
-            ItemEntity drop = new ItemEntity(level, sign.getX() + 0.5, sign.getY() + 0.5, sign.getZ() + 0.5, currency.copyWithCount(count));
+        Money.items(left, stack -> {
+            ItemEntity drop = new ItemEntity(level, sign.getX() + 0.5, sign.getY() + 0.5, sign.getZ() + 0.5, stack);
             drop.setDefaultPickUpDelay();
             level.addFreshEntity(drop);
-            left -= count;
-        }
+        });
     }
 
     /** Moves bills into the sign's balance and clears their displays. */
@@ -1662,7 +1659,7 @@ public class Restaurant {
         List<Status.Member> members = readyCheckActive ? requiredPlayers(level).stream()
                 .map(p -> new Status.Member(p.getUUID(), p.getGameProfile().getName(), ready.contains(p.getUUID()))).toList() : List.of();
         Status status = new Status(open, day, serviceLeft > 0 ? customers.size() : toSpawn + customers.size(), served, lost,
-                Config.MAX_LOST_PER_DAY.get(), register, earned, BuiltInRegistries.ITEM.getKey(Config.currency()), members,
+                Config.MAX_LOST_PER_DAY.get(), register, earned, BuiltInRegistries.ITEM.getKey(Money.coin()), members,
                 countdown, open ? serviceLeft : 0, sign, area, readyCheckActive);
         for (ServerPlayer p : viewers) PacketDistributor.sendToPlayer(p, status);
     }

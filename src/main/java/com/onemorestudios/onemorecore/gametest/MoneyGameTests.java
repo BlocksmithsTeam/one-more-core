@@ -13,6 +13,7 @@ import com.onemorestudios.onemorecore.Customer;
 import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.OpenSignBlockEntity;
 import com.onemorestudios.onemorecore.Restaurant;
+import com.onemorestudios.onemorecore.Money;
 import com.onemorestudios.onemorecore.Restaurants;
 import com.onemorestudios.onemorecore.Shop;
 import com.onemorestudios.onemorecore.TableItems;
@@ -61,7 +62,7 @@ public final class MoneyGameTests {
         addBill(restaurant, helper.absolutePos(OTHER), 9);
 
         helper.setBlock(SIGN, Blocks.AIR);
-        helper.assertValueEqual(dropped(helper, Config.currency()), 12, "overflow at the sign");
+        helper.assertValueEqual(droppedMoney(helper), 12, "overflow at the sign");
         List<ItemEntity> signs = drops(helper, OneMoreCore.OPEN_SIGN_ITEM.get());
         helper.assertValueEqual(signs.size(), 1, "dropped sign count");
         ItemStack item = signs.getFirst().getItem();
@@ -88,7 +89,7 @@ public final class MoneyGameTests {
                 List.of(new TableItems.Collected(5)), "collection notice");
         helper.assertValueEqual(collect(helper, restaurant, player, table), 0, "credit into a full register");
         helper.assertValueEqual(billAt(restaurant, table), 15, "bill remainder after retry");
-        helper.assertValueEqual(dropped(helper, Config.currency()), 0, "coins dropped during collection");
+        helper.assertValueEqual(droppedMoney(helper), 0, "coins dropped during collection");
         helper.succeed();
     }
 
@@ -102,9 +103,29 @@ public final class MoneyGameTests {
             int payment = (int) read(PARTY, party, "bill");
             call(PARTY, party, "settle", new Class<?>[] {Restaurant.class, boolean.class}, restaurant, true);
             helper.assertValueEqual(restaurant.register(), Integer.MAX_VALUE, "capped register");
-            helper.assertValueEqual(dropped(helper, Config.currency()), payment - 5, "currency dropped at the sign");
+            helper.assertValueEqual(droppedMoney(helper), payment - 5, "currency dropped at the sign");
             helper.assertValueEqual(billAt(restaurant, helper.absolutePos(TABLE)), 0, "table bill after direct payment");
         });
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void paidTableStoresAndSplitsMoney(GameTestHelper helper) {
+        Restaurant restaurant = placeRestaurant(helper);
+        Object party = serveBread(helper, restaurant, 23, false);
+        // The payment is the price plus the tip.
+        int payment = (int) read(PARTY, party, "bill");
+        helper.assertTrue(payment >= 23, "Payment includes the price: " + payment);
+        call(PARTY, party, "settle", new Class<?>[] {Restaurant.class, boolean.class}, restaurant, true);
+        BlockPos table = helper.absolutePos(TABLE);
+        int amount = billAt(restaurant, table);
+        helper.assertValueEqual(amount, payment, "Table stores the party's full payment");
+        helper.assertValueEqual(Money.split(amount), new Money.Split(amount / 10, amount % 10), "Table shows bills and coins for the payment");
+        helper.assertValueEqual(Money.split(23), new Money.Split(2, 3), "23 shows two bills and three coins");
+        Restaurant restored = reload(helper, restaurant, save(restaurant));
+        helper.assertValueEqual(billAt(restored, table), payment, "Payment amount survives saving");
+        helper.assertValueEqual(collect(helper, restored, GameTestSupport.player(helper), table), payment, "Collection credits the full amount");
+        helper.assertValueEqual(restored.register(), payment, "Collection uses the restaurant balance");
         helper.succeed();
     }
 
@@ -380,8 +401,9 @@ public final class MoneyGameTests {
         return helper.getLevel().getEntitiesOfClass(ItemEntity.class, helper.getBounds(), entity -> entity.getItem().is(item));
     }
 
-    private static int dropped(GameTestHelper helper, Item item) {
-        return drops(helper, item).stream().mapToInt(entity -> entity.getItem().getCount()).sum();
+    private static int droppedMoney(GameTestHelper helper) {
+        return helper.getLevel().getEntitiesOfClass(ItemEntity.class, helper.getBounds()).stream()
+                .mapToInt(entity -> (int) Money.value(entity.getItem())).sum();
     }
 
     private static CompoundTag save(Restaurant r) {

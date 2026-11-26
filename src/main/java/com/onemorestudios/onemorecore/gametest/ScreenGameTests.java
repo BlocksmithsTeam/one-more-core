@@ -238,6 +238,50 @@ public final class ScreenGameTests {
         helper.succeed();
     }
 
+    @GameTest(template = "empty")
+    public static void registerStationRoutesOnlyItsUsers(GameTestHelper helper) {
+        if (!net.neoforged.fml.ModList.get().isLoaded("diegesis")) { helper.succeed(); return; }
+        GameTestSupport.place(helper, POS, OneMoreCore.CASH_REGISTER.get(),
+                com.onemorestudios.onemorecore.CashRegisterBlockEntity.class);
+        var player = GameTestSupport.player(helper);
+        GameTestSupport.give(player, new ItemStack(OneMoreCore.BANKNOTE.get(), 2));
+        GameTestSupport.click(helper, player, POS);
+        GameTestSupport.give(player, ItemStack.EMPTY);
+        enableDiegesisChannel(player);
+        BlockPos pos = helper.absolutePos(POS);
+        helper.assertTrue(Diegesis.open(player, pos), "Empty hand opens the register station");
+        var station = Diegesis.activeStation(helper.getLevel(), pos).orElseThrow();
+        helper.assertValueEqual(station.type(), KitchenStations.REGISTER, "Cash register selects its drawer station");
+        var rules = KitchenStations.REGISTER.logic().create(station);
+        rules.onOpen(station, player);
+        helper.assertValueEqual(station.state().data().getInt("bills"), 2, "Drawer opens with the saved banknote count");
+        helper.assertValueEqual(station.state().data().getInt("coins"), 0, "Drawer opens without extra coins");
+        var outsider = GameTestSupport.player(helper);
+        try {
+            rules.onCustomAction(station, outsider, "take_banknote", new net.minecraft.nbt.CompoundTag());
+            helper.assertValueEqual(outsider.getInventory().countItem(OneMoreCore.BANKNOTE.get()), 0,
+                    "A player outside the station cannot take a banknote");
+            rules.onCustomAction(station, player, "take_banknote", new net.minecraft.nbt.CompoundTag());
+            helper.assertValueEqual(player.getInventory().countItem(OneMoreCore.BANKNOTE.get()), 1,
+                    "The station action delivers a banknote");
+            var cash = (com.onemorestudios.onemorecore.CashRegisterBlockEntity) helper.getBlockEntity(POS);
+            helper.assertValueEqual(cash.balance(), 10, "The station action charges ten");
+            rules.tick(station);
+            helper.assertValueEqual(station.state().data().getInt("bills"), 1, "Drawer count follows withdrawals");
+            GameTestSupport.give(player, new ItemStack(OneMoreCore.BANKNOTE.get(), 64));
+            GameTestSupport.click(helper, player, POS);
+            GameTestSupport.give(player, new ItemStack(com.onemorestudios.onemorecore.Config.currency(), 7));
+            GameTestSupport.click(helper, player, POS);
+            rules.tick(station);
+            helper.assertValueEqual(cash.balance(), 657, "Drawing limits do not change the saved value");
+            helper.assertValueEqual(station.state().data().getInt("bills"), 65, "Drawer preserves counts above the drawing cap");
+            helper.assertValueEqual(station.state().data().getInt("coins"), 7, "Drawer preserves the exact remainder");
+        } finally {
+            Diegesis.close(player);
+        }
+        helper.succeed();
+    }
+
     /** EXTERNAL-1: a same-tick tray replacement prevents stale slot moves and closes the open station. */
     @GameTest(template = "empty")
     public static void replacingTrayClosesStation(GameTestHelper helper) {

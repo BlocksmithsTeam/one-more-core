@@ -201,9 +201,10 @@ public class OpenSignBlock extends Block implements EntityBlock {
             }
             return ItemInteractionResult.sidedSuccess(level.isClientSide);
         }
-        if (stack.is(Config.currency())) {
+        if (Money.pieceValue(stack) > 0) {
             if (level instanceof ServerLevel sl) {
-                CashRegisterBlock.depositMoney(stack, player, Restaurants.get(sl).create(pos)::deposit);
+                Restaurant restaurant = Restaurants.get(sl).create(pos);
+                CashRegisterBlock.depositMoney(stack, player, restaurant.register(), restaurant::deposit);
             }
             return ItemInteractionResult.sidedSuccess(level.isClientSide);
         }
