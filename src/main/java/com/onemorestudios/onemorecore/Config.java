@@ -124,6 +124,7 @@ public class Config {
     static final ModConfigSpec.BooleanValue APP_SHOP = B.define("appShop", true);
     static final ModConfigSpec.BooleanValue APP_MANAGER = B.define("appManager", true);
     static final ModConfigSpec.BooleanValue APP_UPGRADES = B.define("appUpgrades", true);
+    public static final ModConfigSpec.BooleanValue APP_LEVELS = B.define("appLevels", false);
     static final ModConfigSpec.BooleanValue APP_STREAM = B
             .comment("The Stream app: an operator (or the owner of a single player world) sets chatPlatform, chatChannel and chatCommand in the game.")
             .define("appStream", true);

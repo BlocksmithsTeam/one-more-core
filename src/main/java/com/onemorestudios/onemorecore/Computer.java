@@ -72,12 +72,13 @@ public class Computer extends Block {
             new double[] {8.25, 0, 15, 13, 0.5, 15.5});
     public static final int REFRESH = 0, UNLOCK_INGREDIENT = 1, BUY = 2, SET_AREA = 3, SET_SPAWN = 4, SET_DELIVERY = 5,
             TOGGLE_DISH = 6, ADD_DISH = 7, REMOVE_DISH = 8, SET_PRICE = 9, SET_KIND = 10, ADD_COMBO = 11, REMOVE_COMBO = 12,
-            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17, REFRESH_MANAGER = 18, CLOSE = 19, EDIT_COMBO = 20, SET_STREAM = 21, REFRESH_MENU = 22;
+            SET_COMBO_PRICE = 13, TOGGLE_TABLE = 14, BUY_UPGRADE = 15, BUY_CART = 16, SET_SCREEN = 17, REFRESH_MANAGER = 18, CLOSE = 19, EDIT_COMBO = 20, SET_STREAM = 21, REFRESH_MENU = 22,
+            LEVEL_BUY = 23, LEVEL_ADD = 24, LEVEL_REMOVE = 25, LEVEL_PRICE = 26, LEVEL_AREA = 27, LEVEL_WALL = 28, LEVEL_MOVE = 29;
     public static final int MAX_REQUEST_LENGTH = 1024, MAX_CART_LINES = 32, MAX_CART_COUNT = 64;
     /** How far from the computer the manager app may set a point, in blocks per axis. */
     public static final int PLACE_RANGE = 48;
     /** Bits of {@link State#apps}. */
-    public static final int APP_MENU = 1, APP_SHOP = 2, APP_MANAGER = 4, APP_UPGRADES = 8, APP_STREAM = 16;
+    public static final int APP_MENU = 1, APP_SHOP = 2, APP_MANAGER = 4, APP_UPGRADES = 8, APP_STREAM = 16, APP_LEVELS = 32;
     /** The upgrades of the upgrades app, in order. */
     public static final List<String> UPGRADES = List.of("decor", "delivery", "bell");
 
@@ -151,6 +152,20 @@ public class Computer extends Block {
                 ItemStack.OPTIONAL_STREAM_CODEC, ShopLine::icon, ByteBufCodecs.VAR_INT, ShopLine::price, ShopLine::new);
     }
 
+    public record LevelLine(int price, List<Integer> area, List<Integer> wall, Optional<BlockPos> moveTo) {
+        public LevelLine {
+            price = Math.max(0, price);
+            area = area.size() == 6 ? List.copyOf(area) : List.of();
+            wall = wall.size() == 6 ? List.copyOf(wall) : List.of();
+        }
+        static final StreamCodec<RegistryFriendlyByteBuf, LevelLine> CODEC = StreamCodec.of((b, line) -> {
+            b.writeVarInt(line.price);
+            State.INTS.encode(b, line.area);
+            State.INTS.encode(b, line.wall);
+            State.OPTIONAL_POS.encode(b, line.moveTo);
+        }, b -> new LevelLine(b.readVarInt(), State.INTS.decode(b), State.INTS.decode(b), State.OPTIONAL_POS.decode(b)));
+    }
+
     /**
      * Server to client. "open" opens the screen; without it only an open screen is updated.
      * "found" is false when no restaurant is near the computer (see {@link Restaurants#forComputer}). "info" holds the
@@ -161,7 +176,19 @@ public class Computer extends Block {
             List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message,
             Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
             List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades,
-            List<String> stream, Optional<IngredientData> ingredientData) implements CustomPacketPayload {
+            List<String> stream, Optional<IngredientData> ingredientData, int level, List<LevelLine> levels, boolean levelEditor) implements CustomPacketPayload {
+        public State {
+            level = Math.max(1, Math.min(65, level));
+            levels = List.copyOf(levels.subList(0, Math.min(64, levels.size())));
+        }
+        public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, int day,
+                List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message,
+                Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
+                List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades,
+                List<String> stream, Optional<IngredientData> ingredientData) {
+            this(pos, open, found, apps, currency, balance, day, menu, shop, info, message, sign, area, spawn, delivery,
+                    combos, surfaces, offSurfaces, upgrades, stream, ingredientData, 1, List.of(), false);
+        }
         /** stream: platform, channel, command, "on" or "off", viewers in the pool; empty for the other apps. */
         public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, List<MenuLine> menu, List<ShopLine> shop,
                 List<Component> info, Component message, Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
@@ -203,13 +230,17 @@ public class Computer extends Block {
             UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).encode(b, s.upgrades);
             ByteBufCodecs.stringUtf8(256).apply(ByteBufCodecs.list(8)).encode(b, s.stream);
             ByteBufCodecs.optional(IngredientData.CODEC).encode(b, s.ingredientData);
+            b.writeVarInt(s.level);
+            LevelLine.CODEC.apply(ByteBufCodecs.list(64)).encode(b, s.levels);
+            b.writeBoolean(s.levelEditor);
         }, b -> new State(b.readBlockPos(), b.readBoolean(), b.readBoolean(), b.readVarInt(), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(), b.readVarInt(),
                 MenuLine.CODEC.apply(ByteBufCodecs.list()).decode(b), ShopLine.CODEC.apply(ByteBufCodecs.list()).decode(b),
                 ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(b), ComponentSerialization.STREAM_CODEC.decode(b),
                 OPTIONAL_POS.decode(b), INTS.decode(b), OPTIONAL_POS.decode(b), OPTIONAL_POS.decode(b),
                 ComboLine.CODEC.apply(ByteBufCodecs.list()).decode(b), POSITIONS.decode(b), POSITIONS.decode(b),
                 UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).decode(b), ByteBufCodecs.stringUtf8(256).apply(ByteBufCodecs.list(8)).decode(b),
-                ByteBufCodecs.optional(IngredientData.CODEC).decode(b)));
+                ByteBufCodecs.optional(IngredientData.CODEC).decode(b), b.readVarInt(),
+                LevelLine.CODEC.apply(ByteBufCodecs.list(64)).decode(b), b.readBoolean()));
 
         @Override
         public Type<State> type() { return TYPE; }
@@ -278,7 +309,7 @@ public class Computer extends Block {
             if (!canUse(sp, serverLevel, pos)) return InteractionResult.PASS;
             Restaurant restaurant = Restaurants.get(serverLevel).forComputer(pos);
             SESSIONS.put(sp, new Session(serverLevel, pos.immutable(), restaurant));
-            PacketDistributor.sendToPlayer(sp, state(serverLevel, pos, restaurant, true, false, false, Component.empty()));
+            PacketDistributor.sendToPlayer(sp, state(serverLevel, pos, restaurant, true, false, false, Component.empty(), editor(sp)));
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
@@ -335,10 +366,67 @@ public class Computer extends Block {
             SESSIONS.remove(player);
             return checkout ? sessionEnded(request) : null;
         }
-        if (checkout) return checkout(session, request);
+        if (checkout) return checkout(session, request, editor(player));
         if (request.id.length() > MAX_REQUEST_LENGTH) return null;
         Component message = Component.empty();
-        if (request.action == SET_AREA || request.action == SET_SPAWN || request.action == SET_DELIVERY) {
+        if (request.action >= LEVEL_BUY && request.action <= LEVEL_MOVE) {
+            if (r == null || !Config.APP_LEVELS.get()) return null;
+            if (request.action != LEVEL_BUY && !editor(player)) {
+                message = Component.translatable("onemorecore.level.not_allowed");
+            } else if (request.action == LEVEL_BUY) {
+                message = Component.translatable(r.buyLevel(level), Config.MAX_AREA.get());
+            } else if (request.action == LEVEL_ADD) {
+                if (r.steps.size() == 64) return null;
+                r.steps.add(new Restaurant.Step(0, null, null, null));
+                all.setDirty();
+            } else {
+                String[] fields = request.id.split("\n", -1);
+                int index;
+                try { index = Integer.parseInt(fields[0]); } catch (NumberFormatException e) { return null; }
+                if (index < r.level - 1 || index >= r.steps.size()) return null;
+                Restaurant.Step old = r.steps.get(index);
+                if (request.action == LEVEL_REMOVE) {
+                    if (fields.length != 1) return null;
+                    r.steps.remove(index);
+                } else {
+                    if (fields.length != 2) return null;
+                    if (request.action == LEVEL_PRICE) {
+                        int price;
+                        try { price = new java.math.BigInteger(fields[1].trim()).max(java.math.BigInteger.ZERO)
+                                .min(java.math.BigInteger.valueOf(Integer.MAX_VALUE)).intValue(); }
+                        catch (NumberFormatException e) { return null; }
+                        r.steps.set(index, new Restaurant.Step(price, old.area(), old.wall(), old.moveTo()));
+                    } else {
+                        BoundingBox box = null;
+                        BlockPos point = null;
+                        if (!fields[1].isBlank()) {
+                            String[] coordinates = fields[1].trim().split("\\s+");
+                            int count = request.action == LEVEL_MOVE ? 3 : 6;
+                            if (coordinates.length != count) return null;
+                            int[] n = new int[count];
+                            try { for (int i = 0; i < count; i++) n[i] = Integer.parseInt(coordinates[i]); }
+                            catch (NumberFormatException e) { return null; }
+                            point = new BlockPos(n[0], n[1], n[2]);
+                            BlockPos end = count == 3 ? point : new BlockPos(n[3], n[4], n[5]);
+                            if (count == 3 && level.isLoaded(point) && level.isLoaded(point.below())
+                                    && level.getBlockState(point).is(OneMoreCore.SCREEN_PART.get())
+                                    && level.getBlockState(point.below()).is(OneMoreCore.OPEN_SIGN.get())) point = point.below();
+                            if (!near(request.pos, point) || !near(request.pos, end) || !level.isLoaded(point) || !level.isLoaded(end))
+                                return state(level, request.pos, r, false, false, false,
+                                        Component.translatable("onemorecore.tool.too_far", PLACE_RANGE), editor(player));
+                            if (count == 6) {
+                                box = BoundingBox.fromCorners(point, end);
+                                if (!Restaurants.validBox(box)) return state(level, request.pos, r, false, false, false,
+                                        Component.translatable("onemorecore.tool.too_big", Config.MAX_AREA.get()), editor(player));
+                            }
+                        }
+                        r.steps.set(index, new Restaurant.Step(old.price(), request.action == LEVEL_AREA ? box : old.area(),
+                                request.action == LEVEL_WALL ? box : old.wall(), request.action == LEVEL_MOVE ? point : old.moveTo()));
+                    }
+                }
+                all.setDirty();
+            }
+        } else if (request.action == SET_AREA || request.action == SET_SPAWN || request.action == SET_DELIVERY) {
             if (r == null || !Config.APP_MANAGER.get()) return null;
             int[] n = ints(request.id, request.action == SET_AREA ? 6 : 3);
             if (n == null) return null;
@@ -470,7 +558,7 @@ public class Computer extends Block {
                     ADD_COMBO, REMOVE_COMBO, SET_COMBO_PRICE, EDIT_COMBO -> true;
             default -> false;
         };
-        return state(level, request.pos, r, false, manager, menu, message);
+        return state(level, request.pos, r, false, manager, menu, message, editor(player));
     }
 
     private static CheckoutResult sessionEnded(Request request) {
@@ -478,7 +566,7 @@ public class Computer extends Block {
                 "onemorecore.computer.cart_session", "Computer session ended. Use the computer again."), Optional.empty());
     }
 
-    private static CheckoutResult checkout(Session session, Request request) {
+    private static CheckoutResult checkout(Session session, Request request, boolean levelEditor) {
         Restaurant r = session.restaurant;
         Component message;
         boolean success = false;
@@ -508,7 +596,7 @@ public class Computer extends Block {
             }
         }
         return new CheckoutResult(request.pos, request.checkoutId, success, message,
-                Optional.of(state(session.level, request.pos, r, false, false, false, Component.empty())));
+                Optional.of(state(session.level, request.pos, r, false, false, false, Component.empty(), levelEditor)));
     }
 
     /** Reads "id:count;id:count" using the same limits as the Shop screen. */
@@ -530,8 +618,8 @@ public class Computer extends Block {
 
     /** True if the point is at most PLACE_RANGE blocks from the computer in each axis. */
     static boolean near(BlockPos computer, BlockPos p) {
-        return Math.abs(p.getX() - computer.getX()) <= PLACE_RANGE && Math.abs(p.getY() - computer.getY()) <= PLACE_RANGE
-                && Math.abs(p.getZ() - computer.getZ()) <= PLACE_RANGE;
+        return Math.abs((long) p.getX() - computer.getX()) <= PLACE_RANGE && Math.abs((long) p.getY() - computer.getY()) <= PLACE_RANGE
+                && Math.abs((long) p.getZ() - computer.getZ()) <= PLACE_RANGE;
     }
 
     /** Exactly `count` integers separated by commas, or null. */
@@ -554,9 +642,9 @@ public class Computer extends Block {
     }
 
     /** Everything the screen shows. The menu and shop files exist on the server only. */
-    private static State state(ServerLevel level, BlockPos pos, Restaurant r, boolean open, boolean manager, boolean menuRequest, Component message) {
+    private static State state(ServerLevel level, BlockPos pos, Restaurant r, boolean open, boolean manager, boolean menuRequest, Component message, boolean levelEditor) {
         int apps = (Config.APP_MENU.get() ? APP_MENU : 0) | (Config.APP_SHOP.get() ? APP_SHOP : 0) | (Config.APP_MANAGER.get() ? APP_MANAGER : 0)
-                | (Config.APP_UPGRADES.get() ? APP_UPGRADES : 0) | (Config.APP_STREAM.get() ? APP_STREAM : 0);
+                | (Config.APP_UPGRADES.get() ? APP_UPGRADES : 0) | (Config.APP_STREAM.get() ? APP_STREAM : 0) | (Config.APP_LEVELS.get() ? APP_LEVELS : 0);
         ItemStack currency = new ItemStack(Config.currency());
         if (r == null) return new State(pos, open, false, apps, currency, 0, List.of(), List.of(), List.of(), message,
                 Optional.empty(), List.of(), Optional.empty(), Optional.empty());
@@ -603,7 +691,18 @@ public class Computer extends Block {
                     int lv = r.upgrade(id);
                     return new UpgradeLine(id, lv, costs.size(), lv < costs.size() ? costs.get(lv) : 0);
                 }).toList(),
-                stream(), menuRequest ? Optional.of(ingredientData(registries, r, dishes, menu)) : Optional.empty());
+                stream(), menuRequest ? Optional.of(ingredientData(registries, r, dishes, menu)) : Optional.empty(),
+                r.level(), !Config.APP_LEVELS.get() ? List.of() : r.steps().stream().limit(64)
+                        .map(step -> new LevelLine(step.price(), boxList(step.area()), boxList(step.wall()), Optional.ofNullable(step.moveTo()))).toList(),
+                Config.APP_LEVELS.get() && levelEditor);
+    }
+
+    private static boolean editor(Player player) {
+        return player instanceof ServerPlayer sp && (sp.hasPermissions(2) || sp.server.isSingleplayerOwner(sp.getGameProfile()));
+    }
+
+    private static List<Integer> boxList(BoundingBox box) {
+        return box == null ? List.of() : List.of(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ());
     }
 
     private record DishSettings(boolean on, String kind) {}

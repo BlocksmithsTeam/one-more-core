@@ -69,8 +69,25 @@ public final class ComputerCamera {
     static boolean booted;
 
     // Free camera.
-    enum Tool { AREA, SPAWN, DELIVERY, TABLES, SCREENS }
+    enum Tool {
+        AREA, SPAWN, DELIVERY, TABLES, SCREENS, LEVEL_AREA, LEVEL_WALL, LEVEL_MOVE;
+
+        /** A tool of the Levels app: it sets one step, and keys 1-5 do not change it. */
+        boolean level() { return ordinal() >= LEVEL_AREA.ordinal(); }
+
+        /** Two clicks make a box. */
+        boolean box() { return this == AREA || this == LEVEL_AREA || this == LEVEL_WALL; }
+    }
     static Tool tool = Tool.AREA;
+    /** The step (0-based) that a level tool sets. */
+    static int levelStep;
+    /** A level request was sent and its reply has not come yet. */
+    private static boolean levelPending;
+    /** The replies to a level request that keep the free camera open, so that the message shows. */
+    private static final java.util.Set<String> LEVEL_ERRORS = java.util.Set.of("onemorecore.tool.too_far", "onemorecore.tool.too_big",
+            "onemorecore.level.not_allowed");
+    /** The colours of a level's area, wall and target sign, in the free camera and the Levels app. */
+    static final int LEVEL_AREA_COLOR = 0x40C8E0, LEVEL_WALL_COLOR = 0xE0614A, LEVEL_MOVE_COLOR = 0xFF7FD0;
     static BlockPos corner;
     static Component message = Component.empty();
     static long messageTime;
@@ -106,6 +123,12 @@ public final class ComputerCamera {
         if (active() && same) {
             state = s;
             if (mc.screen instanceof ComputerScreen screen) screen.update(s);
+            // A level step was set: back to the Levels app, which shows it. An error keeps the camera, with its message.
+            if (mode == Mode.FREE && levelPending) {
+                levelPending = false;
+                if (!(s.message().getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents t
+                        && LEVEL_ERRORS.contains(t.getKey()))) backToApp();
+            }
             return;
         }
         if (!s.open() || mc.player == null || mc.level == null || active()) return;
@@ -197,6 +220,19 @@ public final class ComputerCamera {
         mode = Mode.FREE;
         tool = Tool.AREA;
         corner = null;
+        levelPending = false;
+    }
+
+    /** From the Levels app: the free camera with a tool for one step. Escape goes back to the Levels app. */
+    static void startLevel(Tool levelTool, int step) {
+        startFree();
+        if (mode != Mode.FREE) return;
+        tool = levelTool;
+        levelStep = step;
+    }
+
+    static int levelColor(Tool t) {
+        return t == Tool.LEVEL_WALL ? LEVEL_WALL_COLOR : t == Tool.LEVEL_MOVE ? LEVEL_MOVE_COLOR : LEVEL_AREA_COLOR;
     }
 
     private static void finish() {
@@ -338,11 +374,14 @@ public final class ComputerCamera {
         BlockPos pos = target();
         if (pos == null) return;
         switch (tool) {
-            case AREA -> {
+            case AREA, LEVEL_AREA, LEVEL_WALL -> {
                 if (corner == null) { corner = pos; return; }
-                send(Computer.SET_AREA, List.of(corner.getX(), corner.getY(), corner.getZ(), pos.getX(), pos.getY(), pos.getZ()));
+                if (tool == Tool.AREA) send(Computer.SET_AREA, List.of(corner.getX(), corner.getY(), corner.getZ(), pos.getX(), pos.getY(), pos.getZ()));
+                else sendLevel(tool == Tool.LEVEL_AREA ? Computer.LEVEL_AREA : Computer.LEVEL_WALL, corner.getX() + " " + corner.getY() + " "
+                        + corner.getZ() + " " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
                 corner = null;
             }
+            case LEVEL_MOVE -> sendLevel(Computer.LEVEL_MOVE, pos.getX() + " " + pos.getY() + " " + pos.getZ());
             case SPAWN -> send(Computer.SET_SPAWN, List.of(pos.getX(), pos.getY(), pos.getZ()));
             case DELIVERY -> send(Computer.SET_DELIVERY, List.of(pos.getX(), pos.getY(), pos.getZ()));
             case TABLES -> send(Computer.TOGGLE_TABLE, List.of(pos.getX(), pos.getY(), pos.getZ()));
@@ -356,6 +395,12 @@ public final class ComputerCamera {
         PacketDistributor.sendToServer(new Computer.Request(state.pos(), action, id.toString()));
     }
 
+    /** A level request: "<step>\n<numbers>". */
+    private static void sendLevel(int action, String numbers) {
+        PacketDistributor.sendToServer(new Computer.Request(state.pos(), action, levelStep + "\n" + numbers));
+        levelPending = true;
+    }
+
     /** Keys 1, 2 and 3 choose the tool in the free camera. */
     private static void key(InputEvent.Key event) {
         if (mode != Mode.FREE || event.getAction() != org.lwjgl.glfw.GLFW.GLFW_PRESS || Minecraft.getInstance().screen != null) return;
@@ -364,7 +409,7 @@ public final class ComputerCamera {
             return;
         }
         int k = event.getKey();
-        if (k >= org.lwjgl.glfw.GLFW.GLFW_KEY_1 && k <= org.lwjgl.glfw.GLFW.GLFW_KEY_5) {
+        if (!tool.level() && k >= org.lwjgl.glfw.GLFW.GLFW_KEY_1 && k <= org.lwjgl.glfw.GLFW.GLFW_KEY_5) {
             tool = Tool.values()[k - org.lwjgl.glfw.GLFW.GLFW_KEY_1];
             corner = null;
         }
@@ -377,14 +422,20 @@ public final class ComputerCamera {
                 && mc.options.keyUse.isActiveAndMatches(InputConstants.Type.MOUSE.getOrCreate(event.getButton()))) useTool();
     }
 
-    /** Escape in the free camera ends the editing: the camera flies back to the monitor and the manager app opens. */
+    /** Escape in the free camera ends the editing: the camera flies back to the monitor and the app that started it opens. */
     private static void pause(ScreenEvent.Opening event) {
         if (mode != Mode.FREE || !(event.getNewScreen() instanceof PauseScreen)) return;
         event.setCanceled(true);
+        backToApp();
+    }
+
+    /** The camera flies back to the monitor, and the app that started the free camera opens. */
+    private static void backToApp() {
         Minecraft.getInstance().options.hideGui = true;
-        reopenApp = Computer.APP_MANAGER;
+        reopenApp = tool.level() ? Computer.APP_LEVELS : Computer.APP_MANAGER;
         flyTo(Mode.TO_SCREEN, screenView(state.pos()));
         corner = null;
+        levelPending = false;
     }
 
     private static void renderWorld(RenderLevelStageEvent event) {
@@ -396,8 +447,18 @@ public final class ComputerCamera {
         pose.pushPose();
         pose.translate(-cam.x, -cam.y, -cam.z);
         // Boxes like Create's Super Glue: see-through faces with a grid, thick edges.
-        List<Integer> a = state.area();
-        if (a.size() == 6) SelectionBox.draw(pose, buffers, new AABB(a.get(0), a.get(1), a.get(2), a.get(3) + 1, a.get(4) + 1, a.get(5) + 1), 0x4DE066, 0.12f);
+        if (state.area().size() == 6) SelectionBox.draw(pose, buffers, box(state.area()), 0x4DE066, 0.12f);
+        if (tool.level()) {
+            // Every step's area and wall; the step being set is stronger, with its target sign.
+            List<Computer.LevelLine> steps = state.levels();
+            for (int i = 0; i < steps.size(); i++) {
+                Computer.LevelLine s = steps.get(i);
+                float alpha = i == levelStep ? 0.3f : 0.08f;
+                if (s.area().size() == 6) SelectionBox.draw(pose, buffers, box(s.area()).inflate(0.015), LEVEL_AREA_COLOR, alpha);
+                if (s.wall().size() == 6) SelectionBox.draw(pose, buffers, box(s.wall()).inflate(0.025), LEVEL_WALL_COLOR, alpha);
+                if (i == levelStep) s.moveTo().ifPresent(m -> SelectionBox.draw(pose, buffers, new AABB(m).inflate(0.035), LEVEL_MOVE_COLOR, 0.3f));
+            }
+        }
         state.sign().ifPresent(p -> SelectionBox.draw(pose, buffers, new AABB(p).inflate(0.02), 0xFFFFFF, 0.2f));
         state.spawn().ifPresent(p -> SelectionBox.draw(pose, buffers, new AABB(p), 0x4D99FF, 0.3f));
         state.delivery().ifPresent(p -> SelectionBox.draw(pose, buffers, new AABB(p).inflate(0.02), 0xFF8C1A, 0.3f));
@@ -409,11 +470,16 @@ public final class ComputerCamera {
         BlockPos p = target();
         if (p != null) {
             // The box grows from the first corner to the looked-at point, like Create's Super Glue.
-            if (tool == Tool.AREA && corner != null) SelectionBox.draw(pose, buffers, AABB.encapsulatingFullBlocks(corner, p).inflate(0.01), 0xFFE04D, 0.18f);
+            if (tool.box() && corner != null) SelectionBox.draw(pose, buffers, AABB.encapsulatingFullBlocks(corner, p).inflate(0.01), 0xFFE04D, 0.18f);
             SelectionBox.draw(pose, buffers, new AABB(p).inflate(0.005), 0xFFFFFF, 0.15f);
         }
         pose.popPose();
         buffers.endBatch();
+    }
+
+    /** A box of 6 ints (min x y z, max x y z) as whole blocks. */
+    private static AABB box(List<Integer> a) {
+        return new AABB(a.get(0), a.get(1), a.get(2), a.get(3) + 1, a.get(4) + 1, a.get(5) + 1);
     }
 
     private static void renderHud(RenderGuiEvent.Post event) {
@@ -422,16 +488,20 @@ public final class ComputerCamera {
         GuiGraphics g = event.getGuiGraphics();
         var font = mc.font;
         var o = mc.options;
-        Component[] tools = {Component.translatable("onemorecore.free.area"), Component.translatable("onemorecore.free.spawn"),
+        // A level tool shows only its own tab, without a key.
+        boolean level = tool.level();
+        Component[] tools = level ? new Component[] {Component.translatable("onemorecore.free." + tool.name().toLowerCase(java.util.Locale.ROOT), levelStep + 2)}
+                : new Component[] {Component.translatable("onemorecore.free.area"), Component.translatable("onemorecore.free.spawn"),
                 Component.translatable("onemorecore.free.delivery"), Component.translatable("onemorecore.free.tables"),
                 Component.translatable("onemorecore.free.screens")};
-        int[] colors = {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A, 0xFFE05555, 0xFFB57BFF};
+        int[] colors = level ? new int[] {0xFF000000 | levelColor(tool)} : new int[] {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A, 0xFFE05555, 0xFFB57BFF};
+        int cap = level ? 0 : 16;
         // One prompt row for the current tool: the mouse buttons and what they do.
         List<Object> help = new java.util.ArrayList<>();
         if (altDown()) {
             help.add(KeyGlyphs.Mouse.MIDDLE);
             help.add(Component.translatable("onemorecore.free.distance", (int) reach));
-        } else if (tool == Tool.AREA && corner != null) {
+        } else if (tool.box() && corner != null) {
             help.add(o.keyUse); help.add(Component.translatable("onemorecore.free.corner2"));
             help.add(o.keyAttack); help.add(Component.translatable("onemorecore.free.cancel"));
         } else {
@@ -442,15 +512,17 @@ public final class ComputerCamera {
                 case DELIVERY -> "onemorecore.free.place_delivery";
                 case TABLES -> "onemorecore.free.toggle_table";
                 case SCREENS -> "onemorecore.free.cycle_screen";
+                case LEVEL_AREA, LEVEL_WALL -> "onemorecore.free.corner1";
+                case LEVEL_MOVE -> "onemorecore.free.pick_sign";
             }));
-            if (tool == Tool.AREA) { help.add("Alt"); help.add(Component.translatable("onemorecore.free.in_air")); }
+            if (tool.box()) { help.add("Alt"); help.add(Component.translatable("onemorecore.free.in_air")); }
         }
         List<Object> keys = List.of(o.keyUp, o.keyLeft, o.keyDown, o.keyRight, Component.translatable("onemorecore.free.fly"),
                 o.keyJump, o.keyShift, Component.translatable("onemorecore.free.up_down"), o.keySprint, Component.translatable("onemorecore.free.fast"),
                 "Esc", Component.translatable("onemorecore.free.done"));
         // Tabs: a key cap with the number, a colour mark and the name.
         int toolsW = -4;
-        for (Component t : tools) toolsW += 16 + 4 + 8 + font.width(t) + 6 + 4;
+        for (Component t : tools) toolsW += cap + 18 + font.width(t) + 4;
         int helpW = KeyGlyphs.width(font, help), keysW = KeyGlyphs.width(font, keys);
         int w = Math.min(g.guiWidth() - 12, Math.max(toolsW, Math.max(helpW, keysW)) + 12);
         boolean showMessage = System.currentTimeMillis() - messageTime < 4000 && !message.getString().isEmpty();
@@ -461,12 +533,12 @@ public final class ComputerCamera {
         g.fill(x, y + 1, x + w, y + h - 1, 0x8C0C0C0C);
         int tx = x + (w - toolsW) / 2, ty = y + 4;
         for (int i = 0; i < tools.length; i++) {
-            int tw = 16 + 4 + 8 + font.width(tools[i]) + 6;
-            boolean on = tool.ordinal() == i;
+            int tw = cap + 18 + font.width(tools[i]);
+            boolean on = level || tool.ordinal() == i;
             g.fill(tx, ty, tx + tw, ty + 16, on ? 0x55FFFFFF : 0x1AFFFFFF);
-            KeyGlyphs.draw(g, font, tx + 1, ty + 1, String.valueOf(i + 1), 0xFFFFFFFF);
-            g.fill(tx + 18, ty + 5, tx + 24, ty + 11, colors[i]);
-            g.drawString(font, tools[i], tx + 28, ty + 4, on ? 0xFFFFFFFF : 0xFF9AA3AD, false);
+            if (!level) KeyGlyphs.draw(g, font, tx + 1, ty + 1, String.valueOf(i + 1), 0xFFFFFFFF);
+            g.fill(tx + cap + 2, ty + 5, tx + cap + 8, ty + 11, colors[i]);
+            g.drawString(font, tools[i], tx + cap + 12, ty + 4, on ? 0xFFFFFFFF : 0xFF9AA3AD, false);
             tx += tw + 4;
         }
         int ry = ty + 20;
