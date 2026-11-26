@@ -1,0 +1,226 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "#case",
+    "case": "onemorecore:block/iron_tray_side",
+    "drawer": "onemorecore:block/modern_tray_rack_frame"
+  },
+  "elements": [
+    {
+      "name": "base",
+      "from": [
+        2,
+        0,
+        3
+      ],
+      "to": [
+        14,
+        3,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        }
+      }
+    },
+    {
+      "name": "slanted_top",
+      "from": [
+        3,
+        3,
+        5
+      ],
+      "to": [
+        13,
+        5,
+        12
+      ],
+      "rotation": {
+        "origin": [
+          8,
+          3,
+          8
+        ],
+        "axis": "x",
+        "angle": -22.5
+      },
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#case"
+        }
+      }
+    },
+    {
+      "name": "drawer_line",
+      "from": [
+        3,
+        1,
+        2.9
+      ],
+      "to": [
+        13,
+        1.5,
+        3.1
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#drawer"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#drawer"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#drawer"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#drawer"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#drawer"
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#drawer"
+        }
+      }
+    }
+  ]
+}

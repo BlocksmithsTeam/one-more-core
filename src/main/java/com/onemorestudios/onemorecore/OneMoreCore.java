@@ -73,6 +73,9 @@ public class OneMoreCore {
     public static final DeferredBlock<OpenSignBlock> OPEN_SIGN = BLOCKS.register("open_sign",
             () -> new OpenSignBlock(BlockBehaviour.Properties.of().strength(1.5f).lightLevel(s -> s.getValue(OpenSignBlock.OPEN) ? 9 : 0).noOcclusion().sound(SoundType.WOOD).pushReaction(PushReaction.BLOCK)));
     public static final DeferredItem<BlockItem> OPEN_SIGN_ITEM = ITEMS.registerSimpleBlockItem(OPEN_SIGN);
+    public static final DeferredBlock<CashRegisterBlock> CASH_REGISTER = BLOCKS.register("cash_register",
+            () -> new CashRegisterBlock(BlockBehaviour.Properties.of().strength(1.5f).sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredItem<BlockItem> CASH_REGISTER_ITEM = ITEMS.registerSimpleBlockItem(CASH_REGISTER);
     public static final DeferredBlock<MenuBoardBlock> MENU_BOARD = BLOCKS.register("menu_board",
             () -> new ScreenBlock(BlockBehaviour.Properties.of().strength(1.5f).noOcclusion().sound(SoundType.METAL)));
     public static final DeferredItem<BlockItem> MENU_BOARD_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOARD);
@@ -136,6 +139,8 @@ public class OneMoreCore {
     public static final DeferredHolder<EntityType<?>, EntityType<Courier>> COURIER = ENTITIES.register("courier",
             () -> EntityType.Builder.<Courier>of(Courier::new, MobCategory.MISC).sized(0.6f, 1.8f)
                     .noSummon().clientTrackingRange(8).build("courier"));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CashRegisterBlockEntity>> CASH_REGISTER_ENTITY = BLOCK_ENTITIES.register("cash_register",
+            () -> BlockEntityType.Builder.of(CashRegisterBlockEntity::new, CASH_REGISTER.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OpenSignBlockEntity>> OPEN_SIGN_ENTITY = BLOCK_ENTITIES.register("open_sign",
             () -> BlockEntityType.Builder.of(OpenSignBlockEntity::new, OPEN_SIGN.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBoardBlockEntity>> MENU_BOARD_ENTITY = BLOCK_ENTITIES.register("menu_board",
@@ -160,6 +165,7 @@ public class OneMoreCore {
             .icon(() -> new ItemStack(OPEN_SIGN_ITEM.get()))
             .displayItems((parameters, output) -> {
                 output.accept(OPEN_SIGN_ITEM);
+                output.accept(CASH_REGISTER_ITEM);
                 output.accept(COMPUTER_ITEM);
                 output.accept(MENU_BOARD_ITEM);
                 output.accept(MENU_BOOK_ITEM);

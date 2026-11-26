@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "onemorecore:block/cash_register"
+    },
+    "facing=east": {
+      "model": "onemorecore:block/cash_register",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "onemorecore:block/cash_register",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "onemorecore:block/cash_register",
+      "y": 270
+    }
+  }
+}

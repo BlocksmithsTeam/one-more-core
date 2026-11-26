@@ -26,10 +26,12 @@ public class Restaurants extends SavedData {
 
     /** Needed to save and load the item stacks of pending deliveries. */
     HolderLookup.Provider registries;
+    ServerLevel level;
 
     public static Restaurants get(ServerLevel level) {
         Restaurants data = level.getDataStorage().computeIfAbsent(new Factory<>(Restaurants::new, Restaurants::load), "onemorecore_restaurants");
         data.registries = level.registryAccess();
+        data.level = level;
         return data;
     }
 
