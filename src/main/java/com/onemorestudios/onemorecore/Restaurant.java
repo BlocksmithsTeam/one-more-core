@@ -55,6 +55,14 @@ public class Restaurant {
     public final BlockPos sign;
     BoundingBox area;
     BlockPos spawn;
+    int level = 1;
+    final List<Step> steps = new ArrayList<>();
+    public record Step(int price, BoundingBox area, BoundingBox wall, BlockPos moveTo) {
+        public Step { price = Math.max(0, price); }
+    }
+    public int level() { return level; }
+    public List<Step> steps() { return List.copyOf(steps); }
+
     int day = 1;
     int register;
     private final Set<ResourceLocation> unlockedIngredients = new HashSet<>();
@@ -632,6 +640,77 @@ public class Restaurant {
         resetReadyCheck();
         owner.setDirty();
     }
+    String buyLevel(ServerLevel world) {
+        if (level > steps.size()) return "onemorecore.level.max";
+        if (isOpen()) return "onemorecore.tool.busy";
+        Step step = steps.get(level - 1);
+        if (register < step.price()) return "onemorecore.level.no_money";
+        if (step.moveTo() != null) {
+            Restaurant target = owner.levelTarget(this, step.moveTo());
+            if (target == null || !world.isLoaded(target.sign)) return "onemorecore.level.no_target";
+            BlockPos landing = landing(world, target);
+            if (landing == null) return "onemorecore.level.no_target";
+            register -= step.price();
+            target.restore(progress());
+            target.level = level + 1;
+            target.refreshMachines(world);
+            register = 0;
+            deliveries.clear();
+            level = 1;
+            steps.clear();
+            if (area != null) for (ServerPlayer player : world.players()) {
+                if (area.isInside(player.blockPosition())) player.teleportTo(world, landing.getX() + 0.5,
+                        landing.getY(), landing.getZ() + 0.5, player.getYRot(), player.getXRot());
+            }
+            owner.setDirty();
+            return "onemorecore.level.moved";
+        }
+        if (step.wall() != null) {
+            for (BlockPos pos : BlockPos.betweenClosed(step.wall().minX(), step.wall().minY(), step.wall().minZ(),
+                    step.wall().maxX(), step.wall().maxY(), step.wall().maxZ()))
+                if (!world.isLoaded(pos)) return "onemorecore.tool.too_far";
+        }
+        if (step.area() != null) {
+            String result = owner.setArea(this, step.area());
+            if (!result.equals("area_set")) return "onemorecore.tool." + result;
+        }
+        if (step.wall() != null) {
+            for (BlockPos pos : BlockPos.betweenClosed(step.wall().minX(), step.wall().minY(), step.wall().minZ(),
+                    step.wall().maxX(), step.wall().maxY(), step.wall().maxZ())) {
+                BlockState state = world.getBlockState(pos);
+                Restaurant other = owner.containing(pos);
+                if (state.isAir() || BuiltInRegistries.BLOCK.getKey(state.getBlock()).getNamespace().equals(OneMoreCore.MODID)
+                        || other != null && other != this) continue;
+                // Remove the inventory first so block removal cannot spill its contents.
+                world.removeBlockEntity(pos);
+                if (world.removeBlock(pos, false)) world.levelEvent(2001, pos, net.minecraft.world.level.block.Block.getId(state));
+            }
+        }
+        register -= step.price();
+        level++;
+        refreshMachines(world);
+        owner.setDirty();
+        return "onemorecore.level.bought";
+    }
+
+    private static BlockPos landing(ServerLevel world, Restaurant target) {
+        for (BlockPos pos : BlockPos.betweenClosed(target.sign.offset(-1, 0, -1), target.sign.offset(1, 1, 1)))
+            if (!pos.equals(target.sign) && freeLanding(world, pos)) return pos.immutable();
+        BoundingBox box = target.area;
+        for (BlockPos pos : BlockPos.betweenClosed(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()))
+            if (freeLanding(world, pos)) return pos.immutable();
+        return null;
+    }
+
+    private static boolean freeLanding(ServerLevel world, BlockPos pos) {
+        return world.isLoaded(pos) && world.isLoaded(pos.above()) && world.isLoaded(pos.below())
+                && world.getWorldBorder().isWithinBounds(pos) && !world.isOutsideBuildHeight(pos.above())
+                && world.getBlockState(pos).getCollisionShape(world, pos).isEmpty()
+                && world.getBlockState(pos.above()).getCollisionShape(world, pos.above()).isEmpty()
+                && world.getFluidState(pos).isEmpty() && world.getFluidState(pos.above()).isEmpty()
+                && world.getBlockState(pos.below()).isFaceSturdy(world, pos.below(), Direction.UP);
+    }
+
     void setSpawn(BlockPos pos) { spawn = pos; owner.setDirty(); }
     void setDelivery(BlockPos pos) { delivery = pos; owner.setDirty(); }
 
@@ -784,7 +863,7 @@ public class Restaurant {
     }
 
     boolean hasProgress() {
-        return day > 1 || register > 0 || !unlockedIngredients.isEmpty() || !deliveries.isEmpty()
+        return level > 1 || !steps.isEmpty() || day > 1 || register > 0 || !unlockedIngredients.isEmpty() || !deliveries.isEmpty()
                 || !off.isEmpty() || !custom.isEmpty() || !kinds.isEmpty() || !dishPrices.isEmpty()
                 || !combos.isEmpty() || !upgrades.isEmpty() || !coins.isEmpty() || !servedBills.isEmpty() || !interruptedBills.isEmpty();
     }
@@ -794,15 +873,25 @@ public class Restaurant {
         Restaurant from = load(owner, progress);
         day = from.day;
         register = from.register;
+        level = from.level;
+        steps.clear();
+        steps.addAll(from.steps);
         unlockedIngredients.clear();
         unlockedIngredients.addAll(from.unlockedIngredients);
         ingredientAvailability = null;
+        off.clear();
         off.addAll(from.off);
+        custom.clear();
         custom.addAll(from.custom);
+        kinds.clear();
         kinds.putAll(from.kinds);
+        dishPrices.clear();
         dishPrices.putAll(from.dishPrices);
+        combos.clear();
         combos.addAll(from.combos);
+        upgrades.clear();
         upgrades.putAll(from.upgrades);
+        favourites.clear();
         favourites.addAll(from.favourites);
         deliveries.addAll(from.deliveries);
         owner.setDirty();
@@ -1571,6 +1660,17 @@ public class Restaurant {
         tag.putLong("sign", sign.asLong());
         if (area != null) tag.putIntArray("area", new int[] {area.minX(), area.minY(), area.minZ(), area.maxX(), area.maxY(), area.maxZ()});
         if (spawn != null) tag.putLong("spawn", spawn.asLong());
+        tag.putInt("level", level);
+        ListTag levelSteps = new ListTag();
+        for (Step step : steps.stream().limit(64).toList()) {
+            CompoundTag entry = new CompoundTag();
+            entry.putInt("price", step.price());
+            if (step.area() != null) entry.putIntArray("area", boxArray(step.area()));
+            if (step.wall() != null) entry.putIntArray("wall", boxArray(step.wall()));
+            if (step.moveTo() != null) entry.putLong("moveTo", step.moveTo().asLong());
+            levelSteps.add(entry);
+        }
+        tag.put("steps", levelSteps);
         tag.putInt("day", day);
         tag.putInt("register", register);
         ListTag list = new ListTag();
@@ -1675,11 +1775,29 @@ public class Restaurant {
         list.add(tag);
     }
 
+    private static int[] boxArray(BoundingBox box) {
+        return new int[] {box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()};
+    }
+
+    private static BoundingBox readBox(int[] values) {
+        if (values.length != 6) return null;
+        BoundingBox box = BoundingBox.fromCorners(new BlockPos(values[0], values[1], values[2]), new BlockPos(values[3], values[4], values[5]));
+        return Restaurants.validBox(box) ? box : null;
+    }
+
     static Restaurant load(Restaurants owner, CompoundTag tag) {
         Restaurant r = new Restaurant(owner, BlockPos.of(tag.getLong("sign")));
         int[] a = tag.getIntArray("area");
         if (a.length == 6) r.area = new BoundingBox(a[0], a[1], a[2], a[3], a[4], a[5]);
         if (tag.contains("spawn")) r.spawn = BlockPos.of(tag.getLong("spawn"));
+        for (Tag t : tag.getList("steps", Tag.TAG_COMPOUND)) {
+            if (r.steps.size() == 64) break;
+            CompoundTag entry = (CompoundTag) t;
+            r.steps.add(new Step((int) Math.max(0, Math.min(Integer.MAX_VALUE, entry.getLong("price"))),
+                    readBox(entry.getIntArray("area")), readBox(entry.getIntArray("wall")),
+                    entry.contains("moveTo", Tag.TAG_LONG) ? BlockPos.of(entry.getLong("moveTo")) : null));
+        }
+        r.level = Math.max(1, Math.min(r.steps.size() + 1, tag.getInt("level")));
         r.day = Math.max(1, tag.getInt("day"));
         r.register = Math.max(0, tag.getInt("register"));
         for (Tag t : tag.getList("unlockedIngredients", Tag.TAG_STRING)) {

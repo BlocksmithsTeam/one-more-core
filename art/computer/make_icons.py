@@ -103,6 +103,26 @@ BROADCAST = [
     "..##..............##..",
 ]
 
+# Levels: three bars that climb.
+LEVELS = [
+    "................######",
+    "................######",
+    "................######",
+    "................######",
+    "................######",
+    "........######..######",
+    "........######..######",
+    "........######..######",
+    "........######..######",
+    "........######..######",
+    "######..######..######",
+    "######..######..######",
+    "######..######..######",
+    "######..######..######",
+    "######..######..######",
+    "######..######..######",
+]
+
 # name: (tile colour, glyph)
 ICONS = {
     "menu": (0xD85A30, CLOCHE),
@@ -110,6 +130,7 @@ ICONS = {
     "upgrades": (0xBA7517, UPGRADES),
     "manager": (0x5F5E5A, SHOP_FRONT),
     "stream": (0x7F77DD, BROADCAST),
+    "levels": (0x378ADD, LEVELS),
 }
 
 # The radius of the tile's rounded corners; ComputerScreen cuts its hover outline and dim overlay the same way.

@@ -40,11 +40,12 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * power-on line, boot text, the logo with a loading bar; a click or a key skips it), and Escape on the desktop turns the
  * picture off like a CRT (a line, then a dot) before the camera flies back.
  * Menu: searchable dishes, combos and recipe ingredients. Shop: a searchable catalog. Manager: what is set, and the free
- * camera that sets it.
+ * camera that sets it. Levels: buy the next level; an editor also sets each level's price, area, wall and new place.
  */
 public class ComputerScreen extends Screen {
-    private static final int[] APPS = {Computer.APP_MENU, Computer.APP_SHOP, Computer.APP_MANAGER, Computer.APP_UPGRADES, Computer.APP_STREAM};
-    private static final String[] KEYS = {"menu", "shop", "manager", "upgrades", "stream"};
+    private static final int[] APPS = {Computer.APP_MENU, Computer.APP_SHOP, Computer.APP_MANAGER, Computer.APP_UPGRADES, Computer.APP_STREAM,
+            Computer.APP_LEVELS};
+    private static final String[] KEYS = {"menu", "shop", "manager", "upgrades", "stream", "levels"};
     private static final String[] PLATFORMS = {"none", "twitch", "kick", "youtube"};
     private static final int[] PLATFORM_COLORS = {0xFF5A6270, 0xFF9146FF, 0xFF53FC18, 0xFFFF0033};
     /**
@@ -111,6 +112,10 @@ public class ComputerScreen extends Screen {
     /** The Stream app: the channel and the chat command, and the platform picked (null: as the server has it). */
     private EditBox channel, command;
     private String platform;
+    /** The Levels app: the price field, and the step (0-based) whose price it edits, or -1. */
+    private EditBox priceBox;
+    private int priceStep = -1;
+    private static final int LEVEL_CARD = 47;
     /** Every food and drink item of the game, for the picker. */
     private List<ItemStack> foods;
     /** The boot: true until it ends or is skipped; its start on the client clock (-1 before the first frame). */
@@ -156,6 +161,15 @@ public class ComputerScreen extends Screen {
     void update(Computer.State s) {
         state = s;
         hits.clear();
+        // The open app was turned off (config): back to the desktop.
+        if (app != 0 && (s.apps() & app) == 0) {
+            app = 0;
+            adding = false;
+            building = null;
+            cartOpen = false;
+            priceStep = -1;
+            setFocused(null);
+        }
         s.ingredientData().ifPresent(this::updateIngredients);
         if (!s.message().getString().isEmpty()) {
             Component toast = s.message();
@@ -231,6 +245,7 @@ public class ComputerScreen extends Screen {
         scroll = 0;
         if (search != null) search.setValue("");
         platform = null;
+        priceStep = -1;
         send(switch (which) {
             case Computer.APP_MANAGER -> Computer.REFRESH_MANAGER;
             case Computer.APP_MENU -> Computer.REFRESH_MENU;
@@ -271,6 +286,13 @@ public class ComputerScreen extends Screen {
         addWidget(search);
         channel = streamBox(channel, 64);
         command = streamBox(command, 16);
+        String oldPrice = priceBox == null ? "" : priceBox.getValue();
+        priceBox = new EditBox(font, 0, 0, 40, 10, Component.empty());
+        priceBox.setBordered(false);
+        priceBox.setMaxLength(9);
+        priceBox.setFilter(v -> v.chars().allMatch(c -> c >= '0' && c <= '9'));
+        priceBox.setValue(oldPrice);
+        priceBox.setTextColor(TEXT);
     }
 
     private boolean hasSearch() {
@@ -631,7 +653,8 @@ public class ComputerScreen extends Screen {
     }
 
     private static int index(int app) {
-        return app == Computer.APP_MENU ? 0 : app == Computer.APP_SHOP ? 1 : app == Computer.APP_MANAGER ? 2 : app == Computer.APP_UPGRADES ? 3 : 4;
+        for (int i = 0; i < APPS.length; i++) if (APPS[i] == app) return i;
+        return 0;
     }
 
     /** A rectangle with its corners cut by one pixel. */
@@ -729,6 +752,7 @@ public class ComputerScreen extends Screen {
             case Computer.APP_SHOP -> drawShop(g, mouseX, mouseY);
             case Computer.APP_UPGRADES -> { drawUpgrades(g, mouseX, mouseY); yield ItemStack.EMPTY; }
             case Computer.APP_STREAM -> { drawStream(g, mouseX, mouseY, partialTick); yield ItemStack.EMPTY; }
+            case Computer.APP_LEVELS -> { drawLevels(g, mouseX, mouseY, partialTick); yield ItemStack.EMPTY; }
             default -> { drawManager(g, mouseX, mouseY); yield ItemStack.EMPTY; }
         };
         g.disableScissor();
@@ -1024,6 +1048,7 @@ public class ComputerScreen extends Screen {
     /** Closes the picker or the combo maker first, then the window. */
     private void back() {
         hits.clear();
+        priceStep = -1;
         if (adding) adding = false;
         else if (building != null) building = null;
         else app = 0;
@@ -1524,12 +1549,149 @@ public class ComputerScreen extends Screen {
         button(g, cx, y, cw, 20, text("edit_places"), AMBER, AMBER_HOVER, pendingCheckout == 0, mouseX, mouseY, ComputerCamera::startFree);
     }
 
+    /** True while the restaurant of this computer runs a day, from the status the HUD receives. */
+    private boolean dayRunning() {
+        if (state.sign().isEmpty()) return false;
+        BlockPos sign = state.sign().get();
+        Status.Received near = Status.near(sign, false);
+        if (near != null && sign.equals(near.status().sign())) return near.status().open();
+        Status last = Status.client;
+        return last != null && sign.equals(last.sign()) && last.open();
+    }
+
+    /**
+     * The Levels app. Top: the level, and the button that buys the next one, or why it cannot. An editor also sees every
+     * step: its price (a field), its new area, the wall it removes and the sign it moves to, each set in the free camera.
+     * Bought steps only show what they did.
+     */
+    private void drawLevels(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        List<Computer.LevelLine> steps = state.levels();
+        int level = Math.max(1, state.level());
+        boolean editor = state.levelEditor();
+        if (priceStep >= 0 && (!editor || priceStep >= steps.size() || priceStep < level - 1)) priceStep = -1;
+        int contentHeight = 30 + (editor ? 18 + steps.size() * (LEVEL_CARD + 4) + ROW : 0);
+        scroll = Mth.clamp(scroll, 0, Math.max(0, contentHeight - ch));
+        int y = cy - (int) scroll;
+        rounded(g, cx, y, cw, 30, CARD);
+        g.drawString(font, text("levels.level", level), cx + 6, y + 5, TEXT, false);
+        Computer.LevelLine next = level - 1 < steps.size() ? steps.get(level - 1) : null;
+        Component note = text("levels.last");
+        int noteColor = DIM, noteWidth = cw - 12;
+        if (next != null) {
+            boolean busy = dayRunning(), poor = state.balance() < next.price();
+            note = busy ? text("levels.busy") : poor ? text("levels.needs_more", next.price() - state.balance()) : text("levels.next", level + 1);
+            if (busy || poor) noteColor = RED;
+            Component buy = text("buy_cost", next.price());
+            int bw = font.width(buy) + 10;
+            button(g, cx + cw - 6 - bw, y + 8, bw, 14, buy, AMBER, AMBER_HOVER, !busy && !poor, mouseX, mouseY, () -> send(Computer.LEVEL_BUY, ""));
+            noteWidth -= bw + 6;
+        }
+        g.drawString(font, ellipsize(note, noteWidth), cx + 6, y + 17, noteColor, false);
+        if (!editor) return;
+        y += 34;
+        g.drawString(font, text("levels.steps"), cx + 2, y + 2, DIM, false);
+        y += 14;
+        for (int i = 0; i < steps.size(); i++) {
+            if (y + LEVEL_CARD > cy && y < cy + ch) levelCard(g, i, steps.get(i), i < level - 1, y, mouseX, mouseY, partialTick);
+            y += LEVEL_CARD + 4;
+        }
+        // The last row adds a step, like the menu's last row adds a dish. The server sends at most 64.
+        if (steps.size() < 64 && y + ROW > cy && y < cy + ch) {
+            boolean over = inside(mouseX, mouseY, cx, y, cw, ROW);
+            rounded(g, cx, y, cw, ROW, over ? HOVER : CARD_DIM);
+            g.blitSprite(sprite("add"), cx + 5, y + 5, 12, 12);
+            g.drawString(font, text("levels.add"), cx + 24, y + 7, over ? TEXT : DIM, false);
+            clipHit(cx, y, cw, ROW, () -> send(Computer.LEVEL_ADD, ""));
+        }
+    }
+
+    /**
+     * One step: "Level N", its price field and Remove; under them three columns (area, wall, move) with a colour mark, a
+     * check or a cross, and the buttons Set (the free camera) and a cross that clears it.
+     */
+    private void levelCard(GuiGraphics g, int i, Computer.LevelLine step, boolean bought, int y, int mouseX, int mouseY, float partialTick) {
+        rounded(g, cx, y, cw, LEVEL_CARD, bought ? CARD_DIM : CARD);
+        g.drawString(font, text("levels.level", i + 2), cx + 6, y + 5, bought ? GREY : TEXT, false);
+        int right = cx + cw - 5;
+        if (bought) {
+            Component done = text("levels.bought");
+            g.drawString(font, done, right - font.width(done), y + 5, DIM, false);
+            right -= font.width(done) + 6;
+        } else {
+            Component remove = text("levels.remove");
+            int rw = font.width(remove) + 10;
+            button(g, right - rw, y + 3, rw, 12, remove, TRACK, HOVER, true, mouseX, mouseY, () -> send(Computer.LEVEL_REMOVE, String.valueOf(i)));
+            right -= rw + 6;
+        }
+        int fw = 46, fx = right - fw;
+        drawItem(g, state.currency(), fx - 12, y + 4, 10);
+        if (priceStep == i) {
+            rounded(g, fx, y + 3, fw, 12, FIELD_FOCUS);
+            g.fill(fx + 1, y + 14, fx + fw - 1, y + 15, AMBER);
+            priceBox.setX(fx + 4);
+            priceBox.setY(y + 5);
+            priceBox.setWidth(fw - 8);
+            priceBox.render(g, mouseX, mouseY, partialTick);
+        } else {
+            if (!bought) rounded(g, fx, y + 3, fw, 12, inside(mouseX, mouseY, fx, y + 3, fw, 12) ? HOVER : FIELD);
+            g.drawString(font, String.valueOf(step.price()), fx + 4, y + 5, bought ? GREY : AMBER, false);
+            if (!bought) clipHit(fx, y + 3, fw, 12, () -> editPrice(i, step.price()));
+        }
+        String[] keys = {"area", "wall", "move"};
+        boolean[] set = {step.area().size() == 6, step.wall().size() == 6, step.moveTo().isPresent()};
+        int[] actions = {Computer.LEVEL_AREA, Computer.LEVEL_WALL, Computer.LEVEL_MOVE};
+        ComputerCamera.Tool[] tools = {ComputerCamera.Tool.LEVEL_AREA, ComputerCamera.Tool.LEVEL_WALL, ComputerCamera.Tool.LEVEL_MOVE};
+        int column = (cw - 12) / 3;
+        for (int k = 0; k < 3; k++) {
+            int x = cx + 6 + k * column, ly = y + 19;
+            g.fill(x, ly + 1, x + 6, ly + 7, 0xFF000000 | ComputerCamera.levelColor(tools[k]));
+            // A set target shows where it is.
+            Component label = k == 2 && set[2] ? Component.literal(step.moveTo().get().toShortString()) : text("levels." + keys[k]);
+            String shown = ellipsize(label, column - 24);
+            g.drawString(font, shown, x + 10, ly, bought ? GREY : TEXT, false);
+            g.blitSprite(sprite(set[k] ? "check" : "cross"), x + 12 + font.width(shown), ly, 8, 8);
+            if (bought) continue;
+            int action = actions[k];
+            ComputerCamera.Tool tool = tools[k];
+            Component setLabel = text("levels.set");
+            int sw = font.width(setLabel) + 10;
+            button(g, x, y + 31, sw, 12, setLabel, TRACK, HOVER, pendingCheckout == 0, mouseX, mouseY, () -> ComputerCamera.startLevel(tool, i));
+            if (set[k]) button(g, x + sw + 3, y + 32, 10, 10, Component.literal("\u00d7"), CLOSE, RED, true, mouseX, mouseY,
+                    () -> send(action, i + "\n"));
+        }
+    }
+
+    private void editPrice(int step, int price) {
+        priceStep = step;
+        priceBox.setValue(String.valueOf(price));
+        priceBox.setFocused(true);
+        setFocused(priceBox);
+    }
+
+    /** Sends the typed price (an empty field changes nothing) and closes the field. */
+    private void commitPrice() {
+        String value = priceBox.getValue();
+        if (priceStep >= 0 && !value.isEmpty()) send(Computer.LEVEL_PRICE, priceStep + "\n" + value);
+        cancelPrice();
+    }
+
+    private void cancelPrice() {
+        priceStep = -1;
+        priceBox.setFocused(false);
+        setFocused(null);
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (shutdownStart >= 0) return true;
         if (booting) {
             skipBoot();
             return true;
+        }
+        // A click in the price field moves its cursor; a click anywhere else saves the price first.
+        if (priceStep >= 0) {
+            if (priceBox.isMouseOver(mouseX, mouseY)) return priceBox.mouseClicked(mouseX, mouseY, button);
+            commitPrice();
         }
         if (button == 0) {
             for (Hit h : hits) {
@@ -1579,6 +1741,13 @@ public class ComputerScreen extends Screen {
             swallowChar = !waitForEscapeRelease;
             return true;
         }
+        // The price field: Enter saves, Escape cancels.
+        if (priceStep >= 0 && !waitForEscapeRelease) {
+            if (key == GLFW.GLFW_KEY_ESCAPE) cancelPrice();
+            else if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) commitPrice();
+            else priceBox.keyPressed(key, scanCode, modifiers);
+            return true;
+        }
         if (key == GLFW.GLFW_KEY_ESCAPE) {
             if (waitForEscapeRelease) return true;
             if (adding || building != null || app != 0) back();
@@ -1616,6 +1785,7 @@ public class ComputerScreen extends Screen {
             swallowChar = false;
             return true;
         }
+        if (priceStep >= 0) return priceBox.charTyped(c, modifiers);
         for (EditBox box : streamBoxes()) if (box.isFocused()) return box.charTyped(c, modifiers);
         if (hasSearch()) {
             if (!search.isFocused()) { search.setFocused(true); setFocused(search); }
