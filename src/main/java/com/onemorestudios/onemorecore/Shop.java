@@ -70,6 +70,7 @@ public class Shop {
     }
 
     private static Entry ingredientEntry(ResourceLocation item) {
+        if (Ingredients.current().unlockCost(item) < 0) return null;
         ItemStack stack = Ingredients.stack(item);
         if (stack.isEmpty()) return null;
         int count = Math.min(16, stack.getMaxStackSize());

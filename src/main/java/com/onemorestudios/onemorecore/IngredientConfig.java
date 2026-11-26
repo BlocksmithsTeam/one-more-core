@@ -20,24 +20,33 @@ import net.neoforged.fml.loading.FMLPaths;
 
 /** Ingredient overrides and prices from config/onemorecore/ingredients.json. */
 record IngredientConfig(Set<ResourceLocation> free, Set<ResourceLocation> ignore,
-        Map<ResourceLocation, List<Set<ResourceLocation>>> dishes, Map<ResourceLocation, Price> prices) {
+        Map<ResourceLocation, List<Set<ResourceLocation>>> dishes, Map<ResourceLocation, Price> prices,
+        Set<ResourceLocation> foodTags) {
     private static final int BASE = 4, PER_DISH = 2, MIN = 5, MAX = 40;
     private static final double VALUE_SHARE = 0.15;
     record Price(Integer unlock, Integer shop) {}
 
+    private static final List<String> FOOD_TAGS = List.of("c:foods", "c:crops", "c:eggs", "c:milks",
+            "c:drinks", "c:mushrooms", "c:flours", "c:flour", "c:dusts/salt");
+
     private static final String DEFAULT = """
             {
+              "food_tags": ["c:foods", "c:crops", "c:eggs", "c:milks", "c:drinks", "c:mushrooms", "c:flours", "c:flour", "c:dusts/salt"],
               "prices": {},
               "free": ["minecraft:bowl", "minecraft:glass_bottle", "minecraft:bucket", "minecraft:water_bucket",
                 "minecraft:stick", "#c:tools/knife", "#c:tools/knives", "#farmersdelight:tools/knives",
                 "#kaleidoscope_cookery:kitchen_knives"],
-              "ignore": [],
+              "ignore": ["minecraft:cactus", "minecraft:nether_wart", "minecraft:ominous_bottle",
+                "minecraft:chorus_fruit", "minecraft:turtle_egg"],
               "dishes": {}
             }
             """;
 
     static IngredientConfig load() {
-        Path path = FMLPaths.CONFIGDIR.get().resolve(OneMoreCore.MODID).resolve("ingredients.json");
+        return load(FMLPaths.CONFIGDIR.get().resolve(OneMoreCore.MODID).resolve("ingredients.json"));
+    }
+
+    private static IngredientConfig load(Path path) {
         try {
             if (Files.notExists(path)) {
                 Files.createDirectories(path.getParent());
@@ -83,6 +92,11 @@ record IngredientConfig(Set<ResourceLocation> free, Set<ResourceLocation> ignore
         readList(root.get("free"), name -> free.addAll(items(name)));
         readList(root.get("ignore"), name -> ignore.addAll(items(name)));
 
+        Set<ResourceLocation> foodTags = new LinkedHashSet<>();
+        if (root.has("food_tags")) readList(root.get("food_tags"), name ->
+                foodTags.add(ResourceLocation.parse(name.startsWith("#") ? name.substring(1) : name)));
+        else FOOD_TAGS.stream().map(ResourceLocation::parse).forEach(foodTags::add);
+
         Map<ResourceLocation, Price> prices = new HashMap<>();
         JsonObject rules = object(root, "prices");
         // Apply tag prices first so exact item overrides win.
@@ -117,7 +131,7 @@ record IngredientConfig(Set<ResourceLocation> free, Set<ResourceLocation> ignore
                 OneMoreCore.LOGGER.warn("Skipped invalid dish ingredient override {}: {}", entry.getKey(), e.getMessage());
             }
         });
-        return new IngredientConfig(Set.copyOf(free), Set.copyOf(ignore), Map.copyOf(dishes), Map.copyOf(prices));
+        return new IngredientConfig(Set.copyOf(free), Set.copyOf(ignore), Map.copyOf(dishes), Map.copyOf(prices), Set.copyOf(foodTags));
     }
 
     int unlockCost(ResourceLocation id, int dishes, long totalWorth) {

@@ -18,6 +18,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
@@ -30,13 +31,17 @@ final class Ingredients {
     record Recipe(List<Set<ResourceLocation>> slots, Set<ResourceLocation> machines) {}
 
     private static final int DEPTH = 3;
+    // Keep core ingredients whose harmful effects are unlikely, such as raw chicken.
+    private static final float HARMFUL_EFFECT_PROBABILITY = 0.5f;
     private static Ingredients current = new Ingredients(List.of(), IngredientConfig.parse("{}"), List.of(), null);
 
     private final IngredientConfig config;
+    private final Set<ResourceLocation> foodDependencies = new HashSet<>();
     private final Map<ResourceLocation, List<Recipe>> recipes = new HashMap<>();
     private final Map<ResourceLocation, Set<ResourceLocation>> dishesByIngredient = new HashMap<>();
     private final Map<ResourceLocation, Integer> unlockCosts = new HashMap<>();
     private final Map<ResourceLocation, Integer> dishWorth = new HashMap<>();
+    private final Map<ResourceLocation, Set<ResourceLocation>> portions = new HashMap<>();
     private final Map<ResourceLocation, Set<ResourceLocation>> recyclingInputs = new HashMap<>();
     final List<ResourceLocation> raw;
     final List<Menu.Entry> automatic;
@@ -79,6 +84,10 @@ final class Ingredients {
                 slots.addAll(hidden(recipe, registries, slots, id));
                 var machines = Machines.forType(Machines.kind(recipe));
                 if (addRecipe(alternatives, slots, machines)) this.machines.addAll(machines);
+                String type = Machines.kind(recipe).getPath();
+                if (result != null && result.has(DataComponents.FOOD) && slots.size() == 1
+                        && (type.contains("cutting") || type.contains("chopping") || type.contains("slicing")))
+                    portions.computeIfAbsent(id, key -> new TreeSet<>()).addAll(slots.getFirst());
             } catch (RuntimeException e) {
                 skipped++;
                 OneMoreCore.LOGGER.debug("Recipe {} does not expose its result or ingredients", holder.id(), e);
@@ -102,6 +111,41 @@ final class Ingredients {
         }
         automatic = List.copyOf(discovered);
 
+        portions.forEach((portion, parents) -> {
+            if (config.dishes().containsKey(portion)) parents.clear();
+            parents.removeIf(parent -> !dishWorth.containsKey(parent) || !recipes.containsKey(parent) || parent.equals(portion));
+            if (!parents.isEmpty())
+                recipes.put(portion, List.of(new Recipe(List.of(Set.copyOf(parents)), Set.of())));
+        });
+        portions.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        // Unpacking storage or processing only non-food must not make its food result free.
+        recipes.entrySet().removeIf(entry -> {
+            if ((!food(entry.getKey()) && !dishWorth.containsKey(entry.getKey())) || entry.getValue().isEmpty()) return false;
+            var usable = entry.getValue().stream().filter(recipe -> recipe.slots().stream().anyMatch(slot ->
+                    slot.stream().anyMatch(item -> config.free().contains(item) || (!excluded(stack(item))
+                            && (food(item) || isFluidKey(item) || dishWorth.containsKey(item) || recipes.containsKey(item)))))).toList();
+            entry.setValue(usable);
+            return usable.isEmpty();
+        });
+
+        recipes.forEach((result, alternatives) -> {
+            foodDependencies.add(result);
+            alternatives.forEach(recipe -> recipe.slots().forEach(foodDependencies::addAll));
+        });
+        foodDependencies.removeIf(item -> !food(item) && !isFluidKey(item)
+                && !(dishWorth.containsKey(item) && !excluded(stack(item))));
+        recipes.forEach((result, alternatives) -> {
+            if (alternatives.isEmpty()) foodDependencies.add(result);
+        });
+        int count;
+        do {
+            count = foodDependencies.size();
+            recipes.forEach((result, alternatives) -> {
+                if (alternatives.stream().anyMatch(recipe -> recipe.slots().stream()
+                        .anyMatch(slot -> slot.stream().anyMatch(foodDependencies::contains)))) foodDependencies.add(result);
+            });
+        } while (count != foodDependencies.size());
+
         Set<ResourceLocation> rawIds = new TreeSet<>();
         int withIngredients = 0;
         int unreadable = 0;
@@ -117,7 +161,7 @@ final class Ingredients {
                         if (config.free().contains(item) || config.ignore().contains(item)) continue;
                         Set<ResourceLocation> sources = sources(item, DEPTH, new HashSet<>());
                         if (sources == null) {
-                            if (!isFluidKey(item)) rawIds.add(item);
+                            if (food(item) && !portions.containsKey(item)) rawIds.add(item);
                         }
                         else rawIds.addAll(sources);
                         indexDependencies(item, dish, DEPTH, seen);
@@ -125,11 +169,34 @@ final class Ingredients {
                 }
             }
         }
+        rawIds.removeIf(item -> !food(item) || config.free().contains(item) || config.ignore().contains(item));
         raw = List.copyOf(rawIds);
         raw.forEach(id -> unlockCosts.put(id, automaticCost(id)));
         if (registries != null) OneMoreCore.LOGGER.info(
                 "Ingredient index: {} dishes with readable recipes, {} locked without a readable recipe, {} without a recipe; {} recipes could not be read",
                 withIngredients, unreadable, dishWorth.size() - withIngredients - unreadable, skipped);
+    }
+
+    private static boolean excluded(ItemStack stack) {
+        return stack.getTags().map(tag -> tag.location()).anyMatch(tag -> (tag.getNamespace().equals("c")
+                && (tag.getPath().equals("storage_blocks") || tag.getPath().startsWith("storage_blocks/")))
+                || tag.getPath().equals("wild_crops") || tag.getPath().startsWith("wild_crops/"));
+    }
+
+    private boolean food(ResourceLocation id) {
+        ItemStack stack = stack(id);
+        var food = stack.get(DataComponents.FOOD);
+        if (food != null && food.effects().stream().anyMatch(effect -> effect.probability() >= HARMFUL_EFFECT_PROBABILITY
+                && effect.effect().getEffect().value().getCategory() == MobEffectCategory.HARMFUL)) return false;
+        return !stack.isEmpty() && !excluded(stack) && (food != null
+                || stack.getTags().map(tag -> tag.location()).anyMatch(tag -> config.foodTags().contains(tag)
+                        && !(tag.getNamespace().equals("c")
+                            && (tag.getPath().equals("seeds") || tag.getPath().startsWith("seeds/")))));
+    }
+
+    private boolean free(ResourceLocation item) {
+        return config.free().contains(item) || (!config.ignore().contains(item) && !isFluidKey(item)
+                && !food(item) && !dishWorth.containsKey(item) && !foodDependencies.contains(item));
     }
 
     // An empty recipe list marks a known result with no usable alternative. An absent result has no indexed recipe.
@@ -275,10 +342,15 @@ final class Ingredients {
         if (seen.getOrDefault(item, -1) >= depth) return;
         seen.put(item, depth);
         dishesByIngredient.computeIfAbsent(item, key -> new HashSet<>()).add(dish);
-        if (depth == 0 || config.free().contains(item) || config.ignore().contains(item)) return;
+        if (config.free().contains(item) || config.ignore().contains(item)) return;
+        if (portions.containsKey(item)) {
+            for (var parent : portions.get(item)) indexDependencies(parent, dish, DEPTH, seen);
+            return;
+        }
+        if (depth == 0 && (food(item) || isFluidKey(item))) return;
         for (var recipe : recipes.getOrDefault(item, List.of())) {
             for (var slot : recipe.slots()) {
-                for (ResourceLocation input : slot) indexDependencies(input, dish, depth - 1, seen);
+                for (ResourceLocation input : slot) indexDependencies(input, dish, Math.max(0, depth - 1), seen);
             }
         }
     }
@@ -301,11 +373,24 @@ final class Ingredients {
 
     /** Null means no path to a source. An empty set means the item can be made for free. */
     private Set<ResourceLocation> sources(ResourceLocation item, int depth, Set<ResourceLocation> path) {
-        if (config.free().contains(item)) return Set.of();
+        if (free(item)) return Set.of();
         if (config.ignore().contains(item) || path.contains(item)) return null;
+        if (portions.containsKey(item)) {
+            path.add(item);
+            Set<ResourceLocation> result = new TreeSet<>();
+            boolean possible = false;
+            for (var parent : portions.get(item)) {
+                var inputs = sources(parent, DEPTH, path);
+                if (inputs == null) continue;
+                possible = true;
+                result.addAll(inputs);
+            }
+            path.remove(item);
+            return possible ? result : null;
+        }
         var alternatives = recipes.get(item);
         if ((depth == 0 || alternatives == null) && isFluidKey(item)) return null;
-        if (depth == 0 || alternatives == null) return Set.of(item);
+        if ((depth == 0 && food(item)) || alternatives == null) return food(item) ? Set.of(item) : Set.of();
         path.add(item);
         Set<ResourceLocation> result = null;
         boolean onlyRecycling = !alternatives.isEmpty();
@@ -318,7 +403,7 @@ final class Ingredients {
                 for (ResourceLocation candidate : slot) {
                     if (recycles(candidate, item)) continue;
                     onlySkippedRecycling = false;
-                    Set<ResourceLocation> sources = sources(candidate, depth - 1, path);
+                    Set<ResourceLocation> sources = sources(candidate, Math.max(0, depth - 1), path);
                     if (sources == null) continue;
                     satisfied = true;
                     inputs.addAll(sources);
@@ -407,13 +492,21 @@ final class Ingredients {
         boolean item(ResourceLocation id) { return item(id, DEPTH); }
 
         private boolean item(ResourceLocation item, int depth) {
-            if (config.free().contains(item) || unlocked.contains(item)) return true;
-            if (depth == 0 || config.ignore().contains(item)) return false;
+            if (free(item) || unlocked.contains(item)) return true;
+            if (config.ignore().contains(item)) return false;
             AtDepth key = new AtDepth(item, depth);
             Boolean known = available.get(key);
             if (known != null) return known;
-            // Each edge consumes a level, so a cycle can only succeed if it reaches an unlocked or free item.
-            boolean result = recipes.getOrDefault(item, List.of()).stream().anyMatch(recipe -> satisfied(recipe, depth - 1));
+            available.put(key, false);
+            if (portions.containsKey(item)) {
+                boolean result = portions.get(item).stream().anyMatch(parent -> free(parent) || unlocked.contains(parent)
+                        || (!config.ignore().contains(parent) && dish(parent)));
+                available.put(key, result);
+                return result;
+            }
+            if (depth == 0 && (food(item) || isFluidKey(item))) return false;
+            // The in-progress entry stops cycles when a non-food intermediate keeps the same depth.
+            boolean result = recipes.getOrDefault(item, List.of()).stream().anyMatch(recipe -> satisfied(recipe, Math.max(0, depth - 1)));
             available.put(key, result);
             return result;
         }
@@ -431,6 +524,7 @@ final class Ingredients {
         private Set<ResourceLocation> missing(ResourceLocation id, int depth, Set<ResourceLocation> path) {
             if (!path.add(id)) return null;
             Set<ResourceLocation> best = null;
+            int nextDepth = portions.containsKey(id) ? DEPTH : depth - 1;
             for (var recipe : recipes.getOrDefault(id, List.of())) {
                 Set<ResourceLocation> requirements = new LinkedHashSet<>();
                 // A missing machine shows as its item, before the ingredients.
@@ -441,9 +535,11 @@ final class Ingredients {
                 for (var slot : recipe.slots()) {
                     Set<ResourceLocation> fewest = null;
                     for (ResourceLocation candidate : slot) {
+                        int candidateDepth = portions.containsKey(candidate) ? DEPTH
+                                : !food(candidate) && !isFluidKey(candidate) ? Math.max(0, nextDepth) : nextDepth;
                         Set<ResourceLocation> needed = item(candidate, depth) ? Set.of()
                                 : unlockCosts.containsKey(candidate) ? Set.of(candidate)
-                                : depth > 0 && !config.ignore().contains(candidate) ? missing(candidate, depth - 1, path) : null;
+                                : candidateDepth >= 0 && !config.ignore().contains(candidate) ? missing(candidate, candidateDepth, path) : null;
                         if (needed != null && (fewest == null || needed.size() < fewest.size())) fewest = needed;
                     }
                     if (fewest == null) {

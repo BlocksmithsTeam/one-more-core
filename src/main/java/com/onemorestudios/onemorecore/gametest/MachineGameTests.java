@@ -40,7 +40,7 @@ public final class MachineGameTests {
         setArea.setAccessible(true);
         setArea.invoke(restaurant, BoundingBox.fromCorners(helper.absolutePos(BlockPos.ZERO), helper.absolutePos(new BlockPos(4, 3, 4))));
         GameTestSupport.setRegister(restaurant, 100);
-        GameTestSupport.unlock(helper, restaurant, "beef");
+        GameTestSupport.unlock(helper, restaurant, "beef", "wheat");
         var beef = restaurant.dish("cooked_beef");
         helper.assertTrue(beef != null, "Cooked beef is a dish");
         boolean before = Config.REQUIRE_MACHINES.get();
@@ -51,6 +51,7 @@ public final class MachineGameTests {
             Config.REQUIRE_MACHINES.set(true);
             restaurant.refreshMachines(helper.getLevel());
             helper.assertFalse(restaurant.orderable(beef), "No furnace, smoker or campfire: no cooked beef");
+            helper.assertTrue(restaurant.orderable(restaurant.dish("bread")), "Crafting needs no block in the area");
 
             helper.setBlock(MACHINE, Blocks.SMOKER);
             restaurant.refreshMachines(helper.getLevel());
@@ -80,6 +81,10 @@ public final class MachineGameTests {
         helper.assertValueEqual(merged, Map.of(id("smelting"), Set.of(id("furnace")),
                 id("smoking"), Set.of(id("smoker")), ResourceLocation.fromNamespaceAndPath("nomod", "no_type"), Set.of(id("stone"))),
                 "JEI adds only types the list lacks (also types that are not registered); unknown blocks are left out");
+        helper.assertValueEqual(Machines.forType(id("crafting")), Set.of(), "Crafting needs no machine");
+        helper.assertValueEqual(Machines.merge(Machines.parse("{\"minecraft:crafting\":[]}"),
+                Map.of(id("crafting"), List.of(id("crafter"), id("crafting_table")))),
+                Map.of(id("crafting"), Set.of()), "JEI preserves an explicitly empty machine list");
         helper.assertFalse(Machines.forType(ResourceLocation.parse("youkaisfeasts:kettle")).contains(ResourceLocation.parse("farmersdelight:stove")),
                 "A stove is no kettle");
         helper.assertValueEqual(Machines.forType(id("smoker")), Set.of(id("smoker")), "A type named like a block uses that block");
