@@ -3,12 +3,12 @@
     "position": [
       8,
       27,
-      -28
+      -31
     ],
     "target": [
       8,
       2,
-      0
+      -3
     ],
     "fov": 36,
     "neighbors": {
@@ -52,42 +52,42 @@
     {
       "id": "bills",
       "pos": [
-        5.25,
-        0.6,
-        -0.5
+        8,
+        0.5,
+        -5.5
       ],
       "tooltip": "onemorecore.register.take_banknote",
       "collider": {
         "from": [
-          -2.6,
+          -6,
           0,
-          -4.3
+          -3
         ],
         "to": [
-          2.6,
+          6,
           5,
-          4.3
+          3
         ]
       }
     },
     {
       "id": "coins",
       "pos": [
-        11,
-        0.6,
-        -0.5
+        8,
+        0.5,
+        0
       ],
       "tooltip": "onemorecore.register.take_coin",
       "collider": {
         "from": [
-          -1.5,
+          -6,
           0,
-          -5
+          -2
         ],
         "to": [
-          1.5,
+          6,
           5,
-          5
+          2
         ]
       }
     }

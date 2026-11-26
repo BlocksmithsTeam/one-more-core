@@ -18,15 +18,13 @@ final class RegisterBehavior implements StationBehavior {
         view.node("bills").ifPresent(node -> node.setPainter((pose, buffers, light) -> {
             pose.pushPose();
             pose.scale(16, 16, 16);
-            pose.mulPose(com.mojang.math.Axis.YP.rotationDegrees(90));
-            MoneyRenderer.banknotes(pose, buffers, light, view.state().data().getInt("bills"));
+            MoneyRenderer.drawerBanknotes(pose, buffers, light, view.state().data().getInt("bills"));
             pose.popPose();
         }));
         view.node("coins").ifPresent(node -> node.setPainter((pose, buffers, light) -> {
             pose.pushPose();
             pose.scale(16, 16, 16);
-            pose.mulPose(com.mojang.math.Axis.YP.rotationDegrees(90));
-            MoneyRenderer.coins(pose, buffers, light, view.state().data().getInt("coins"));
+            MoneyRenderer.drawerCoins(pose, buffers, light, view.state().data().getInt("coins"));
             pose.popPose();
         }));
     }

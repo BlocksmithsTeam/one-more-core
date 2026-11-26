@@ -57,9 +57,9 @@ class DirtRenderer {
             pose.translate(pos.getX() - cam.x, pos.getY() + Dirt.top(mc.level, pos) + 0.004 - cam.y, pos.getZ() - cam.z);
             var split = com.onemorestudios.onemorecore.Money.split(t.coins());
             // The world also draws these pieces in the wiping close-up; its node is only a click target.
-            pose.translate(9.5 / 16, 0, 8.0 / 16);
+            pose.translate(8.0 / 16, 0, 4.0 / 16);
             MoneyRenderer.banknotes(pose, buffers, light, split.bills());
-            pose.translate(1.5 / 16, 0, 5.5 / 16);
+            pose.translate(0, 0, 7.5 / 16);
             MoneyRenderer.coins(pose, buffers, light, split.coins());
             pose.popPose();
         });
