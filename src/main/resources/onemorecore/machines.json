@@ -88,10 +88,7 @@
     "refurbished_furniture:red_grill",
     "refurbished_furniture:black_grill"
   ],
-  "minecraft:crafting": [
-    "minecraft:crafting_table",
-    "minecraft:crafter"
-  ],
+  "minecraft:crafting": [],
   "minecraft:smelting": [
     "minecraft:furnace"
   ],
