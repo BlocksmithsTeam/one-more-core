@@ -37,6 +37,7 @@ final class Ingredients {
     private final Map<ResourceLocation, Set<ResourceLocation>> dishesByIngredient = new HashMap<>();
     private final Map<ResourceLocation, Integer> unlockCosts = new HashMap<>();
     private final Map<ResourceLocation, Integer> dishWorth = new HashMap<>();
+    private final Map<ResourceLocation, Set<ResourceLocation>> recyclingInputs = new HashMap<>();
     final List<ResourceLocation> raw;
     final List<Menu.Entry> automatic;
     /** Every machine block a recipe can need: what a restaurant looks for in its area. */
@@ -282,6 +283,22 @@ final class Ingredients {
         }
     }
 
+    private boolean recycles(ResourceLocation candidate, ResourceLocation item) {
+        return recyclingInputs.computeIfAbsent(candidate, key -> {
+            Set<ResourceLocation> direct = new HashSet<>();
+            for (var recipe : recipes.getOrDefault(key, List.of())) {
+                for (var slot : recipe.slots()) direct.addAll(slot);
+            }
+            Set<ResourceLocation> inputs = new HashSet<>(direct);
+            for (var input : direct) {
+                for (var recipe : recipes.getOrDefault(input, List.of())) {
+                    for (var slot : recipe.slots()) inputs.addAll(slot);
+                }
+            }
+            return inputs;
+        }).contains(item);
+    }
+
     /** Null means no path to a source. An empty set means the item can be made for free. */
     private Set<ResourceLocation> sources(ResourceLocation item, int depth, Set<ResourceLocation> path) {
         if (config.free().contains(item)) return Set.of();
@@ -291,12 +308,16 @@ final class Ingredients {
         if (depth == 0 || alternatives == null) return Set.of(item);
         path.add(item);
         Set<ResourceLocation> result = null;
+        boolean onlyRecycling = !alternatives.isEmpty();
         for (var recipe : alternatives) {
             Set<ResourceLocation> inputs = new HashSet<>();
             boolean possible = true;
             for (var slot : recipe.slots()) {
                 boolean satisfied = false;
+                boolean onlySkippedRecycling = true;
                 for (ResourceLocation candidate : slot) {
+                    if (recycles(candidate, item)) continue;
+                    onlySkippedRecycling = false;
                     Set<ResourceLocation> sources = sources(candidate, depth - 1, path);
                     if (sources == null) continue;
                     satisfied = true;
@@ -304,7 +325,7 @@ final class Ingredients {
                 }
                 if (!satisfied) {
                     possible = false;
-                    break;
+                    if (!onlySkippedRecycling) onlyRecycling = false;
                 }
             }
             if (!possible) continue;
@@ -316,6 +337,8 @@ final class Ingredients {
             result.addAll(inputs);
         }
         path.remove(item);
+        // Keep a closed conversion cycle buyable, but not an unusable recipe or a bucketless fluid.
+        if (result == null && onlyRecycling && !isFluidKey(item)) return Set.of(item);
         return result;
     }
 

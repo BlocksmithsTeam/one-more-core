@@ -92,6 +92,47 @@ public final class IngredientGameTests {
         helper.succeed();
     }
 
+    @GameTest(template = "empty")
+    public static void purchaseSourcesSkipRecyclingAndKeepClosedCycles(GameTestHelper helper) throws ReflectiveOperationException {
+        var recipes = List.of(
+                recipe("planks_from_log", Items.OAK_PLANKS, Ingredient.of(Items.OAK_LOG)),
+                recipe("boat_from_planks", Items.OAK_BOAT, Ingredient.of(Items.OAK_PLANKS)),
+                recipe("planks_from_boat", Items.OAK_PLANKS, Ingredient.of(Items.OAK_BOAT)),
+                recipe("chest_boat_from_boat", Items.OAK_CHEST_BOAT, Ingredient.of(Items.OAK_BOAT)),
+                recipe("planks_from_chest_boat", Items.OAK_PLANKS, Ingredient.of(Items.OAK_CHEST_BOAT)),
+                // Put planks at depth one so the old search buys boats at depth zero.
+                recipe("stick_from_planks", Items.STICK, Ingredient.of(Items.OAK_PLANKS)),
+                recipe("bowl_from_stick", Items.BOWL, Ingredient.of(Items.STICK)),
+                recipe("stew_from_bowl", Items.MUSHROOM_STEW, Ingredient.of(Items.BOWL)),
+                recipe("wheat_from_hay", Items.WHEAT, Ingredient.of(Items.HAY_BLOCK)),
+                recipe("hay_from_wheat", Items.HAY_BLOCK, Ingredient.of(Items.WHEAT)),
+                recipe("bread_from_wheat", Items.BREAD, Ingredient.of(Items.WHEAT)),
+                recipe("unreadable_sugar", Items.SUGAR),
+                recipe("emerald_from_diamond", Items.EMERALD, Ingredient.of(Items.DIAMOND)),
+                recipe("diamond_from_mixed_slot", Items.DIAMOND, Ingredient.of(Items.EMERALD, Items.SUGAR)));
+        var ingredients = Class.forName("com.onemorestudios.onemorecore.Ingredients");
+        var config = Class.forName("com.onemorestudios.onemorecore.IngredientConfig");
+        var parse = config.getDeclaredMethod("parse", String.class);
+        parse.setAccessible(true);
+        var constructor = ingredients.getDeclaredConstructor(Collection.class, config, List.class, HolderLookup.Provider.class);
+        constructor.setAccessible(true);
+        var configured = List.of(new Menu.Entry("stew", new ItemStack(Items.MUSHROOM_STEW), null, 4, false),
+                new Menu.Entry("bread", new ItemStack(Items.BREAD), null, 2, false));
+        var index = constructor.newInstance(recipes, parse.invoke(null, "{}"), configured, helper.getLevel().registryAccess());
+        var rawField = ingredients.getDeclaredField("raw");
+        rawField.setAccessible(true);
+        helper.assertValueEqual(rawField.get(index), List.of(id("oak_log"), WHEAT),
+                "Purchase sources keep logs and wheat, without boats or chest boats");
+
+        var sources = ingredients.getDeclaredMethod("sources", ResourceLocation.class, int.class, Set.class);
+        sources.setAccessible(true);
+        helper.assertTrue(sources.invoke(index, id("diamond"), 3, new java.util.HashSet<ResourceLocation>()) == null,
+                "An unreadable candidate prevents the recycling-only fallback");
+        helper.assertValueEqual(sources.invoke(index, WHEAT, 3, new java.util.HashSet<ResourceLocation>()), Set.of(WHEAT),
+                "A closed conversion cycle keeps wheat as its source");
+        helper.succeed();
+    }
+
     private static RecipeHolder<?> recipe(String name, Item result, Ingredient... slots) {
         var ingredients = NonNullList.<Ingredient>create();
         ingredients.addAll(List.of(slots));
