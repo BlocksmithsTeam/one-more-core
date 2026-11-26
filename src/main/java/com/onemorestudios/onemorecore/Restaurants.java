@@ -90,12 +90,22 @@ public class Restaurants extends SavedData {
      * The area must hold the sign, must not be larger than maxArea in each axis and must not overlap another area.
      */
     String setArea(Restaurant r, BoundingBox box) {
-        int max = Config.MAX_AREA.get();
-        if (box.getXSpan() > max || box.getYSpan() > max || box.getZSpan() > max) return "too_big";
+        if (!validBox(box)) return "too_big";
         if (!box.isInside(r.sign)) return "sign_outside";
         if (overlaps(box, r)) return "overlap";
         r.setArea(box);
         return "area_set";
+    }
+
+    static boolean validBox(BoundingBox box) {
+        int max = Config.MAX_AREA.get();
+        return (long) box.maxX() - box.minX() < max && (long) box.maxY() - box.minY() < max
+                && (long) box.maxZ() - box.minZ() < max;
+    }
+
+    Restaurant levelTarget(Restaurant source, BlockPos pos) {
+        Restaurant target = at(pos);
+        return target != source && target != null && target.area != null ? target : null;
     }
 
     boolean overlaps(BoundingBox box, Restaurant except) {

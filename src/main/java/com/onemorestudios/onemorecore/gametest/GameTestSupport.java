@@ -56,6 +56,12 @@ public final class GameTestSupport {
     /** A fake player whose server listener records outgoing payloads and vanilla packets. */
     static final class TestPlayer extends FakePlayer {
         final List<Object> packets = new ArrayList<>();
+        boolean operator;
+
+        @Override
+        public boolean hasPermissions(int level) {
+            return operator && level <= 2 || super.hasPermissions(level);
+        }
 
         private TestPlayer(ServerLevel level) {
             super(level, new GameProfile(UUID.randomUUID(), "omc" + Long.toUnsignedString(NEXT_PLAYER.incrementAndGet(), 36)));
@@ -84,6 +90,12 @@ public final class GameTestSupport {
         TestPlayer player = new TestPlayer(helper.getLevel());
         Vec3 position = helper.absoluteVec(new Vec3(1.5, 1, 2.5));
         player.setPos(position.x, position.y, position.z);
+        return player;
+    }
+
+    static TestPlayer operator(GameTestHelper helper) {
+        TestPlayer player = player(helper);
+        player.operator = true;
         return player;
     }
 

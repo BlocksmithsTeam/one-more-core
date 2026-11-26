@@ -18,6 +18,8 @@ change how one of them works, change its lines here in the same commit.
 
 ## Systems and what must keep working
 
+- **Restaurant levels** (`Restaurant`, `Computer`, `appLevels`, off by default): editors define up to 64 paid area, wall or move steps. Move targets selected on a wall sign's upper `screen_part` use the sign below. Purchases require a closed restaurant, preserve all `onemorecore` blocks during wall removal, refresh machines, and carry level progress with the sign. See `LevelGameTests`.
+
 - **Screen** (`menu_board`, `ScreenBlock`, `ScreenLayout`, models from `art/screen/screen_models.py`): stands on a floor (post,
   two sides), on a wall (bracket, front only) or under a ceiling (rods, two sides); upright or wide; wall and ceiling screens
   turn down (TILT). Same-kind neighbours join (`connect_*` state, `ScreenGroups`): one picture over all, drawn by the top-left
