@@ -29,7 +29,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class CashRegisterBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {2, 0, 3, 14, 7, 13});
+    private static final VoxelShape[] SHAPES = BoxShapes.byFacing(new double[] {1, 0, 2, 15, 3, 13}, new double[] {2, 3, 3, 14, 7, 13});
 
     public CashRegisterBlock(Properties properties) {
         super(properties);
