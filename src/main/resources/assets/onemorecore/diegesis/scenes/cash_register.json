@@ -2,24 +2,28 @@
   "camera": {
     "position": [
       8,
-      27,
-      -31
+      32,
+      -36
     ],
     "target": [
       8,
-      2,
-      -3
+      5,
+      0
     ],
     "fov": 36,
     "neighbors": {
       "enabled": false
-    }
+    },
+    "keep_width": 1.3333334,
+    "interactive_at": 0.6
   },
   "work_plane": 1,
   "idle_visible": false,
   "interface": {
     "hide_player": true,
-    "inventory_panel": false
+    "inventory_panel": false,
+    "hover_outline": true,
+    "outline_color": "#FFFFE8C0"
   },
   "clear_view": {
     "blocks": false
@@ -33,63 +37,215 @@
         8
       ],
       "visual": {
-        "model": "onemorecore:diegesis/register_body"
+        "model": "onemorecore:diegesis/register_body",
+        "lit_as_block": true
       },
       "pickable": false
     },
     {
       "id": "drawer",
-      "pos": [
-        8,
-        0,
-        8
-      ],
       "visual": {
-        "model": "onemorecore:diegesis/register_drawer"
+        "model": "onemorecore:diegesis/register_drawer",
+        "anchor": [
+          0,
+          0,
+          0
+        ],
+        "lit_as_block": true
       },
-      "pickable": false
-    },
-    {
-      "id": "bills",
-      "pos": [
-        8,
-        0.5,
-        -5.5
-      ],
-      "tooltip": "onemorecore.register.take_banknote",
-      "collider": {
-        "from": [
-          -6,
-          0,
-          -3
-        ],
-        "to": [
-          6,
-          5,
-          3
-        ]
-      }
-    },
-    {
-      "id": "coins",
-      "pos": [
-        8,
-        0.5,
-        0
-      ],
-      "tooltip": "onemorecore.register.take_coin",
-      "collider": {
-        "from": [
-          -6,
-          0,
-          -2
-        ],
-        "to": [
-          6,
-          5,
-          2
-        ]
-      }
+      "pickable": false,
+      "children": [
+        {
+          "id": "bills",
+          "tooltip": "onemorecore.register.take_banknote",
+          "collider": {
+            "from": [
+              2,
+              0.5,
+              -8.5
+            ],
+            "to": [
+              7.75,
+              3.5,
+              2
+            ]
+          },
+          "children": [
+            {
+              "id": "bill_0",
+              "pos": [
+                4.95,
+                0.5,
+                -3.3
+              ],
+              "rotation": [
+                0,
+                -90,
+                0
+              ],
+              "scale": [
+                0.75,
+                1,
+                0.75
+              ],
+              "visual": {
+                "model": "onemorecore:block/banknote"
+              },
+              "pickable": false,
+              "hidden": true
+            },
+            {
+              "id": "bill_1",
+              "pos": [
+                4.95,
+                1.5,
+                -3.3
+              ],
+              "rotation": [
+                0,
+                -90,
+                0
+              ],
+              "scale": [
+                0.75,
+                1,
+                0.75
+              ],
+              "visual": {
+                "model": "onemorecore:block/banknote"
+              },
+              "pickable": false,
+              "hidden": true
+            }
+          ]
+        },
+        {
+          "id": "coins",
+          "tooltip": "onemorecore.register.take_coin",
+          "collider": {
+            "from": [
+              8.25,
+              0.5,
+              -8.5
+            ],
+            "to": [
+              14,
+              3.5,
+              2
+            ]
+          },
+          "children": [
+            {
+              "id": "coin_0",
+              "pos": [
+                9.5,
+                0.5,
+                -8.25
+              ],
+              "visual": {
+                "model": "onemorecore:block/coin_piece",
+                "anchor": [
+                  6,
+                  0,
+                  6
+                ]
+              },
+              "pickable": false,
+              "hidden": true
+            },
+            {
+              "id": "coin_1",
+              "pos": [
+                9.2,
+                0.5,
+                -4.95
+              ],
+              "visual": {
+                "model": "onemorecore:block/coin_piece",
+                "anchor": [
+                  6,
+                  0,
+                  6
+                ]
+              },
+              "pickable": false,
+              "hidden": true
+            },
+            {
+              "id": "coin_2",
+              "pos": [
+                9.3,
+                0.5,
+                -1.5
+              ],
+              "visual": {
+                "model": "onemorecore:block/coin_piece",
+                "anchor": [
+                  6,
+                  0,
+                  6
+                ]
+              },
+              "pickable": false,
+              "hidden": true
+            },
+            {
+              "id": "coin_3",
+              "pos": [
+                9.7,
+                1.5,
+                -4.95
+              ],
+              "visual": {
+                "model": "onemorecore:block/coin_piece",
+                "anchor": [
+                  6,
+                  0,
+                  6
+                ]
+              },
+              "pickable": false,
+              "hidden": true
+            },
+            {
+              "id": "coin_4",
+              "pos": [
+                9.8,
+                1.5,
+                -1.5
+              ],
+              "visual": {
+                "model": "onemorecore:block/coin_piece",
+                "anchor": [
+                  6,
+                  0,
+                  6
+                ]
+              },
+              "pickable": false,
+              "hidden": true
+            },
+            {
+              "id": "coin_5",
+              "pos": [
+                9.3,
+                2.5,
+                -1
+              ],
+              "visual": {
+                "model": "onemorecore:block/coin_piece",
+                "anchor": [
+                  6,
+                  0,
+                  6
+                ]
+              },
+              "pickable": false,
+              "hidden": true
+            }
+          ]
+        }
+      ]
     }
   ]
 }
