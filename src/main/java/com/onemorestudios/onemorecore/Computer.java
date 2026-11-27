@@ -120,7 +120,7 @@ public class Computer extends Block {
                 ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list(6)), LockedDish::missing, LockedDish::new);
     }
 
-    /** This section is present only in responses to Menu requests. Counts describe omitted rows. */
+    /** This section is present in responses to Menu and Shop catalog or unlock requests. Counts describe omitted rows. */
     public record IngredientData(List<IngredientLine> ingredients, List<LockedDish> lockedDishes,
             int moreIngredients, int moreLockedDishes) {
         static final int BYTE_BUDGET = 128 * 1024;
@@ -543,7 +543,7 @@ public class Computer extends Block {
             }
             message = Component.translatable("onemorecore.computer." + key, Config.MAX_DISH_PRICE.get());
         } else if (request.action == UNLOCK_INGREDIENT) {
-            if (r == null || !Config.APP_MENU.get()) return null;
+            if (r == null || !Config.APP_SHOP.get()) return null;
             ResourceLocation item = ResourceLocation.tryParse(request.id);
             message = OneMoreCore.unlockMessage(r, request.id, item, r.unlockIngredient(item));
         } else if (request.action == BUY) {
@@ -563,11 +563,12 @@ public class Computer extends Block {
             default -> false;
         };
         boolean menu = Config.APP_MENU.get() && switch (request.action) {
-            case REFRESH_MENU, UNLOCK_INGREDIENT, TOGGLE_DISH, ADD_DISH, REMOVE_DISH, SET_PRICE, SET_KIND,
+            case REFRESH_MENU, TOGGLE_DISH, ADD_DISH, REMOVE_DISH, SET_PRICE, SET_KIND,
                     ADD_COMBO, REMOVE_COMBO, SET_COMBO_PRICE, EDIT_COMBO -> true;
             default -> false;
         };
-        return state(level, request.pos, r, false, manager, menu, message, editor(player));
+        boolean shop = Config.APP_SHOP.get() && (request.action == REFRESH || request.action == UNLOCK_INGREDIENT);
+        return state(level, request.pos, r, false, manager, menu || shop, message, editor(player));
     }
 
     private static CheckoutResult sessionEnded(Request request) {

@@ -433,7 +433,7 @@ public final class IngredientGameTests {
     }
 
     @GameTest(template = "empty")
-    public static void computerUnlockChecksFundsAndReturnsOnlyMenuData(GameTestHelper helper) {
+    public static void computerShopUnlockChecksFundsAndReturnsCatalogData(GameTestHelper helper) {
         var restaurant = place(helper);
         helper.setBlock(COMPUTER, OneMoreCore.COMPUTER.get());
         var player = GameTestSupport.player(helper);
@@ -443,9 +443,13 @@ public final class IngredientGameTests {
         try {
             var desktop = (Computer.State) player.packets.stream().filter(Computer.State.class::isInstance).findFirst().orElseThrow();
             helper.assertTrue(desktop.ingredientData().isEmpty(), "Opening the desktop omits ingredient data");
-            helper.assertTrue(request(helper, player, Computer.REFRESH).ingredientData().isEmpty(), "Shop refresh omits ingredient data");
+            var shop = request(helper, player, Computer.REFRESH);
+            helper.assertFalse(shop.shop().stream().anyMatch(row -> row.id().equals("ingredient/minecraft:wheat")),
+                    "Locked wheat has no buyable listing");
             helper.assertTrue(request(helper, player, Computer.REFRESH_MANAGER).ingredientData().isEmpty(), "Manager refresh omits ingredient data");
-            var menu = request(helper, player, Computer.REFRESH_MENU).ingredientData().orElseThrow();
+            var menu = shop.ingredientData().orElseThrow();
+            helper.assertValueEqual(request(helper, player, Computer.REFRESH_MENU).ingredientData().orElseThrow(), menu,
+                    "Menu keeps the same missing ingredient data for dish cards");
             var line = menu.ingredients().stream().filter(row -> row.id().equals(WHEAT)).findFirst().orElseThrow();
             helper.assertFalse(line.unlocked(), "Wheat starts locked");
             helper.assertTrue(line.newlyOrderable() > 0, "Wheat adds bread to the menu");
@@ -457,13 +461,32 @@ public final class IngredientGameTests {
             helper.assertValueEqual(restaurant.unlockIngredient(id("not_an_item")), Restaurant.Unlock.UNKNOWN, "Unknown item");
             helper.assertValueEqual(restaurant.register(), line.unlockCost() - 1, "Failed unlocks do not charge");
 
+            var appMenu = appSwitch("APP_MENU"); var appShop = appSwitch("APP_SHOP");
+            boolean menuEnabled = appMenu.get(), shopEnabled = appShop.get();
+            try {
+                appShop.set(false);
+                helper.assertTrue(Computer.handle(player, unlock) == null, "A disabled Shop rejects ingredient unlocks");
+                appShop.set(true);
+                appMenu.set(false);
+                helper.assertTrue(request(helper, player, Computer.REFRESH).ingredientData().isPresent(),
+                        "The Shop supplies ingredient data when Menu is disabled");
+                helper.assertTrue(((Computer.State) Computer.handle(player, unlock)).ingredientData().isPresent(),
+                        "The Shop returns a denied unlock when Menu is disabled");
+                helper.assertValueEqual(restaurant.register(), line.unlockCost() - 1, "Denied unlocks keep the balance");
+            } finally {
+                appMenu.set(menuEnabled);
+                appShop.set(shopEnabled);
+            }
             GameTestSupport.setRegister(restaurant, line.unlockCost());
             var position = player.position();
             player.setPos(position.add(32, 0, 0));
             helper.assertTrue(Computer.handle(player, unlock) == null, "Unlocks require reach");
             player.setPos(position);
             helper.assertTrue(GameTestSupport.click(helper, player, COMPUTER).consumesAction(), "The computer reopens");
-            var updated = ((Computer.State) Computer.handle(player, unlock)).ingredientData().orElseThrow();
+            var reply = (Computer.State) Computer.handle(player, unlock);
+            var updated = reply.ingredientData().orElseThrow();
+            helper.assertTrue(reply.shop().stream().anyMatch(row -> row.id().equals("ingredient/minecraft:wheat")),
+                    "The unlock reply replaces locked wheat with a buyable listing");
             helper.assertTrue(updated.ingredients().stream().anyMatch(row -> row.id().equals(WHEAT) && row.unlocked()
                     && row.newlyOrderable() == 0), "The reply shows wheat purchased");
             helper.assertValueEqual(restaurant.register(), 0, "Unlock charged exactly its quoted cost");
@@ -685,5 +708,16 @@ public final class IngredientGameTests {
         var load = Restaurant.class.getDeclaredMethod("load", Restaurants.class, CompoundTag.class);
         load.setAccessible(true);
         return (Restaurant) load.invoke(null, Restaurants.get(helper.getLevel()), data);
+    }
+
+    /** A computer app switch from Config (package-private there). */
+    private static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue appSwitch(String name) {
+        try {
+            var field = Config.class.getDeclaredField(name);
+            field.setAccessible(true);
+            return (net.neoforged.neoforge.common.ModConfigSpec.BooleanValue) field.get(null);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }
