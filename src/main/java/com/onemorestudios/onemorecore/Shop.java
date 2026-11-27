@@ -46,7 +46,13 @@ public class Shop {
 
     static Entry byId(Restaurant restaurant, String id) {
         Entry configured = byId(id);
-        if (configured != null || !id.startsWith(INGREDIENT_PREFIX)) return configured;
+        if (configured != null) {
+            // A configured raw ingredient is sold only after its unlock (the same rule as the catalog).
+            ResourceLocation sold = Ingredients.id(configured.stack());
+            Ingredients index = Ingredients.current();
+            return index.isRawIngredient(sold) && !index.purchased(sold, restaurant.unlockedIngredients()) ? null : configured;
+        }
+        if (!id.startsWith(INGREDIENT_PREFIX)) return null;
         String itemId = id;
         do {
             itemId = itemId.substring(INGREDIENT_PREFIX.length());
@@ -59,10 +65,19 @@ public class Shop {
     }
 
     public static List<Entry> catalog(Restaurant restaurant) {
-        List<Entry> catalog = new ArrayList<>(entries);
+        List<Entry> catalog = new ArrayList<>();
         Ingredients index = Ingredients.current();
         var unlocked = restaurant.unlockedIngredients();
-        index.raw.stream().filter(item -> index.purchased(item, unlocked))
+        java.util.Set<ResourceLocation> sold = new java.util.HashSet<>();
+        for (Entry entry : entries) {
+            ResourceLocation item = Ingredients.id(entry.stack());
+            // A configured line that sells a raw ingredient waits for its unlock, like the generated line.
+            if (index.isRawIngredient(item) && !index.purchased(item, unlocked)) continue;
+            catalog.add(entry);
+            sold.add(index.representative(item));
+        }
+        // One card per ingredient: a configured line replaces the generated one.
+        index.raw.stream().filter(item -> index.purchased(item, unlocked) && !sold.contains(item))
                 .map(Shop::ingredientEntry)
                 .filter(java.util.Objects::nonNull).forEach(catalog::add);
         return catalog;

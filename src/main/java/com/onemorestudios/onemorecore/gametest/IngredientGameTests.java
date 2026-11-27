@@ -630,7 +630,7 @@ public final class IngredientGameTests {
             helper.assertTrue(GameTestSupport.click(helper, player, COMPUTER).consumesAction(), "The computer reopens");
             var reply = (Computer.State) Computer.handle(player, unlock);
             var updated = reply.ingredientData().orElseThrow();
-            helper.assertTrue(reply.shop().stream().anyMatch(row -> row.id().equals("ingredient/minecraft:wheat")),
+            helper.assertTrue(reply.shop().stream().anyMatch(row -> row.stack().is(Items.WHEAT)),
                     "The unlock reply replaces locked wheat with a buyable listing");
             helper.assertTrue(updated.ingredients().stream().anyMatch(row -> row.id().equals(WHEAT) && row.unlocked()
                     && row.newlyOrderable() == 0), "The reply shows wheat purchased");
@@ -853,6 +853,24 @@ public final class IngredientGameTests {
         var load = Restaurant.class.getDeclaredMethod("load", Restaurants.class, CompoundTag.class);
         load.setAccessible(true);
         return (Restaurant) load.invoke(null, Restaurants.get(helper.getLevel()), data);
+    }
+
+    @GameTest(template = "empty")
+    public static void configuredRawLinesWaitForUnlockAndReplaceGenerated(GameTestHelper helper) throws ReflectiveOperationException {
+        var before = Shop.entries;
+        try {
+            var restaurant = place(helper);
+            ItemStack wheat = new ItemStack(Items.WHEAT, 16);
+            Shop.entries = List.of(new Shop.Entry("wheat", wheat, wheat, 4));
+            helper.assertTrue(Shop.catalog(restaurant).stream().noneMatch(e -> e.stack().is(Items.WHEAT)), "A locked raw line is hidden");
+            GameTestSupport.setRegister(restaurant, 1000);
+            GameTestSupport.unlock(helper, restaurant, "wheat");
+            helper.assertValueEqual(Shop.catalog(restaurant).stream().filter(e -> e.stack().is(Items.WHEAT)).count(), 1L,
+                    "After the unlock the configured line is the only wheat card");
+        } finally {
+            Shop.entries = before;
+        }
+        helper.succeed();
     }
 
     @GameTest(template = "empty")
