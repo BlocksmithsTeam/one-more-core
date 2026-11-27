@@ -123,7 +123,7 @@ final class Ingredients {
             if ((!food(entry.getKey()) && !dishWorth.containsKey(entry.getKey())) || entry.getValue().isEmpty()) return false;
             var usable = entry.getValue().stream().filter(recipe -> recipe.slots().stream().anyMatch(slot ->
                     slot.stream().anyMatch(item -> config.free().contains(item) || (!excluded(stack(item))
-                            && (food(item) || isFluidKey(item) || dishWorth.containsKey(item) || recipes.containsKey(item)))))).toList();
+                            && (food(item) || isFluidKey(item)))))).toList();
             entry.setValue(usable);
             return usable.isEmpty();
         });
