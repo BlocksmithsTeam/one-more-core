@@ -71,7 +71,7 @@ final class Ingredients {
                     continue;
                 }
                 var alternatives = recipes.computeIfAbsent(id, key -> new ArrayList<>());
-                if (result != null && !result.isEmpty() && Restaurant.isFood(result)) foodResults.putIfAbsent(id, result.copyWithCount(1));
+                if (result != null && DishBlacklist.isDishCandidate(result)) foodResults.putIfAbsent(id, result.copyWithCount(1));
                 List<Set<ResourceLocation>> slots = new ArrayList<>(recipe.getIngredients().stream()
                         // An empty ingredient ("[]", Brewin's fermenting) is no slot.
                         .filter(ingredient -> !ingredient.isEmpty())
@@ -109,7 +109,6 @@ final class Ingredients {
             dishWorth.put(id, worth);
             discovered.add(new Menu.Entry(id.toString(), stack, null, worth, false));
         }
-        automatic = List.copyOf(discovered);
 
         portions.forEach((portion, parents) -> {
             if (config.dishes().containsKey(portion)) parents.clear();
@@ -171,6 +170,8 @@ final class Ingredients {
         }
         rawIds.removeIf(item -> !food(item) || config.free().contains(item) || config.ignore().contains(item));
         raw = List.copyOf(rawIds);
+        automatic = discovered.stream().filter(entry -> DishBlacklist.isDishCandidate(entry.stack())
+                && !excludesDish(id(entry.stack()))).toList();
         raw.forEach(id -> unlockCosts.put(id, automaticCost(id)));
         if (registries != null) OneMoreCore.LOGGER.info(
                 "Ingredient index: {} dishes with readable recipes, {} locked without a readable recipe, {} without a recipe; {} recipes could not be read",
@@ -186,12 +187,21 @@ final class Ingredients {
     private boolean food(ResourceLocation id) {
         ItemStack stack = stack(id);
         var food = stack.get(DataComponents.FOOD);
-        if (food != null && food.effects().stream().anyMatch(effect -> effect.probability() >= HARMFUL_EFFECT_PROBABILITY
-                && effect.effect().getEffect().value().getCategory() == MobEffectCategory.HARMFUL)) return false;
+        if (harmful(stack)) return false;
         return !stack.isEmpty() && !excluded(stack) && (food != null
                 || stack.getTags().map(tag -> tag.location()).anyMatch(tag -> config.foodTags().contains(tag)
                         && !(tag.getNamespace().equals("c")
                             && (tag.getPath().equals("seeds") || tag.getPath().startsWith("seeds/")))));
+    }
+
+    static boolean harmful(ItemStack stack) {
+        var food = stack.get(DataComponents.FOOD);
+        return food != null && food.effects().stream().anyMatch(effect -> effect.probability() >= HARMFUL_EFFECT_PROBABILITY
+                && effect.effect().getEffect().value().getCategory() == MobEffectCategory.HARMFUL);
+    }
+
+    boolean excludesDish(ResourceLocation id) {
+        return raw.contains(id) || config.ignore().contains(id);
     }
 
     private boolean free(ResourceLocation item) {
@@ -485,6 +495,7 @@ final class Ingredients {
         }
 
         boolean dish(ResourceLocation id) {
+            if (excludesDish(id) || !DishBlacklist.isDishCandidate(stack(id))) return false;
             var alternatives = recipes.get(id);
             return alternatives == null || alternatives.stream().anyMatch(recipe -> satisfied(recipe, DEPTH));
         }

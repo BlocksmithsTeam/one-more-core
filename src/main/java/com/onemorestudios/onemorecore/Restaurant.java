@@ -423,6 +423,7 @@ public class Restaurant {
                     Math.min(price, Config.MAX_DISH_PRICE.get()), entry.exact(), entry.category()));
         }
         all.addAll(custom);
+        all.removeIf(entry -> Ingredients.variants(entry).noneMatch(Restaurant::isFood));
         return all;
     }
 
