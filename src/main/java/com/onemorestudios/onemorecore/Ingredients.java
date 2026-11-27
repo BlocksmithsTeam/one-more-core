@@ -220,6 +220,8 @@ final class Ingredients {
         } while (count != blocked.size());
     }
 
+    boolean isRawIngredient(ResourceLocation item) { return rawIngredients.contains(item); }
+
     ResourceLocation representative(ResourceLocation item) { return representatives.getOrDefault(item, item); }
 
     boolean purchased(ResourceLocation item, Set<ResourceLocation> unlocked) {

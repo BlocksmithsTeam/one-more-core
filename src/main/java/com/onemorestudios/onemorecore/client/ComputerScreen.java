@@ -826,8 +826,12 @@ public class ComputerScreen extends Screen {
         g.pose().translate(x + w / 2f - 16, y + 6, 0);
         g.pose().scale(2, 2, 1);
         g.renderItem(picture, 0, 0);
-        if (!decorations.isEmpty()) g.renderItemDecorations(font, decorations, 0, 0);
         g.pose().popPose();
+        // The count in the picture's corner at text size: other mods' item decorations are not drawn here.
+        if (!decorations.isEmpty() && decorations.getCount() > 1) {
+            String count = "x" + decorations.getCount();
+            g.drawString(font, count, x + w - 6 - font.width(count), y + 31, TEXT, true);
+        }
         g.drawString(font, ellipsize(picture.getHoverName(), w - 8), x + 4, y + 45, TEXT, false);
         return over;
     }
