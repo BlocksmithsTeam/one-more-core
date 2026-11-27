@@ -179,7 +179,7 @@ final class Ingredients {
         for (var group : config.groups()) {
             List<ResourceLocation> members = rawIds.stream().filter(group.members()::contains).toList();
             if (members.isEmpty()) continue;
-            ResourceLocation representative = members.stream().min(Comparator
+            ResourceLocation representative = group.show() != null && members.contains(group.show()) ? group.show() : members.stream().min(Comparator
                     .<ResourceLocation>comparingInt(item -> dishesHelped(item).size()).reversed()
                     .thenComparing(Comparator.naturalOrder())).orElseThrow();
             Set<ResourceLocation> dishes = new HashSet<>();
