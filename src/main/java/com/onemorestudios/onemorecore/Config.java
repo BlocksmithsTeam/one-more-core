@@ -60,7 +60,7 @@ public class Config {
             .defineInRange("maxLostPerDay", 0, 0, 1000);
     static final ModConfigSpec.IntValue SPAWN_INTERVAL = B
             .comment("Ticks between two groups of customers, on average. It is shorter on later days, down to 40 percent, and varies by up to 40 percent.")
-            .defineInRange("spawnIntervalTicks", 200, 1, 72000);
+            .defineInRange("spawnIntervalTicks", 300, 1, 72000);
     static final ModConfigSpec.IntValue ORDER_PATIENCE = B
             .comment("Ticks a seated customer waits for a player to take the order.")
             .defineInRange("orderPatienceTicks", 2400, 20, 72000);
