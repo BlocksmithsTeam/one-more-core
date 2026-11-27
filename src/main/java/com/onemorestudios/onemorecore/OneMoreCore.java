@@ -344,9 +344,10 @@ public class OneMoreCore {
             if (r != null && r.ringBell(level)) event.getEntity().displayClientMessage(Component.translatable("onemorecore.bell.called"), true);
             return;
         }
-        // Coins and dirty dishes on a table: an empty hand collects them first (without Diegesis; with it, in the station).
+        // Collect directly unless our wiping station handles this surface.
         if (held.isEmpty() && event.getHand() == InteractionHand.MAIN_HAND && event.getLevel().getBlockState(event.getPos()).is(SURFACES)
-                && !(net.neoforged.fml.ModList.get().isLoaded("diegesis"))) {
+                && (!net.neoforged.fml.ModList.get().isLoaded("diegesis")
+                    || !WipingStation.handles(event.getLevel().getBlockState(event.getPos())))) {
             boolean has;
             if (event.getLevel() instanceof ServerLevel level) {
                 Restaurant r = Restaurants.get(level).containing(event.getPos());
@@ -368,6 +369,7 @@ public class OneMoreCore {
             // Diegesis (1.0.0-beta.15) opens stations from its own lowest-priority listener, which skips cancelled events.
             // Diegesis also posts this event on the server to check permission before opening a station.
             if (net.neoforged.fml.ModList.get().isLoaded("diegesis")
+                    && WipingStation.handles(event.getLevel().getBlockState(event.getPos()))
                     && WipingStation.opens(event.getEntity(), event.getPos(), event.getLevel().getBlockState(event.getPos()))) return;
             boolean wiped;
             if (event.getLevel() instanceof ServerLevel level) {

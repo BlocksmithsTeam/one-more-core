@@ -130,6 +130,28 @@ public final class RegisterGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void retainedRemainderSurvivesBreak(GameTestHelper helper) throws ReflectiveOperationException {
+        Restaurant restaurant = sign(helper);
+        int dropped = 0;
+        for (int retained : new int[] {6, 13, 1}) {
+            setArea(helper, restaurant, SIGN);
+            CashRegisterBlockEntity cash = place(helper, REGISTER);
+            var deposit = CashRegisterBlockEntity.class.getDeclaredMethod("deposit", int.class);
+            deposit.setAccessible(true);
+            deposit.invoke(cash, retained + 5);
+            GameTestSupport.setRegister(restaurant, Integer.MAX_VALUE - 5);
+            setArea(helper, restaurant, REGISTER);
+            helper.assertValueEqual(cash.balance(), retained, "Area merge retains only the overflow");
+            helper.getLevel().destroyBlock(helper.absolutePos(REGISTER), true);
+            dropped += retained;
+            helper.assertValueEqual(droppedMoney(helper), dropped, "Break drops every retained unit exactly once");
+            helper.assertValueEqual(cash.balance(), 0, "Removed block keeps no balance to drop twice");
+            helper.assertValueEqual(restaurant.register(), Integer.MAX_VALUE, "Break never withdraws shared money");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void openingRequiresRegisterOnlyWhenEnabled(GameTestHelper helper) throws ReflectiveOperationException {
         boolean previous = Config.REQUIRE_REGISTER.get();
         try {
@@ -195,7 +217,7 @@ public final class RegisterGameTests {
     }
 
     @GameTest(template = "empty")
-    public static void breakingOnlyDropsOutsideMoney(GameTestHelper helper) throws ReflectiveOperationException {
+    public static void breakingDropsLocalMoneyWithoutTouchingRestaurant(GameTestHelper helper) throws ReflectiveOperationException {
         Restaurant restaurant = sign(helper);
         place(helper, REGISTER);
         var player = GameTestSupport.player(helper);

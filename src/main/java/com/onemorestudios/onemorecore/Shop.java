@@ -11,9 +11,11 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.neoforged.fml.loading.FMLPaths;
 
 /** The items that the Restaurant Computer sells, read from config/onemorecore/shop.json. */
@@ -47,10 +49,7 @@ public class Shop {
     static Entry byId(Restaurant restaurant, String id) {
         Entry configured = byId(id);
         if (configured != null) {
-            // A configured raw ingredient is sold only after its unlock (the same rule as the catalog).
-            ResourceLocation sold = Ingredients.id(configured.stack());
-            Ingredients index = Ingredients.current();
-            return index.isRawIngredient(sold) && !index.purchased(sold, restaurant.unlockedIngredients()) ? null : configured;
+            return locked(restaurant, configured.stack()) ? null : configured;
         }
         if (!id.startsWith(INGREDIENT_PREFIX)) return null;
         String itemId = id;
@@ -71,8 +70,7 @@ public class Shop {
         java.util.Set<ResourceLocation> sold = new java.util.HashSet<>();
         for (Entry entry : entries) {
             ResourceLocation item = Ingredients.id(entry.stack());
-            // A configured line that sells a raw ingredient waits for its unlock, like the generated line.
-            if (index.isRawIngredient(item) && !index.purchased(item, unlocked)) continue;
+            if (locked(restaurant, entry.stack())) continue;
             catalog.add(entry);
             sold.add(index.representative(item));
         }
@@ -81,6 +79,15 @@ public class Shop {
                 .map(Shop::ingredientEntry)
                 .filter(java.util.Objects::nonNull).forEach(catalog::add);
         return catalog;
+    }
+
+    private static boolean locked(Restaurant restaurant, ItemStack stack) {
+        Ingredients index = Ingredients.current();
+        var unlocked = restaurant.unlockedIngredients();
+        return java.util.stream.Stream.concat(java.util.stream.Stream.of(stack),
+                        stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).nonEmptyStream())
+                .map(Ingredients::id)
+                .anyMatch(item -> index.isRawIngredient(item) && !index.purchased(item, unlocked));
     }
 
     private static String ingredientListingId(ResourceLocation item) {

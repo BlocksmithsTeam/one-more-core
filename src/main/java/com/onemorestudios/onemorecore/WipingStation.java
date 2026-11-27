@@ -32,6 +32,10 @@ public final class WipingStation implements StationLogic {
 
     public static void register() { Diegesis.register(TYPE); }
 
+    public static boolean handles(BlockState state) {
+        return Diegesis.stationFor(state).map(type -> type.id().equals(ID)).orElse(false);
+    }
+
     public static boolean opens(Player player, BlockPos pos, BlockState state) {
         if (!state.is(OneMoreCore.SURFACES) || !player.getMainHandItem().isEmpty()
                 || player.isSpectator() || !player.canInteractWithBlock(pos, 1)) return false;

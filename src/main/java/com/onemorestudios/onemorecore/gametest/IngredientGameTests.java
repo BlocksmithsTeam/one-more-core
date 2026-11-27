@@ -21,6 +21,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -34,6 +35,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.crafting.CraftingBookCategory;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -869,6 +871,46 @@ public final class IngredientGameTests {
                     "After the unlock the configured line is the only wheat card");
         } finally {
             Shop.entries = before;
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void configuredContainersWaitForEveryRawUnlock(GameTestHelper helper) throws ReflectiveOperationException {
+        var current = Class.forName("com.onemorestudios.onemorecore.Ingredients").getDeclaredField("current");
+        current.setAccessible(true);
+        Object beforeIndex = current.get(null);
+        var beforeShop = Shop.entries;
+        var byId = Shop.class.getDeclaredMethod("byId", Restaurant.class, String.class);
+        byId.setAccessible(true);
+        try {
+            current.set(null, ingredientIndex(helper, "{\"minDishes\":0}", List.of(
+                    recipe("bread", Items.BREAD, Ingredient.of(Items.WHEAT)),
+                    recipe("pie", Items.PUMPKIN_PIE, Ingredient.of(Items.CARROT)))));
+            Restaurant restaurant = place(helper);
+            ItemStack box = new ItemStack(Items.SHULKER_BOX);
+            box.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(
+                    ItemStack.EMPTY, new ItemStack(Items.STONE), new ItemStack(Items.WHEAT, 16), new ItemStack(Items.CARROT, 8))));
+            ItemStack empty = new ItemStack(Items.SHULKER_BOX);
+            var bundle = new Shop.Entry("bundle", box, new ItemStack(Items.CAKE), 12);
+            var emptyBox = new Shop.Entry("empty", empty, empty, 1);
+            var direct = new Shop.Entry("direct", new ItemStack(Items.WHEAT), new ItemStack(Items.WHEAT), 1);
+            Shop.entries = List.of(bundle, emptyBox, direct);
+            GameTestSupport.setRegister(restaurant, 1000);
+            for (int unlocked = 0; unlocked < 3; unlocked++) {
+                boolean allowed = unlocked == 2;
+                helper.assertTrue(Shop.catalog(restaurant).contains(bundle) == allowed, "Catalog needs every contained raw unlock");
+                helper.assertTrue((byId.invoke(null, restaurant, "bundle") != null) == allowed, "Purchase uses the same bundle gate");
+                helper.assertTrue(Shop.catalog(restaurant).contains(emptyBox), "Empty containers remain available");
+                helper.assertTrue(byId.invoke(null, restaurant, "empty") != null, "Empty container purchase remains available");
+                helper.assertTrue(Shop.catalog(restaurant).contains(direct) == (unlocked > 0), "Direct lines keep their unlock gate");
+                helper.assertTrue((byId.invoke(null, restaurant, "direct") != null) == (unlocked > 0), "Direct purchases keep their unlock gate");
+                if (unlocked == 0) GameTestSupport.unlock(helper, restaurant, "wheat");
+                if (unlocked == 1) GameTestSupport.unlock(helper, restaurant, "carrot");
+            }
+        } finally {
+            current.set(null, beforeIndex);
+            Shop.entries = beforeShop;
         }
         helper.succeed();
     }
