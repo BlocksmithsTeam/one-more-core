@@ -74,6 +74,15 @@ public class Config {
     static final ModConfigSpec.IntValue MAX_TIP = B
             .comment("Maximum tip as a percentage of the order price. The tip scales with the patience that is left.")
             .defineInRange("maxTipPercent", 50, 0, 1000);
+    static final ModConfigSpec.ConfigValue<List<? extends String>> PREFERENCES = B
+            .comment("Party preferences as name=chance (0..1), read in order from one roll; total chance should not exceed 1.",
+                    "Names select onemorecore:preferences/<name> item tags. Empty disables preferences.")
+            .defineListAllowEmpty("customerPreferences", List.of("vegetarian=0.1", "sweet=0.1", "drinks=0.1"),
+                    () -> "sweet=0.1", Config::isPreference);
+    static final ModConfigSpec.DoubleValue PREFERENCE_TIP = B
+            .comment("Tip multiplier for the tip share of each delivered matching dish. The bonus can go over maxTipPercent.")
+            .defineInRange("preferenceTipMultiplier", 1.5, 1, 10);
+
     static final ModConfigSpec.IntValue WRONG_PENALTY = B
             .comment("Patience ticks a customer loses when a player offers a wrong item. 0 disables the penalty.")
             .defineInRange("wrongItemPenaltyTicks", 100, 0, 72000);
@@ -196,6 +205,18 @@ public class Config {
             list.add("kaleidoscope_world_liquor:bar_stool_" + color.getName() + "=0.9375");
         }
         return list;
+    }
+
+    private static boolean isPreference(Object o) {
+        if (!(o instanceof String s)) return false;
+        int split = s.indexOf('=');
+        if (split <= 0 || !s.substring(0, split).matches("[a-z0-9_]+")) return false;
+        try {
+            double chance = Double.parseDouble(s.substring(split + 1));
+            return Double.isFinite(chance) && chance >= 0 && chance <= 1;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private static boolean isPair(Object o) {

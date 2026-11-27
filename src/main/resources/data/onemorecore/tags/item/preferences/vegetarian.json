@@ -1,0 +1,44 @@
+{
+  "values": [
+    {
+      "id": "#c:foods/vegetable",
+      "required": false
+    },
+    {
+      "id": "#c:foods/fruit",
+      "required": false
+    },
+    {
+      "id": "#c:foods/grain",
+      "required": false
+    },
+    {
+      "id": "#c:foods/bread",
+      "required": false
+    },
+    {
+      "id": "#c:foods/salad",
+      "required": false
+    },
+    {
+      "id": "#c:vegetables",
+      "required": false
+    },
+    {
+      "id": "#c:fruits",
+      "required": false
+    },
+    {
+      "id": "#c:grains",
+      "required": false
+    },
+    {
+      "id": "#c:breads",
+      "required": false
+    },
+    {
+      "id": "#c:salads",
+      "required": false
+    }
+  ]
+}
