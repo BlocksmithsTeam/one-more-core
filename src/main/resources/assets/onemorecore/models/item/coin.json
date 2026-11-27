@@ -1,6 +1,124 @@
 {
- "parent": "minecraft:item/generated",
- "textures": {
-  "layer0": "onemorecore:item/coin"
+ "parent": "onemorecore:block/coin_piece",
+ "display": {
+  "gui": {
+   "rotation": [
+    80,
+    0,
+    0
+   ],
+   "translation": [
+    1.4,
+    3.6466,
+    0
+   ],
+   "scale": [
+    2.8,
+    2.8,
+    2.8
+   ]
+  },
+  "ground": {
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "translation": [
+    0,
+    3,
+    0
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ]
+  },
+  "fixed": {
+   "rotation": [
+    90,
+    0,
+    0
+   ],
+   "translation": [
+    0,
+    0,
+    7.5
+   ],
+   "scale": [
+    2.8,
+    2.8,
+    2.8
+   ]
+  },
+  "firstperson_righthand": {
+   "rotation": [
+    65,
+    0,
+    90
+   ],
+   "translation": [
+    -10.87,
+    2.813,
+    2.193
+   ],
+   "scale": [
+    1.6,
+    1.6,
+    1.6
+   ]
+  },
+  "thirdperson_righthand": {
+   "rotation": [
+    75,
+    0,
+    0
+   ],
+   "translation": [
+    0,
+    4,
+    0
+   ],
+   "scale": [
+    1.25,
+    1.25,
+    1.25
+   ]
+  },
+  "firstperson_lefthand": {
+   "rotation": [
+    65,
+    0,
+    -90
+   ],
+   "translation": [
+    13.13,
+    2.137,
+    0.743
+   ],
+   "scale": [
+    1.6,
+    1.6,
+    1.6
+   ]
+  },
+  "thirdperson_lefthand": {
+   "rotation": [
+    75,
+    0,
+    0
+   ],
+   "translation": [
+    0,
+    4,
+    0
+   ],
+   "scale": [
+    1.25,
+    1.25,
+    1.25
+   ]
+  }
  }
 }
