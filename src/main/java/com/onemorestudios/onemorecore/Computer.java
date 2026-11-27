@@ -678,7 +678,9 @@ public class Computer extends Block {
                 Component.translatable("onemorecore.computer.info.spawn", r.spawn() == null ? none : r.spawn().toShortString()),
                 Component.translatable("onemorecore.computer.info.delivery", r.delivery() == null ? none : r.delivery().toShortString()),
                 Component.translatable("onemorecore.computer.info.seats", seats.size()),
-                Component.translatable("onemorecore.computer.info.orders", r.deliveries.size()));
+                Component.translatable("onemorecore.computer.info.orders", r.deliveries.size()),
+                Config.REVIEWS.get() ? Component.translatable("onemorecore.reviews.rating",
+                        String.format(java.util.Locale.ROOT, "%.1f", r.rating())) : Component.empty());
         List<ComboLine> combos = r.combos.stream().map(c -> new ComboLine(c.id(), c.dishes(), c.price(), r.canOrder(c))).toList();
         // The serving surfaces next to seats, and the ones of tables that are off, for the free camera's table tool.
         List<BlockPos> surfaces = new ArrayList<>(), off = new ArrayList<>();

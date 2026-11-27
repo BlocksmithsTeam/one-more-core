@@ -193,7 +193,21 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         model = skin(customer).model() == PlayerSkin.Model.SLIM ? slim : wide;
         super.render(customer, yaw, partialTick, pose, buffers, light);
         renderBubble(customer, pose, buffers);
+        renderReview(customer, pose, buffers);
         renderServed(customer, partialTick, pose, buffers);
+    }
+
+    private void renderReview(Customer customer, PoseStack pose, MultiBufferSource buffers) {
+        int stars = customer.getReview();
+        if (customer.getState() != Customer.State.LEAVING || stars < 1 || stars > 5) return;
+        String line = "★".repeat(stars) + "☆".repeat(5 - stars);
+        pose.pushPose();
+        pose.translate(0, customer.getBbHeight() + 0.75, 0);
+        pose.mulPose(entityRenderDispatcher.cameraOrientation());
+        pose.scale(NAME_SCALE, -NAME_SCALE, NAME_SCALE);
+        getFont().drawInBatch(line, -getFont().width(line) / 2f, 0, NAME_COLOR, false,
+                pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
+        pose.popPose();
     }
 
     private static final ResourceLocation BUBBLE = ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "textures/entity/order_bubble.png");

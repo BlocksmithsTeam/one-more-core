@@ -399,7 +399,7 @@ public final class MoneyGameTests {
         call(Restaurant.class, r, "recordDish", new Class<?>[] {ItemStack.class}, new ItemStack(Items.BREAD));
         int day = r.day();
         call(Restaurant.class, r, "endDay", new Class<?>[] {ServerLevel.class, boolean.class}, helper.getLevel(), true);
-        DaySummary expected = new DaySummary(day, 120, 17, 9, 3, 2, "minecraft:bread", 1, 44);
+        DaySummary expected = new DaySummary(day, 120, 17, 9, 3, 2, "minecraft:bread", 1, 44, 0, 3);
         helper.assertValueEqual(r.lastSummary(), expected, "Failed day snapshot uses authoritative counters");
         helper.assertValueEqual(r.lastSummary().net(), 128L, "Net is prices plus tips minus actual penalties");
         helper.assertValueEqual(r.day(), day, "Failed day does not advance");
@@ -413,13 +413,13 @@ public final class MoneyGameTests {
     public static void daySummaryCodecIsBounded(GameTestHelper helper) {
         var buffer = io.netty.buffer.Unpooled.buffer();
         try {
-            DaySummary expected = new DaySummary(4, Integer.MAX_VALUE - 20L, 20, 500, 7, 3, "minecraft:bread", 6, 42);
+            DaySummary expected = new DaySummary(4, Integer.MAX_VALUE - 20L, 20, 500, 7, 3, "minecraft:bread", 6, 42, 2.5f, 3.75f);
             DaySummary.CODEC.encode(buffer, expected);
             helper.assertValueEqual(DaySummary.CODEC.decode(buffer), expected, "All fields round trip");
             buffer.clear();
             boolean rejected = false;
             try {
-                DaySummary.CODEC.encode(buffer, new DaySummary(1, 0, 0, 0, 0, 0, "a".repeat(257), 0, 0));
+                DaySummary.CODEC.encode(buffer, new DaySummary(1, 0, 0, 0, 0, 0, "a".repeat(257), 0, 0, 0, 3));
             } catch (io.netty.handler.codec.EncoderException expectedError) {
                 rejected = true;
             }
@@ -475,9 +475,136 @@ public final class MoneyGameTests {
             Object party = serveBread(helper, r, 10, true);
             call(PARTY, party, "settle", new Class<?>[] {Restaurant.class, boolean.class}, r, false);
             helper.assertTrue(!r.isOpen(), "Lost customer limit closes the restaurant");
-            helper.assertValueEqual(r.lastSummary(), new DaySummary(r.day(), 0, 0, 7, 0, 1, "minecraft:bread", 1, 13),
+            helper.assertValueEqual(r.lastSummary(), new DaySummary(r.day(), 0, 0, 7, 0, 1, "minecraft:bread", 1, 13, 1, 1),
                     "Lost customer limit builds the summary after charging the penalty");
         }));
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    @SuppressWarnings("unchecked")
+    public static void reviewsRewardFastServiceOncePerParty(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        withConfig("REVIEWS", true, () -> withConfig("DIRT_ENABLED", false, () -> {
+            for (float patience : new float[] {1, 0.25f}) {
+                Object party = serveBread(helper, r, 10, false, patience);
+                Customer member = ((List<Customer>) read(PARTY, party, "members")).getFirst();
+                write(Customer.class, member, "timer", ((ConfigValue<Integer>) read(Config.class, null, "EAT_TICKS")).get() + 1);
+                call(PARTY, party, "tick", new Class<?>[] {Restaurant.class}, r);
+                helper.assertValueEqual(member.getReview(), patience == 1 ? 5 : 2, "Service speed determines departure stars");
+                helper.assertValueEqual(member.getState(), Customer.State.LEAVING, "Review appears on departure");
+                call(PARTY, party, "settle", new Class<?>[] {Restaurant.class, boolean.class}, r, true);
+            }
+            helper.assertValueEqual(save(r).getIntArray("reviews").length, 2, "One review per party despite repeated settlement");
+            helper.assertValueEqual(summary(r).reviewAverage(), 3.5f, "Today's average includes both parties");
+        }));
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    @SuppressWarnings("unchecked")
+    public static void reviewsUseWrongDishesDirtAndDecor(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        withConfig("REVIEWS", true, () -> withConfig("WRONG_PENALTY", 0, () -> {
+            for (int scenario = 0; scenario < 4; scenario++) {
+                dirt(helper, r, helper.absolutePos(TABLE), 0);
+                Map<String, Integer> upgrades = (Map<String, Integer>) read(Restaurant.class, r, "upgrades");
+                upgrades.put("decor", scenario == 3 ? 3 : 0);
+                Object party = serveBread(helper, r, 10, true, 0.75f);
+                Customer member = ((List<Customer>) read(PARTY, party, "members")).getFirst();
+                TestPlayer player = GameTestSupport.player(helper);
+                if (scenario >= 1) {
+                    GameTestSupport.give(player, new ItemStack(Items.STICK));
+                    for (int i = 0; i < 2; i++) call(Customer.class, member, "mobInteract",
+                            new Class<?>[] {Player.class, InteractionHand.class}, player, InteractionHand.MAIN_HAND);
+                }
+                if (scenario >= 2) dirt(helper, r, helper.absolutePos(TABLE), com.onemorestudios.onemorecore.Dirt.FULL);
+                ItemStack tray = new ItemStack(OneMoreCore.TRAY_ITEM.get());
+                tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.CARROT))));
+                helper.assertTrue(member.deliver(player, tray), "The party completes its correct order");
+                call(PARTY, party, "settle", new Class<?>[] {Restaurant.class, boolean.class}, r, true);
+                helper.assertValueEqual(member.getReview(), new int[] {4, 3, 2, 3}[scenario],
+                        "Wrong attempts and existing dirt lower stars; decor supplies a small bonus");
+            }
+        }));
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    @SuppressWarnings("unchecked")
+    public static void reviewsOffPreservesHistoryWithoutNewReviews(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        call(Restaurant.class, r, "recordReview", new Class<?>[] {int.class}, 5);
+        withConfig("REVIEWS", false, () -> {
+            Object party = serveBread(helper, r, 10, false);
+            call(PARTY, party, "settle", new Class<?>[] {Restaurant.class, boolean.class}, r, true);
+            Customer member = ((List<Customer>) read(PARTY, party, "members")).getFirst();
+            helper.assertValueEqual(member.getReview(), 0, "Disabled reviews show no stars");
+            helper.assertValueEqual(save(r).getIntArray("reviews").length, 1, "Disabled reviews retain the saved history");
+            helper.assertValueEqual(summary(r).rating(), 0f, "Disabled reviews hide summary rating");
+            helper.assertValueEqual(call(Restaurant.class, r, "reviewIntervalFactor", new Class<?>[0]), 1.0,
+                    "Disabled reviews preserve normal spawn timing");
+        });
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void unservedPartyReviewsOneStar(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        withConfig("REVIEWS", true, () -> withConfig("MAX_LOST_PER_DAY", 0, () -> {
+            Object party = serveBread(helper, r, 10, true);
+            write(PARTY, party, "patience", 1);
+            call(PARTY, party, "tick", new Class<?>[] {Restaurant.class}, r);
+            helper.assertValueEqual(r.rating(), 1f, "A party leaving without its complete order gives one star");
+            helper.assertValueEqual(summary(r).reviewAverage(), 1f, "Unserved review enters the daily summary");
+        }));
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void reviewsKeepLastTwentyAndSurviveSaving(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        for (int i = 0; i < 30; i++) call(Restaurant.class, r, "recordReview", new Class<?>[] {int.class}, i < 10 ? 1 : 2 + (i % 2) * 2);
+        helper.assertValueEqual(r.rating(), 3f, "Only the last twenty reviews count");
+        write(Restaurant.class, r, "lastSummary", summary(r));
+        CompoundTag saved = save(r);
+        helper.assertValueEqual(saved.getIntArray("reviews").length, 20, "History is bounded");
+        Restaurant restored = reload(helper, r, saved);
+        helper.assertValueEqual(restored.rating(), 3f, "Rating survives saving");
+        helper.assertValueEqual(restored.lastSummary(), r.lastSummary(), "Yesterday's review average and rating survive saving");
+        helper.assertValueEqual(summary(restored), summary(r), "Daily review counters survive saving");
+        call(Restaurant.class, restored, "recordReview", new Class<?>[] {int.class}, 5);
+        helper.assertValueEqual(restored.rating(), 3.15f, "Reload preserves review order for eviction");
+        call(Restaurant.class, restored, "startDay", new Class<?>[] {ServerLevel.class}, helper.getLevel());
+        helper.assertValueEqual(summary(restored).reviewAverage(), 0f, "Starting a day resets only today's average");
+        helper.assertValueEqual(restored.rating(), 3.15f, "Starting a day preserves rating");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void reviewRatingScalesActualSpawnInterval(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        withConfig("REVIEWS", true, () -> {
+            for (int day : new int[] {1, 100}) {
+                write(Restaurant.class, r, "day", day);
+                for (int stars : new int[] {1, 3, 5}) {
+                    for (int i = 0; i < 20; i++) call(Restaurant.class, r, "recordReview", new Class<?>[] {int.class}, stars);
+                    double factor = (double) call(Restaurant.class, r, "reviewIntervalFactor", new Class<?>[0]);
+                    helper.assertTrue(factor >= 0.7 && factor <= 1.3, "Rating factor stays within its clamp");
+                    for (int seed = 0; seed < 16; seed++) {
+                        helper.getLevel().random.setSeed(seed);
+                        int rated = (int) call(Restaurant.class, r, "nextInterval", new Class<?>[] {ServerLevel.class}, helper.getLevel());
+                        int sampleSeed = seed;
+                        withConfig("REVIEWS", false, () -> {
+                            helper.getLevel().random.setSeed(sampleSeed);
+                            int base = (int) call(Restaurant.class, r, "nextInterval", new Class<?>[] {ServerLevel.class}, helper.getLevel());
+                            helper.assertTrue(stars == 1 ? rated > base : stars == 5 ? rated < base : rated == base,
+                                    "The same spawn timing sample follows the rating");
+                        });
+                    }
+                }
+            }
+        });
         helper.succeed();
     }
 
@@ -513,6 +640,10 @@ public final class MoneyGameTests {
     }
 
     private static Object serveBread(GameTestHelper helper, Restaurant r, int price, boolean partial) {
+        return serveBread(helper, r, price, partial, 1);
+    }
+
+    private static Object serveBread(GameTestHelper helper, Restaurant r, int price, boolean partial, float patienceLeft) {
         Object party;
         try {
             Constructor<?> constructor = PARTY.getDeclaredConstructor();
@@ -529,6 +660,7 @@ public final class MoneyGameTests {
         call(Customer.class, customer, "sit", new Class<?>[0]);
         TestPlayer player = GameTestSupport.player(helper);
         call(Customer.class, customer, "mobInteract", new Class<?>[] {Player.class, InteractionHand.class}, player, InteractionHand.MAIN_HAND);
+        write(PARTY, party, "patience", Math.max(1, Math.round((int) read(PARTY, party, "patienceMax") * patienceLeft)));
         ItemStack tray = new ItemStack(OneMoreCore.TRAY_ITEM.get());
         tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.BREAD))));
         // The bread lies turned in a corner of the tray: it reaches the table with that pose.

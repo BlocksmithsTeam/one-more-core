@@ -9,7 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 
 /** Immutable server snapshot. Dish IDs carry no item components and are limited to 256 characters. */
 public record DaySummary(int day, long income, long tips, long penalties, int served, int lost,
-        String bestDish, int bestCount, int register) {
+        String bestDish, int bestCount, int register, float reviewAverage, float rating) {
     public long net() { return income + tips - penalties; }
 
     public static final StreamCodec<ByteBuf, DaySummary> CODEC = StreamCodec.of((b, s) -> {
@@ -17,14 +17,16 @@ public record DaySummary(int day, long income, long tips, long penalties, int se
         b.writeInt(s.served); b.writeInt(s.lost);
         ByteBufCodecs.stringUtf8(256).encode(b, s.bestDish);
         b.writeInt(s.bestCount); b.writeInt(s.register);
+        b.writeFloat(s.reviewAverage); b.writeFloat(s.rating);
     }, b -> new DaySummary(b.readInt(), b.readLong(), b.readLong(), b.readLong(), b.readInt(), b.readInt(),
-            ByteBufCodecs.stringUtf8(256).decode(b), b.readInt(), b.readInt()));
+            ByteBufCodecs.stringUtf8(256).decode(b), b.readInt(), b.readInt(), b.readFloat(), b.readFloat()));
 
     CompoundTag save() {
         CompoundTag t = new CompoundTag();
         t.putInt("day", day); t.putLong("income", income); t.putLong("tips", tips); t.putLong("penalties", penalties);
         t.putInt("served", served); t.putInt("lost", lost); t.putString("bestDish", bestDish);
         t.putInt("bestCount", bestCount); t.putInt("register", register);
+        t.putFloat("reviewAverage", reviewAverage); t.putFloat("rating", rating);
         return t;
     }
 
@@ -33,7 +35,12 @@ public record DaySummary(int day, long income, long tips, long penalties, int se
         if (dish.length() > 256 || ResourceLocation.tryParse(dish) == null) dish = "";
         return new DaySummary(Math.max(1, t.getInt("day")), Math.max(0, t.getLong("income")), Math.max(0, t.getLong("tips")),
                 Math.max(0, t.getLong("penalties")), Math.max(0, t.getInt("served")), Math.max(0, t.getInt("lost")),
-                dish, Math.max(0, t.getInt("bestCount")), Math.max(0, t.getInt("register")));
+                dish, Math.max(0, t.getInt("bestCount")), Math.max(0, t.getInt("register")),
+                savedRating(t.getFloat("reviewAverage")), savedRating(t.getFloat("rating")));
+    }
+
+    private static float savedRating(float value) {
+        return Float.isFinite(value) && value >= 1 && value <= 5 ? value : 0;
     }
 
     public record Open(DaySummary summary) implements CustomPacketPayload {
