@@ -76,6 +76,7 @@ public class ComputerScreen extends Screen {
     private static final float DESKTOP_REFERENCE = 560, PAD = 16, ICON_CELL = 72, ICON_GAP = 6, ICON_TILE = 44, LABEL_GAP = 4,
             TILE_RADIUS = 7 / 32f;
     private Computer.State state;
+    private boolean managerYesterday;
     /** 0: no window; otherwise one of Computer.APP_*. */
     private int app;
     /** In the menu app: the picker that adds a food. */
@@ -1527,6 +1528,19 @@ public class ComputerScreen extends Screen {
 
     /** What is set, with a mark each, and the button of the free camera. */
     private void drawManager(GuiGraphics g, int mouseX, int mouseY) {
+        if (managerYesterday && state.yesterday().isPresent()) {
+            button(g, cx, cy + 2, cw, 20, Component.translatable("onemorecore.summary.back"),
+                    AMBER, AMBER_HOVER, true, mouseX, mouseY, () -> managerYesterday = false);
+            float scale = Math.min(1f, Math.max(0, ch - 28) / 128f);
+            if (scale > 0) {
+                g.pose().pushPose();
+                g.pose().translate(cx + 6, cy + 28, 0);
+                g.pose().scale(scale, scale, 1);
+                DaySummaryScreen.draw(g, font, state.yesterday().get(), 0, 0, (int) ((cw - 12) / scale));
+                g.pose().popPose();
+            }
+            return;
+        }
         boolean[] set = {!state.area().isEmpty(), state.spawn().isPresent(), state.delivery().isPresent()};
         String[] keys = {"free.area", "free.spawn", "free.delivery"};
         int[] colors = {0xFF4DE066, 0xFF4D99FF, 0xFFFF8C1A};
@@ -1546,7 +1560,13 @@ public class ComputerScreen extends Screen {
         String count = (tables - off) + "/" + tables;
         g.drawString(font, count, cx + cw - 8 - font.width(count), y + 6, DIM, false);
         y += 27;
-        button(g, cx, y, cw, 20, text("edit_places"), AMBER, AMBER_HOVER, pendingCheckout == 0, mouseX, mouseY, ComputerCamera::startFree);
+        int editWidth = state.yesterday().isPresent() ? (cw - 4) / 2 : cw;
+        button(g, cx, y, editWidth, 20, text("edit_places"), AMBER, AMBER_HOVER, pendingCheckout == 0, mouseX, mouseY, ComputerCamera::startFree);
+        if (state.yesterday().isPresent()) {
+            button(g, cx + editWidth + 4, y, cw - editWidth - 4, 20, Component.translatable("onemorecore.summary.yesterday"),
+                    AMBER, AMBER_HOVER, true, mouseX, mouseY,
+                    () -> managerYesterday = true);
+        }
     }
 
     /** True while the restaurant of this computer runs a day, from the status the HUD receives. */

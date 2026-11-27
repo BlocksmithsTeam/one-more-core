@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.onemorestudios.onemorecore.Config;
+import com.onemorestudios.onemorecore.DaySummary;
 import com.onemorestudios.onemorecore.Courier;
 import com.onemorestudios.onemorecore.Customer;
 import com.onemorestudios.onemorecore.OneMoreCore;
@@ -28,6 +29,8 @@ import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ChunkTrackingView;
 import net.minecraft.server.level.PlayerMap;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
@@ -320,6 +323,166 @@ public final class MoneyGameTests {
                 helper.succeed();
             });
         });
+    }
+
+    @GameTest(template = "empty")
+    public static void daySummarySeparatesPriceAndTip(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        withConfig("MAX_TIP", 25, () -> withConfig("COLLECT_PAYMENTS", false, () -> {
+            Object party = serveBread(helper, r, 100, false);
+            int bill = (int) read(PARTY, party, "bill");
+            helper.assertTrue(bill > 100, "The fixture includes a tip");
+            call(PARTY, party, "settle", new Class<?>[] {Restaurant.class, boolean.class}, r, true);
+            DaySummary summary = summary(r);
+            helper.assertValueEqual(summary.income(), 100L, "Dish price excludes the tip");
+            helper.assertValueEqual(summary.tips(), (long) bill - 100, "Tip matches the paid bill");
+            helper.assertValueEqual(summary.served(), 1, "Served customers");
+            helper.assertValueEqual(summary.register(), bill, "Direct payment balance");
+            call(PARTY, party, "settle", new Class<?>[] {Restaurant.class, boolean.class}, r, true);
+            helper.assertValueEqual(summary(r), summary, "Repeated settlement changes no counters");
+        }));
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void daySummaryCountsServedDishes(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        serveBread(helper, r, 0, true);
+        serveBread(helper, r, 20, true);
+        call(Restaurant.class, r, "recordDish", new Class<?>[] {ItemStack.class}, new ItemStack(Items.CARROT));
+        DaySummary summary = summary(r);
+        helper.assertValueEqual(summary.bestDish(), "minecraft:bread", "Actual served item wins");
+        helper.assertValueEqual(summary.bestCount(), 2, "Free and partial-order dishes count");
+        call(Restaurant.class, r, "recordDish", new Class<?>[] {ItemStack.class}, new ItemStack(Items.CARROT));
+        helper.assertValueEqual(summary(r).bestDish(), "minecraft:bread", "Ties use stable item ID order");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void daySummaryPersistsAndResets(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        Object party = serveBread(helper, r, 100, false);
+        call(PARTY, party, "settle", new Class<?>[] {Restaurant.class, boolean.class}, r, true);
+        write(Restaurant.class, r, "lost", 2);
+        write(Restaurant.class, r, "penalties", 7L);
+        DaySummary current = summary(r);
+        Restaurant restored = reload(helper, r, save(r));
+        helper.assertValueEqual(summary(restored), current, "Current counters survive saving");
+        write(Restaurant.class, restored, "open", true);
+        call(Restaurant.class, restored, "endDay", new Class<?>[] {ServerLevel.class, boolean.class}, helper.getLevel(), false);
+        helper.assertValueEqual(restored.lastSummary(), current, "Day end stores the snapshot before advancing the day");
+        Restaurant again = reload(helper, restored, save(restored));
+        helper.assertValueEqual(again.lastSummary(), current, "Last summary survives saving");
+        call(Restaurant.class, again, "startDay", new Class<?>[] {ServerLevel.class}, helper.getLevel());
+        DaySummary next = summary(again);
+        helper.assertValueEqual(next.income(), 0L, "Next day income resets");
+        helper.assertValueEqual(next.tips(), 0L, "Next day tips reset");
+        helper.assertValueEqual(next.served(), 0, "Next day served count resets");
+        helper.assertValueEqual(next.lost(), 0, "Next day lost count resets");
+        helper.assertValueEqual(next.penalties(), 0L, "Next day penalties reset");
+        helper.assertValueEqual(next.bestCount(), 0, "Next day dish counts reset");
+        helper.assertValueEqual(next.bestDish(), "", "An empty day has no best dish");
+        helper.assertValueEqual(again.lastSummary(), current, "Yesterday remains available");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void daySummaryEndDayUsesServerCounters(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        write(Restaurant.class, r, "open", true);
+        write(Restaurant.class, r, "earned", 137);
+        write(Restaurant.class, r, "tips", 17L);
+        write(Restaurant.class, r, "penalties", 9L);
+        write(Restaurant.class, r, "served", 3);
+        write(Restaurant.class, r, "lost", 2);
+        GameTestSupport.setRegister(r, 44);
+        call(Restaurant.class, r, "recordDish", new Class<?>[] {ItemStack.class}, new ItemStack(Items.BREAD));
+        int day = r.day();
+        call(Restaurant.class, r, "endDay", new Class<?>[] {ServerLevel.class, boolean.class}, helper.getLevel(), true);
+        DaySummary expected = new DaySummary(day, 120, 17, 9, 3, 2, "minecraft:bread", 1, 44);
+        helper.assertValueEqual(r.lastSummary(), expected, "Failed day snapshot uses authoritative counters");
+        helper.assertValueEqual(r.lastSummary().net(), 128L, "Net is prices plus tips minus actual penalties");
+        helper.assertValueEqual(r.day(), day, "Failed day does not advance");
+        write(Restaurant.class, r, "earned", 999);
+        call(Restaurant.class, r, "endDay", new Class<?>[] {ServerLevel.class, boolean.class}, helper.getLevel(), false);
+        helper.assertValueEqual(r.lastSummary(), expected, "Repeated day end does not replace the summary");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void daySummaryCodecIsBounded(GameTestHelper helper) {
+        var buffer = io.netty.buffer.Unpooled.buffer();
+        try {
+            DaySummary expected = new DaySummary(4, Integer.MAX_VALUE - 20L, 20, 500, 7, 3, "minecraft:bread", 6, 42);
+            DaySummary.CODEC.encode(buffer, expected);
+            helper.assertValueEqual(DaySummary.CODEC.decode(buffer), expected, "All fields round trip");
+            buffer.clear();
+            boolean rejected = false;
+            try {
+                DaySummary.CODEC.encode(buffer, new DaySummary(1, 0, 0, 0, 0, 0, "a".repeat(257), 0, 0));
+            } catch (io.netty.handler.codec.EncoderException expectedError) {
+                rejected = true;
+            }
+            helper.assertTrue(rejected, "Dish IDs longer than 256 characters are rejected");
+        } finally {
+            buffer.release();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    @SuppressWarnings("unchecked")
+    public static void daySummaryNotifiesEachRestaurantPlayerOnce(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        TestPlayer inside = GameTestSupport.player(helper);
+        TestPlayer signUser = GameTestSupport.player(helper);
+        TestPlayer outsider = GameTestSupport.player(helper);
+        signUser.setPos(r.sign.getX() + 20, r.sign.getY(), r.sign.getZ());
+        outsider.setPos(r.sign.getX() + 30, r.sign.getY(), r.sign.getZ());
+        // getPlayers() is an unmodifiable view; register fixtures in its backing list.
+        var online = (List<ServerPlayer>) read(PlayerList.class, helper.getLevel().getServer().getPlayerList(), "players");
+        online.addAll(List.of(inside, signUser, outsider));
+        try {
+            withConfig("DAY_SUMMARY", true, () -> {
+                write(Restaurant.class, r, "readyInitiator", signUser.getUUID());
+                call(Restaurant.class, r, "startDay", new Class<?>[] {ServerLevel.class}, helper.getLevel());
+                call(Restaurant.class, r, "endDay", new Class<?>[] {ServerLevel.class, boolean.class}, helper.getLevel(), false);
+                call(Restaurant.class, r, "endDay", new Class<?>[] {ServerLevel.class, boolean.class}, helper.getLevel(), true);
+                helper.assertValueEqual(inside.packets.stream().filter(DaySummary.Open.class::isInstance).count(), 1L, "Area player receives one summary");
+                helper.assertValueEqual(signUser.packets.stream().filter(DaySummary.Open.class::isInstance).count(), 1L, "Outside sign user receives one summary");
+                helper.assertValueEqual(outsider.packets.stream().filter(DaySummary.Open.class::isInstance).count(), 0L, "Unrelated player receives no summary");
+            });
+            inside.packets.clear();
+            signUser.packets.clear();
+            withConfig("DAY_SUMMARY", false, () -> {
+                call(Restaurant.class, r, "startDay", new Class<?>[] {ServerLevel.class}, helper.getLevel());
+                call(Restaurant.class, r, "endDay", new Class<?>[] {ServerLevel.class, boolean.class}, helper.getLevel(), false);
+                helper.assertTrue(inside.packets.stream().noneMatch(DaySummary.Open.class::isInstance), "Config disables the popup");
+                helper.assertTrue(r.lastSummary() != null, "Config does not discard the saved summary");
+            });
+        } finally {
+            online.removeAll(List.of(inside, signUser, outsider));
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void daySummaryLostLimitEndsDay(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        write(Restaurant.class, r, "open", true);
+        GameTestSupport.setRegister(r, 20);
+        withConfig("MAX_LOST_PER_DAY", 1, () -> withConfig("LOST_CUSTOMER_PENALTY", 7, () -> {
+            Object party = serveBread(helper, r, 10, true);
+            call(PARTY, party, "settle", new Class<?>[] {Restaurant.class, boolean.class}, r, false);
+            helper.assertTrue(!r.isOpen(), "Lost customer limit closes the restaurant");
+            helper.assertValueEqual(r.lastSummary(), new DaySummary(r.day(), 0, 0, 7, 0, 1, "minecraft:bread", 1, 13),
+                    "Lost customer limit builds the summary after charging the penalty");
+        }));
+        helper.succeed();
+    }
+
+    private static DaySummary summary(Restaurant r) {
+        return (DaySummary) call(Restaurant.class, r, "daySummary", new Class<?>[0]);
     }
 
     private static Restaurant placeRestaurant(GameTestHelper helper) {
