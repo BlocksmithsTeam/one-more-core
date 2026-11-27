@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -31,8 +32,8 @@ import net.neoforged.neoforge.event.TagsUpdatedEvent;
  * What can be a dish: everything that is eaten or drunk (a food component, the eat or drink use, #c:foods, #c:drinks),
  * except raw purchases, ignored ingredients, harmful foods and the items in config/onemorecore/dish_blacklist.json.
  * That file is a list like JEI's blacklist: item ids
- * ("youkaisfeasts:soy_sauce_bottle") and item tags ("#c:buckets"); add to it at any time, it is read again on /reload and
- * when a world loads. A missing file is written with the sauces, buckets and thrown potions of the pack.
+ * ("youkaisfeasts:soy_sauce_bottle"), item tags ("#c:buckets") and id patterns ("*:raw_*"); add to it at any time, it is read again on /reload and
+ * when a world loads. A missing file is written with the pack defaults.
  */
 @EventBusSubscriber(modid = OneMoreCore.MODID)
 public final class DishBlacklist {
@@ -42,8 +43,15 @@ public final class DishBlacklist {
     private static final TagKey<Item> FOODS = ItemTags.create(ResourceLocation.parse("c:foods"));
     private static final TagKey<Item> DRINKS = ItemTags.create(ResourceLocation.parse("c:drinks"));
 
-    /** Eaten or drunk, but no dish: thrown potions, sauces and condiments, buckets of fruit. */
+    /** Eaten or drunk, but no dish: raw foods, intermediates, condiments and special consumables. */
     static final List<String> DEFAULTS = List.of(
+            "#c:foods/raw_meat", "#c:foods/raw_fish", "#c:foods/dough", "#c:dough", "#c:foods/food_poisoning",
+            "*:raw_*", "*:*_dough", "*:dough",
+            "farmersdelight:pie_crust", "farmersdelight:tomato_sauce", "farmersdelight:cabbage_leaf",
+            "youkaisfeasts:cucumber_slice", "youkaisfeasts:raisin", "kaleidoscope_grilling:pepper_honey",
+            "refurbished_furniture:cheese", "refurbished_furniture:sweet_berry_jam", "refurbished_furniture:glow_berry_jam",
+            "brewinandchewin:sweet_berry_jam", "brewinandchewin:glow_berry_marmalade", "brewinandchewin:apple_jelly",
+            "minecraft:golden_apple", "minecraft:golden_carrot", "yuushya:beef",
             "minecraft:splash_potion", "minecraft:lingering_potion", "minecraft:ominous_bottle",
             "youkaisfeasts:soy_sauce_bottle", "youkaisfeasts:soy_sauce_flask",
             "youkaisfeasts:mayonnaise_bottle", "youkaisfeasts:mayonnaise_flask",
@@ -53,23 +61,31 @@ public final class DishBlacklist {
 
     private static volatile Set<ResourceLocation> items;
     private static volatile List<TagKey<Item>> tags = List.of();
+    private static volatile List<Pattern> patterns = List.of();
 
     /** Whether an item can be a dish on the menu. */
     public static boolean isDish(ItemStack stack) {
         return isDishCandidate(stack) && !Ingredients.current().excludesDish(Ingredients.id(stack));
     }
 
-    /** Recipe discovery must not consult the previous ingredient index while rebuilding it. */
+    /** Dish filtering must not consult the previous ingredient index while rebuilding it. */
     static boolean isDishCandidate(ItemStack stack) {
-        if (stack.isEmpty() || blocked(stack) || Ingredients.harmful(stack)) return false;
+        return isFoodCandidate(stack) && !blocked(stack);
+    }
+
+    /** Blacklisted foods still participate in ingredient recipe chains. */
+    static boolean isFoodCandidate(ItemStack stack) {
+        if (stack.isEmpty() || Ingredients.harmful(stack)) return false;
         UseAnim use = stack.getUseAnimation();
         return stack.has(DataComponents.FOOD) || use == UseAnim.EAT || use == UseAnim.DRINK || stack.is(FOODS) || stack.is(DRINKS);
     }
 
-    /** Whether the blacklist names the item, by its id or one of its tags. */
+    /** Whether the blacklist names the item, by its id, an id pattern or one of its tags. */
     public static boolean blocked(ItemStack stack) {
         if (items == null) reload();
-        if (items.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()))) return true;
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (items.contains(id)) return true;
+        for (Pattern pattern : patterns) if (pattern.matcher(id.toString()).matches()) return true;
         for (TagKey<Item> tag : tags) if (stack.is(tag)) return true;
         return false;
     }
@@ -102,25 +118,31 @@ public final class DishBlacklist {
         List<String> entries = new ArrayList<>();
         for (var e : JsonParser.parseString(json).getAsJsonArray()) {
             if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) entries.add(e.getAsString());
-            else LogUtils.getLogger().warn("{}: {} is no item id or #tag", FILE, e);
+            else LogUtils.getLogger().warn("{}: {} is no item id, #tag or id pattern", FILE, e);
         }
         return entries;
     }
 
-    /** Uses these entries: "namespace:item" or "#namespace:tag". */
+    /** Uses item ids, #tags and id patterns where * matches any characters in the complete id. */
     public static void set(List<String> entries) {
         Set<ResourceLocation> ids = new HashSet<>();
         List<TagKey<Item>> tagKeys = new ArrayList<>();
+        List<Pattern> idPatterns = new ArrayList<>();
         for (String entry : entries) {
             String s = entry.trim();
-            ResourceLocation id = ResourceLocation.tryParse(s.startsWith("#") ? s.substring(1) : s);
+            boolean pattern = !s.startsWith("#") && s.contains("*");
+            ResourceLocation id = ResourceLocation.tryParse(s.startsWith("#") ? s.substring(1) : s.replace('*', 'a'));
             if (id == null) {
-                LogUtils.getLogger().warn("{}: '{}' is no item id or #tag", FILE, entry);
+                LogUtils.getLogger().warn("{}: '{}' is no item id, #tag or id pattern", FILE, entry);
                 continue;
             }
             if (s.startsWith("#")) tagKeys.add(TagKey.create(Registries.ITEM, id));
-            else ids.add(id);
+            else if (pattern) {
+                String glob = s.contains(":") ? s : "minecraft:" + s;
+                idPatterns.add(Pattern.compile(Pattern.quote(glob).replace("*", "\\E.*\\Q")));
+            } else ids.add(id);
         }
+        patterns = List.copyOf(idPatterns);
         tags = List.copyOf(tagKeys);
         items = Set.copyOf(ids);
     }

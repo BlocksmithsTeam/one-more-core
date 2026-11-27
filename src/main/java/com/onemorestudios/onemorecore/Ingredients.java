@@ -71,7 +71,7 @@ final class Ingredients {
                     continue;
                 }
                 var alternatives = recipes.computeIfAbsent(id, key -> new ArrayList<>());
-                if (result != null && DishBlacklist.isDishCandidate(result)) foodResults.putIfAbsent(id, result.copyWithCount(1));
+                if (result != null && DishBlacklist.isFoodCandidate(result)) foodResults.putIfAbsent(id, result.copyWithCount(1));
                 List<Set<ResourceLocation>> slots = new ArrayList<>(recipe.getIngredients().stream()
                         // An empty ingredient ("[]", Brewin's fermenting) is no slot.
                         .filter(ingredient -> !ingredient.isEmpty())
@@ -510,8 +510,7 @@ final class Ingredients {
             if (known != null) return known;
             available.put(key, false);
             if (portions.containsKey(item)) {
-                boolean result = portions.get(item).stream().anyMatch(parent -> free(parent) || unlocked.contains(parent)
-                        || (!config.ignore().contains(parent) && dish(parent)));
+                boolean result = portions.get(item).stream().anyMatch(parent -> item(parent, DEPTH));
                 available.put(key, result);
                 return result;
             }
