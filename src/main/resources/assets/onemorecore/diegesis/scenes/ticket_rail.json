@@ -11,9 +11,6 @@
       14
     ],
     "fov": 34,
-    "neighbors": {
-      "enabled": false
-    },
     "keep_width": 1.7777778,
     "interactive_at": 0.6
   },

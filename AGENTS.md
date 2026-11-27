@@ -35,6 +35,7 @@ change how one of them works, change its lines here in the same commit.
 - **One restaurant per screen**: `Restaurant.setScreen` takes the screen from every other restaurant (`Restaurants.claimScreen`),
   and a removed restaurant tells the clients to forget its pictures. Two owners drew two pictures (menu and orders) on one
   screen. Test: `FixesGameTests.screenBelongsToOneRestaurant`.
+- **Station neighbours**: every scene keeps Diegesis `camera.neighbors` on (the default, as in Hands On), so the cursor at a screen edge or A/D/W/S flies to the station next to it, ours or Hands On's.
 - **Screen close-up** (Diegesis): a click on any cell opens it (the upper cell through `DiegesisHook.register`); a long screen
   shows a window of at most 2.4:1 from its start (`ScreenStationBehavior`); a movement key or an arrow moves the window a whole
   window over (`ScreenRenderer.panX/panY`), and at the end of the picture the key goes on to Diegesis. The scene keeps the blocks
