@@ -68,6 +68,41 @@ public class Customer extends PathfinderMob {
     private static final EntityDataAccessor<Integer> REVIEW = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Byte> GUEST = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.BYTE);
 
+    private static final EntityDataAccessor<String> PREFERENCE = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.STRING);
+
+    static String rollPreference(net.minecraft.util.RandomSource random) {
+        var entries = Config.PREFERENCES.get();
+        if (entries.isEmpty()) return "";
+        double roll = random.nextDouble();
+        for (String entry : entries) {
+            int split = entry.indexOf('=');
+            if ((roll -= Double.parseDouble(entry.substring(split + 1))) < 0) return entry.substring(0, split);
+        }
+        return "";
+    }
+
+    static boolean prefers(String preference, ItemStack stack) {
+        return !preference.isEmpty() && stack.is(net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.ITEM,
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(OneMoreCore.MODID, "preferences/" + preference)));
+    }
+
+    public String getPreference() { return entityData.get(PREFERENCE); }
+
+    @Override
+    public void addAdditionalSaveData(net.minecraft.nbt.CompoundTag tag) {
+        super.addAdditionalSaveData(tag);
+        tag.putString("Preference", getPreference());
+    }
+
+    @Override
+    public void readAdditionalSaveData(net.minecraft.nbt.CompoundTag tag) {
+        super.readAdditionalSaveData(tag);
+        String saved = tag.getString("Preference");
+        boolean valid = saved.matches("[a-z0-9_]+") && Config.PREFERENCES.get().stream().anyMatch(e -> e.startsWith(saved + "="));
+        entityData.set(PREFERENCE, valid ? saved : "");
+        if (party != null) party.preference = getPreference();
+    }
+
     // A customer that stands still this long, or walks longer than the timeout, is moved to its target.
     private static final int WALK_TIMEOUT = 600, STUCK_TICKS = 40;
     /** A customer stuck this close to its target (blocks) goes there. */
@@ -84,7 +119,7 @@ public class Customer extends PathfinderMob {
     private int noProgress;
     private long bill;
     /** Price times tipPercent of the served lines: the base of the tip. */
-    private long tipBase;
+    private long tipBase, preferredTipBase;
     /** Served lines on a plate and in a glass; dirty after eating. Server only. */
     /** Ids of the dishes that this customer ordered, for the favourites of the restaurant. Server only. */
     final List<String> dishIds = new ArrayList<>();
@@ -145,6 +180,7 @@ public class Customer extends PathfinderMob {
         }
         /** What kind of guests the party is; it changes the patience and the tip. */
         Type type = Type.NORMAL;
+        String preference = "";
 
         void settle(Restaurant restaurant, boolean paid) {
             if (settled) return;
@@ -267,6 +303,7 @@ public class Customer extends PathfinderMob {
         this.restaurant = restaurant;
         getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(Config.WALK_SPEED.get());
         this.party = party;
+        entityData.set(PREFERENCE, party.preference);
         party.members.add(this);
         this.seat = seat.seat();
         wanted.addAll(order);
@@ -294,6 +331,7 @@ public class Customer extends PathfinderMob {
         builder.define(SKIN_NAME, "");
         builder.define(GUEST, (byte) 0);
         builder.define(REVIEW, 0);
+        builder.define(PREFERENCE, "");
     }
 
     @Override
@@ -503,6 +541,7 @@ public class Customer extends PathfinderMob {
         BlockPos surface = party.members.get(0).getSurface();
         if (surface != null && level() instanceof ServerLevel level) restaurant.recordServed(level, party, surface, line.price());
         tipBase += (long) line.price() * line.tipPercent();
+        if (prefers(getPreference(), held)) preferredTipBase += (long) line.price() * line.tipPercent();
         List<ItemStack> served = new ArrayList<>(getServed());
         // The main dish goes first: it stands big right in front of the guest, the rest smaller beside it.
         boolean main = restaurant != null && Menu.entries.stream().anyMatch(e -> "main".equals(restaurant.kind(e))
@@ -527,6 +566,14 @@ public class Customer extends PathfinderMob {
             java.math.BigInteger tip = java.math.BigInteger.valueOf(base).multiply(java.math.BigInteger.valueOf((long) Config.MAX_TIP.get() * party.type.tip))
                     .multiply(java.math.BigInteger.valueOf(Mth.clamp(party.patience, 0, party.patienceMax)))
                     .divide(java.math.BigInteger.valueOf(1_000_000L * party.patienceMax));
+            long preferred = party.members.stream().mapToLong(m -> m.preferredTipBase).sum();
+            if (preferred > 0 && base > 0) {
+                var weighted = java.math.BigDecimal.valueOf(base).add(java.math.BigDecimal.valueOf(preferred)
+                        .multiply(java.math.BigDecimal.valueOf(Config.PREFERENCE_TIP.get()).subtract(java.math.BigDecimal.ONE)));
+                tip = weighted.multiply(java.math.BigDecimal.valueOf((long) Config.MAX_TIP.get() * party.type.tip))
+                        .multiply(java.math.BigDecimal.valueOf(Mth.clamp(party.patience, 0, party.patienceMax)))
+                        .divide(java.math.BigDecimal.valueOf(1_000_000L * party.patienceMax), 0, java.math.RoundingMode.DOWN).toBigInteger();
+            }
             party.bill = (int) Math.min(Integer.MAX_VALUE, java.math.BigInteger.valueOf(price).add(tip).min(java.math.BigInteger.valueOf(Integer.MAX_VALUE)).longValue());
             party.members.forEach(m -> m.setState(State.EATING));
         }

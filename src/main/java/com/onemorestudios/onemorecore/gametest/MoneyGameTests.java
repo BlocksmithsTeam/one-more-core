@@ -612,6 +612,123 @@ public final class MoneyGameTests {
         return (DaySummary) call(Restaurant.class, r, "daySummary", new Class<?>[0]);
     }
 
+    @GameTest(template = "empty")
+    public static void preferenceDishPreferredWhenAvailable(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        GameTestSupport.setRegister(r, 10000);
+        GameTestSupport.unlock(helper, r, "wheat", "cocoa_beans");
+        List<com.onemorestudios.onemorecore.Menu.Entry> previous = com.onemorestudios.onemorecore.Menu.entries;
+        try {
+            com.onemorestudios.onemorecore.Menu.entries = List.of(
+                    new com.onemorestudios.onemorecore.Menu.Entry("preference_bread", new ItemStack(Items.BREAD), null, 2, false, "main"),
+                    new com.onemorestudios.onemorecore.Menu.Entry("preference_cookie", null, net.minecraft.tags.TagKey.create(
+                            net.minecraft.core.registries.Registries.ITEM, net.minecraft.resources.ResourceLocation.parse("onemorecore:preferences/test_choices")),
+                            2, false, "main"));
+            helper.assertTrue(r.orderable(r.dish("preference_cookie")), "The matching cookie is orderable");
+            for (int seed = 0; seed < 64; seed++) {
+                List<Customer.Line> order = preferenceOrder(r, seed, "test_sweet");
+                helper.assertTrue(order.stream().anyMatch(l -> l.stack().is(Items.COOKIE)), "An available matching dish is included");
+                helper.assertTrue(order.size() <= 3, "Preferences preserve tray capacity");
+                helper.assertTrue(order.stream().allMatch(l -> r.dishes().stream().anyMatch(e -> r.orderable(e)
+                        && (e.tag() != null ? l.stack().is(e.tag()) : ItemStack.isSameItem(e.stack(), l.stack())))),
+                        "Every preferred order line remains orderable");
+            }
+        } finally {
+            com.onemorestudios.onemorecore.Menu.entries = previous;
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void preferenceFallsBackWhenNothingMatches(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        GameTestSupport.setRegister(r, 10000);
+        GameTestSupport.unlock(helper, r, "wheat");
+        for (int seed = 0; seed < 64; seed++) {
+            List<Customer.Line> normal = preferenceOrder(r, seed, "");
+            for (String preference : List.of("test_sweet", "missing_tag")) {
+                List<Customer.Line> fallback = preferenceOrder(r, seed, preference);
+                helper.assertFalse(fallback.isEmpty(), "No match still gives an order");
+                helper.assertValueEqual(fallback.stream().map(l -> l.stack().getItem()).toList(),
+                        normal.stream().map(l -> l.stack().getItem()).toList(), "Fallback preserves the normal roll");
+                helper.assertTrue(fallback.stream().allMatch(l -> r.dishes().stream()
+                        .anyMatch(e -> r.orderable(e) && e.stack() != null && ItemStack.isSameItem(e.stack(), l.stack()))),
+                        "Fallback orders only available dishes");
+            }
+        }
+        helper.succeed();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Customer.Line> preferenceOrder(Restaurant r, int seed, String preference) {
+        return (List<Customer.Line>) call(Restaurant.class, r, "makeOrder",
+                new Class<?>[] {net.minecraft.util.RandomSource.class, Customer.Type.class, List.class, String.class},
+                net.minecraft.util.RandomSource.create(seed), Customer.Type.values()[seed % Customer.Type.values().length], new java.util.ArrayList<String>(), preference);
+    }
+
+    @SuppressWarnings("unchecked")
+    @GameTest(template = "empty")
+    public static void preferenceTipAppliedOnce(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        withConfig("MAX_TIP", 50, () -> withConfig("PREFERENCE_TIP", 1.5, () -> {
+            for (float patience : new float[] {0.5f, 1f}) {
+                Object party = serveBread(helper, r, 100, false, patience, "test_bread");
+                int expected = patience == 0.5f ? 137 : 175;
+                helper.assertValueEqual(read(PARTY, party, "bill"), expected, "Matching dish bonus");
+                Customer member = ((List<Customer>) read(PARTY, party, "members")).getFirst();
+                ItemStack tray = new ItemStack(OneMoreCore.TRAY_ITEM.get());
+                tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.BREAD))));
+                helper.assertFalse(member.deliver(GameTestSupport.player(helper), tray), "A served dish cannot be delivered again");
+                helper.assertValueEqual(read(PARTY, party, "bill"), expected, "Repeated delivery adds no bonus");
+                Object normal = serveBread(helper, r, 100, false, patience, "missing_tag");
+                helper.assertValueEqual(read(PARTY, normal, "bill"), patience == 0.5f ? 125 : 150, "Unmatched dish has the normal tip");
+            }
+            Object mixed = serveBread(helper, r, 100, true, 0.5f, "test_bread");
+            Customer member = ((List<Customer>) read(PARTY, mixed, "members")).getFirst();
+            ItemStack tray = new ItemStack(OneMoreCore.TRAY_ITEM.get());
+            tray.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.CARROT))));
+            helper.assertTrue(member.deliver(GameTestSupport.player(helper), tray), "The remaining unmatched dish completes the order");
+            helper.assertValueEqual(read(PARTY, mixed, "bill"), 187, "Only the matching dish receives the multiplier");
+        }));
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void preferenceEmptyListDisablesRoll(GameTestHelper helper) {
+        withConfig("PREFERENCES", List.of(), () -> {
+            for (int seed = 0; seed < 64; seed++) helper.assertValueEqual(call(Customer.class, null, "rollPreference",
+                    new Class<?>[] {net.minecraft.util.RandomSource.class}, net.minecraft.util.RandomSource.create(seed)), "", "Empty list disables preferences");
+        });
+        withConfig("PREFERENCES", List.of("test_bread=1"), () -> {
+            for (int seed = 0; seed < 64; seed++) helper.assertValueEqual(call(Customer.class, null, "rollPreference",
+                    new Class<?>[] {net.minecraft.util.RandomSource.class}, net.minecraft.util.RandomSource.create(seed)), "test_bread", "Chance one always assigns one preference");
+        });
+        withConfig("PREFERENCES", List.of("test_bread=0"), () -> helper.assertValueEqual(call(Customer.class, null, "rollPreference",
+                new Class<?>[] {net.minecraft.util.RandomSource.class}, net.minecraft.util.RandomSource.create(0)), "", "Chance zero never assigns a preference"));
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void preferenceSurvivesSaveLoad(GameTestHelper helper) {
+        withConfig("PREFERENCES", List.of("test_bread=1"), () -> {
+            Customer original = new Customer(OneMoreCore.CUSTOMER.get(), helper.getLevel());
+            CompoundTag source = new CompoundTag();
+            source.putString("Preference", "test_bread");
+            original.readAdditionalSaveData(source);
+            CompoundTag saved = new CompoundTag();
+            original.addAdditionalSaveData(saved);
+            Customer restored = new Customer(OneMoreCore.CUSTOMER.get(), helper.getLevel());
+            restored.readAdditionalSaveData(saved);
+            helper.assertValueEqual(restored.getPreference(), "test_bread", "Preference survives the entity save hooks");
+            for (String invalid : List.of("../test_bread", "unknown", "test_bread=1", "")) {
+                saved.putString("Preference", invalid);
+                restored.readAdditionalSaveData(saved);
+                helper.assertValueEqual(restored.getPreference(), "", "Invalid or removed preference is dropped");
+            }
+        });
+        helper.succeed();
+    }
+
     private static Restaurant placeRestaurant(GameTestHelper helper) {
         GameTestSupport.place(helper, SIGN, OneMoreCore.OPEN_SIGN.get(), OpenSignBlockEntity.class);
         helper.setBlock(TABLE, Blocks.OAK_SLAB);
@@ -644,6 +761,10 @@ public final class MoneyGameTests {
     }
 
     private static Object serveBread(GameTestHelper helper, Restaurant r, int price, boolean partial, float patienceLeft) {
+        return serveBread(helper, r, price, partial, patienceLeft, "");
+    }
+
+    private static Object serveBread(GameTestHelper helper, Restaurant r, int price, boolean partial, float patienceLeft, String preference) {
         Object party;
         try {
             Constructor<?> constructor = PARTY.getDeclaredConstructor();
@@ -652,6 +773,7 @@ public final class MoneyGameTests {
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(e);
         }
+        write(PARTY, party, "preference", preference);
         Customer customer = new Customer(OneMoreCore.CUSTOMER.get(), helper.getLevel());
         Restaurant.Seat seat = new Restaurant.Seat(helper.absolutePos(SEAT), helper.absolutePos(TABLE));
         Customer.Line bread = new Customer.Line(new ItemStack(Items.BREAD), price, false);

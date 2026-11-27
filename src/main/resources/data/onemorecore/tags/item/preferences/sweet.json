@@ -1,0 +1,32 @@
+{
+  "values": [
+    {
+      "id": "#c:foods/cookie",
+      "required": false
+    },
+    {
+      "id": "#c:foods/cake",
+      "required": false
+    },
+    {
+      "id": "#c:cookies",
+      "required": false
+    },
+    {
+      "id": "#c:cakes",
+      "required": false
+    },
+    {
+      "id": "#c:pies",
+      "required": false
+    },
+    {
+      "id": "#c:candies",
+      "required": false
+    },
+    {
+      "id": "#c:chocolates",
+      "required": false
+    }
+  ]
+}

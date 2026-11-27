@@ -236,8 +236,14 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         Font nameFont = getFont();
         String name = customer.hasCustomName() ? customer.getCustomName().getString() : "";
         if (nameFont.width(name) > NAME_MAX_PX) name = nameFont.plainSubstrByWidth(name, NAME_MAX_PX - nameFont.width("...")) + "...";
-        float nameH = name.isEmpty() ? 0 : NAME_H;
-        if (!name.isEmpty()) half = Math.max(half, nameFont.width(name) * NAME_SCALE / 2 + 0.14f);
+        String preference = customer.getPreference().isEmpty() ? "" : net.minecraft.network.chat.Component
+                .translatable("onemorecore.customer.preference", customer.getPreference()).getString();
+        if (nameFont.width(preference) > NAME_MAX_PX) preference = nameFont.plainSubstrByWidth(preference, NAME_MAX_PX - nameFont.width("...")) + "...";
+        List<String> headings = new java.util.ArrayList<>();
+        if (!name.isEmpty()) headings.add(name);
+        if (!preference.isEmpty()) headings.add(preference);
+        float nameH = headings.size() * NAME_H;
+        for (String heading : headings) half = Math.max(half, nameFont.width(heading) * NAME_SCALE / 2 + 0.14f);
         pose.pushPose();
         pose.translate(0, customer.getBbHeight() + 0.75, 0);
         pose.mulPose(entityRenderDispatcher.cameraOrientation());
@@ -248,14 +254,17 @@ public class CustomerRenderer extends HumanoidMobRenderer<Customer, PlayerModel<
         quad(vc, m, -half, bottom, -half + CAP, outer, z, 0, 0, 8, 20, 0xFFFFFFFF);
         quad(vc, m, -half + CAP, bottom, half - CAP, outer, z, 8, 0, 24, 20, 0xFFFFFFFF);
         quad(vc, m, half - CAP, bottom, half, outer, z, 24, 0, 32, 20, 0xFFFFFFFF);
-        if (!name.isEmpty()) {
-            // A thin line under the name parts it from the order.
+        if (!headings.isEmpty()) {
+            // A thin line under the headings parts them from the order.
             quad(vc, m, -half + 0.1f, top - 0.005f, half - 0.1f, top + 0.005f, z + 0.005f, 28, 28, 32, 32, 0x40FFFFFF);
-            pose.pushPose();
-            pose.translate(0, top + nameH / 2 + 4.5f * NAME_SCALE - 0.01f, 0);
-            pose.scale(NAME_SCALE, -NAME_SCALE, NAME_SCALE);
-            nameFont.drawInBatch(name, -nameFont.width(name) / 2f, 0, NAME_COLOR, false, pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
-            pose.popPose();
+            for (int i = 0; i < headings.size(); i++) {
+                String heading = headings.get(i);
+                pose.pushPose();
+                pose.translate(0, top + nameH - (i + 0.5f) * NAME_H + 4.5f * NAME_SCALE - 0.01f, 0);
+                pose.scale(NAME_SCALE, -NAME_SCALE, NAME_SCALE);
+                nameFont.drawInBatch(heading, -nameFont.width(heading) / 2f, 0, NAME_COLOR, false, pose.last().pose(), buffers, Font.DisplayMode.NORMAL, 0, LightTexture.FULL_BRIGHT);
+                pose.popPose();
+            }
         }
         quad(vc, m, -CAP / 2, bottom - CAP, CAP / 2, bottom, z, 12, 20, 20, 28, 0xFFFFFFFF);
         // Patience bar: a dark track and a coloured fill, from red (0) over yellow to green (1).

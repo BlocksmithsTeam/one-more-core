@@ -1191,9 +1191,10 @@ public class Restaurant {
         if (chosen.size() >= 3) party.type = roll < Config.FAMILY_CHANCE.get() ? Customer.Type.FAMILY : Customer.Type.NORMAL;
         else if (roll < Config.VIP_CHANCE.get()) party.type = Customer.Type.VIP;
         else if (!favourites.isEmpty() && roll < Config.VIP_CHANCE.get() + Config.REGULAR_CHANCE.get()) party.type = Customer.Type.REGULAR;
+        party.preference = Customer.rollPreference(level.random);
         for (Seat seat : chosen) {
             List<String> ids = new ArrayList<>();
-            List<Customer.Line> order = makeOrder(level.random, party.type, ids);
+            List<Customer.Line> order = makeOrder(level.random, party.type, ids, party.preference);
             if (order.isEmpty()) { toSpawn = 0; break; }
             Customer c = new Customer(OneMoreCore.CUSTOMER.get(), level);
             c.setup(this, seat, order, party);
@@ -1250,12 +1251,20 @@ public class Restaurant {
     }
 
     private List<Customer.Line> makeOrder(RandomSource random, Customer.Type type, List<String> ids) {
+        return makeOrder(random, type, ids, "");
+    }
+
+    private List<Customer.Line> makeOrder(RandomSource random, Customer.Type type, List<String> ids, String preference) {
         List<Menu.Entry> available = dishes().stream().filter(this::orderable).toList();
+        var access = ingredientAvailability();
+        List<Menu.Entry> preferred = preference.isEmpty() ? List.of() : available.stream()
+                .filter(e -> Ingredients.variants(e).anyMatch(stack -> Customer.prefers(preference, stack)
+                        && access.dish(Ingredients.id(stack)))).toList();
         List<Customer.Line> order = new ArrayList<>();
         if (available.isEmpty()) return order;
         // A combo: all its dishes; the combo price is split over the lines (the first line takes the rest of the division).
         List<Combo> orderable = combos.stream().filter(this::canOrder).toList();
-        if (!orderable.isEmpty() && random.nextDouble() < Config.COMBO_CHANCE.get()) {
+        if (preferred.isEmpty() && !orderable.isEmpty() && random.nextDouble() < Config.COMBO_CHANCE.get()) {
             Combo c = orderable.get(random.nextInt(orderable.size()));
             int share = c.price() / c.dishes().size(), rest = c.price() - share * c.dishes().size();
             for (int i = 0; i < c.dishes().size(); i++) {
@@ -1297,9 +1306,24 @@ public class Restaurant {
                 }
             }
         }
+        Menu.Entry preferredDish = preferred.isEmpty() ? null : weighted(preferred, random);
+        if (preferredDish != null && !chosen.contains(kind(preferredDish))) {
+            if (chosen.size() == MAX_ORDER_ITEMS) {
+                int last = chosen.size() - 1;
+                if (type == Customer.Type.FAMILY && chosen.get(last).equals("dessert")) last--;
+                chosen.remove(last);
+            }
+            chosen.add(kind(preferredDish));
+        }
         for (String k : chosen) {
             Menu.Entry e = favourite != null && kind(favourite).equals(k) ? favourite : weighted(byKind.get(k), random);
-            ItemStack stack = orderableVariant(e, random);
+            ItemStack stack;
+            if (preferredDish != null && kind(preferredDish).equals(k)) {
+                e = preferredDish;
+                var variants = Ingredients.variants(e).filter(s -> Customer.prefers(preference, s)
+                        && access.dish(Ingredients.id(s))).toList();
+                stack = variants.get(random.nextInt(variants.size()));
+            } else stack = orderableVariant(e, random);
             if (stack.isEmpty()) continue;
             order.add(line(e, stack, e.price()));
             ids.add(e.id());

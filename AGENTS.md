@@ -72,6 +72,10 @@ change how one of them works, change its lines here in the same commit.
 - **Reviews** (`Customer.Party`, `Restaurant`, `reviews`, on by default): each departing party gives 1–5 stars from remaining service patience, wrong dish attempts, seat-surface dirt and decor. Unserved parties give one star. The saved last 20 reviews average to the rating (three before any review), scaling arrival intervals from 1.3 at one star to 0.7 at five. One party member shows stars for up to 60 ticks while leaving. DaySummary saves today’s average and the rating; Manager shows the rating beside Yesterday. Tests: review tests in `MoneyGameTests`.
 - **Customers**: `walkSpeed` 0.26; a customer whose path does not move it steps onto the next free node (`Customer.hopAlong`);
   stuck within 4 blocks of its seat with no free node (behind a sofa's back), it sits down at once.
+  Parties roll one configured item-tag preference; available matching dishes join the existing kind roll, otherwise orders stay normal.
+  Matching deliveries multiply their tip share once (it can go over `maxTipPercent`); bubbles show the saved preference.
+  Tests in `MoneyGameTests`: `preferenceDishPreferredWhenAvailable`, `preferenceFallsBackWhenNothingMatches`,
+  `preferenceTipAppliedOnce`, `preferenceEmptyListDisablesRoll`, `preferenceSurvivesSaveLoad`.
 - **Stream chat**: the computer's Stream app sets `chatPlatform`, `chatChannel`, `chatCommand` (operators only) and connects
   again at once (`SkinPool.configure`; a pasted Kick or Twitch link works). A chat viewer comes once (`SkinPool.pick` takes the
   entry out); with no free name a customer keeps a default skin, so no two customers share one. Test:
