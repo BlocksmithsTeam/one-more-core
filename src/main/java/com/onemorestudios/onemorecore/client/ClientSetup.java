@@ -65,6 +65,7 @@ public class ClientSetup {
         bus.addListener(TableMarkRenderer::registerModels);
         TableMarkRenderer.register();
         ScreenRenderer.register();
+        com.onemorestudios.onemorecore.DaySummary.Open.handler = o -> Minecraft.getInstance().setScreen(new DaySummaryScreen(o.summary()));
         com.onemorestudios.onemorecore.ScreenSettings.Open.handler = o -> Minecraft.getInstance().setScreen(new ScreenSettingsScreen(o));
         MenuBook.register();
         NeoForge.EVENT_BUS.addListener(ClientSetup::renderOrderTooltip);

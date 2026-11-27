@@ -319,5 +319,20 @@
   "onemorecore.register.take_banknote": "Take one banknote",
   "onemorecore.register.take_coin": "Take one coin",
   "onemorecore.configuration.banknoteItem": "Banknote item",
-  "onemorecore.configuration.banknoteValue": "Banknote value"
+  "onemorecore.configuration.banknoteValue": "Banknote value",
+  "onemorecore.summary.title": "Day %s summary",
+  "onemorecore.summary.yesterday": "Yesterday",
+  "onemorecore.summary.day": "Day",
+  "onemorecore.summary.income": "Dish income",
+  "onemorecore.summary.tips": "Tips",
+  "onemorecore.summary.penalties": "Penalties",
+  "onemorecore.summary.net": "Net",
+  "onemorecore.summary.served": "Customers served",
+  "onemorecore.summary.lost": "Customers lost",
+  "onemorecore.summary.register": "Register balance",
+  "onemorecore.summary.best": "Best-selling dish",
+  "onemorecore.summary.none": "None",
+  "onemorecore.summary.close": "Close",
+  "onemorecore.summary.back": "Back",
+  "onemorecore.configuration.daySummary": "Day summary"
 }

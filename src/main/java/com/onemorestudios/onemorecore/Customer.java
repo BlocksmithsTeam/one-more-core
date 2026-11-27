@@ -127,7 +127,10 @@ public class Customer extends PathfinderMob {
             restaurant.finishService(this);
             if (paid) {
                 restaurant.served += members.size();
-                restaurant.earned = (int) Math.min(Integer.MAX_VALUE, (long) restaurant.earned + bill);
+                long price = members.stream().mapToLong(m -> m.bill).sum();
+                long credited = Math.min(bill, Integer.MAX_VALUE - restaurant.earned);
+                restaurant.tips += Math.max(0, credited - price);
+                restaurant.earned += (int) credited;
                 // The bill stays on the table as coins until a player collects it (collectPayments), or goes to the register.
                 if (Config.COLLECT_PAYMENTS.get() && members.get(0).getSurface() != null) restaurant.addCoins(members.get(0).getSurface(), bill);
                 else restaurant.payRegister((ServerLevel) members.get(0).level(), bill);
@@ -465,6 +468,7 @@ public class Customer extends PathfinderMob {
         Line line = wanted.stream().filter(l -> l.matches(held)).findFirst().orElseThrow();
         wanted.remove(line);
         bill += line.price();
+        restaurant.recordDish(held);
         BlockPos surface = party.members.get(0).getSurface();
         if (surface != null && level() instanceof ServerLevel level) restaurant.recordServed(level, party, surface, line.price());
         tipBase += (long) line.price() * line.tipPercent();

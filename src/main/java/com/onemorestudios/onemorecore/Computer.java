@@ -176,7 +176,15 @@ public class Computer extends Block {
             List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message,
             Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
             List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades,
-            List<String> stream, Optional<IngredientData> ingredientData, int level, List<LevelLine> levels, boolean levelEditor) implements CustomPacketPayload {
+            List<String> stream, Optional<IngredientData> ingredientData, int level, List<LevelLine> levels, boolean levelEditor, Optional<DaySummary> yesterday) implements CustomPacketPayload {
+        public State(BlockPos pos, boolean open, boolean found, int apps, ItemStack currency, int balance, int day,
+                List<MenuLine> menu, List<ShopLine> shop, List<Component> info, Component message,
+                Optional<BlockPos> sign, List<Integer> area, Optional<BlockPos> spawn, Optional<BlockPos> delivery,
+                List<ComboLine> combos, List<BlockPos> surfaces, List<BlockPos> offSurfaces, List<UpgradeLine> upgrades,
+                List<String> stream, Optional<IngredientData> ingredientData, int level, List<LevelLine> levels, boolean levelEditor) {
+            this(pos, open, found, apps, currency, balance, day, menu, shop, info, message, sign, area, spawn, delivery,
+                    combos, surfaces, offSurfaces, upgrades, stream, ingredientData, level, levels, levelEditor, Optional.empty());
+        }
         public State {
             level = Math.max(1, Math.min(65, level));
             levels = List.copyOf(levels.subList(0, Math.min(64, levels.size())));
@@ -233,6 +241,7 @@ public class Computer extends Block {
             b.writeVarInt(s.level);
             LevelLine.CODEC.apply(ByteBufCodecs.list(64)).encode(b, s.levels);
             b.writeBoolean(s.levelEditor);
+            ByteBufCodecs.optional(DaySummary.CODEC).encode(b, s.yesterday);
         }, b -> new State(b.readBlockPos(), b.readBoolean(), b.readBoolean(), b.readVarInt(), ItemStack.OPTIONAL_STREAM_CODEC.decode(b), b.readVarInt(), b.readVarInt(),
                 MenuLine.CODEC.apply(ByteBufCodecs.list()).decode(b), ShopLine.CODEC.apply(ByteBufCodecs.list()).decode(b),
                 ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(b), ComponentSerialization.STREAM_CODEC.decode(b),
@@ -240,7 +249,7 @@ public class Computer extends Block {
                 ComboLine.CODEC.apply(ByteBufCodecs.list()).decode(b), POSITIONS.decode(b), POSITIONS.decode(b),
                 UpgradeLine.CODEC.apply(ByteBufCodecs.list(16)).decode(b), ByteBufCodecs.stringUtf8(256).apply(ByteBufCodecs.list(8)).decode(b),
                 ByteBufCodecs.optional(IngredientData.CODEC).decode(b), b.readVarInt(),
-                LevelLine.CODEC.apply(ByteBufCodecs.list(64)).decode(b), b.readBoolean()));
+                LevelLine.CODEC.apply(ByteBufCodecs.list(64)).decode(b), b.readBoolean(), ByteBufCodecs.optional(DaySummary.CODEC).decode(b)));
 
         @Override
         public Type<State> type() { return TYPE; }
@@ -340,7 +349,7 @@ public class Computer extends Block {
     static void playerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) { SESSIONS.remove(event.getEntity()); }
 
     static void registerPayloads(RegisterPayloadHandlersEvent event) {
-        event.registrar("4")
+        event.registrar("5")
                 // The handler runs on the client only, so the client class is not loaded on a dedicated server.
                 .playToClient(State.TYPE, State.CODEC, (state, context) -> com.onemorestudios.onemorecore.client.ComputerCamera.receive(state))
                 .playToClient(CheckoutResult.TYPE, CheckoutResult.CODEC, (result, context) -> com.onemorestudios.onemorecore.client.ComputerCamera.receive(result))
@@ -694,7 +703,7 @@ public class Computer extends Block {
                 stream(), menuRequest ? Optional.of(ingredientData(registries, r, dishes, menu)) : Optional.empty(),
                 r.level(), !Config.APP_LEVELS.get() ? List.of() : r.steps().stream().limit(64)
                         .map(step -> new LevelLine(step.price(), boxList(step.area()), boxList(step.wall()), Optional.ofNullable(step.moveTo()))).toList(),
-                Config.APP_LEVELS.get() && levelEditor);
+                Config.APP_LEVELS.get() && levelEditor, Config.DAY_SUMMARY.get() ? Optional.ofNullable(r.lastSummary()) : Optional.empty());
     }
 
     private static boolean editor(Player player) {

@@ -32,6 +32,9 @@ public class Config {
     static final ModConfigSpec.IntValue READY_COUNTDOWN = B
             .comment("Ticks between the moment every player is ready and the start of the day. 0 starts the day at once.")
             .defineInRange("readyCountdownTicks", 60, 0, 600);
+    static final ModConfigSpec.BooleanValue DAY_SUMMARY = B
+            .comment("Show the day summary when restaurant service ends.")
+            .define("daySummary", true);
     static final ModConfigSpec.IntValue DAY_LENGTH = B
             .comment("Length of the service of one day, in ticks (1200 = one minute). Customers come during the whole service;",
                     "their number depends on the free tables and the speed of the players. 0: a fixed number of customers per day instead.")

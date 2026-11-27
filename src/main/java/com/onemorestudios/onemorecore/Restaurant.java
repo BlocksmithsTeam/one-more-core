@@ -278,10 +278,30 @@ public class Restaurant {
     /** Dirty serving surfaces and their dirty cells, see {@link Dirt}. */
     final Map<BlockPos, Long> dirt = new HashMap<>();
 
-    // Not saved: a restaurant is closed after a world load, and the day starts again.
+    // Service is not resumed after loading; daily counters remain available until the next start.
     boolean open;
-    int toSpawn, spawnTimer, served, lost, earned;
-    long penalties;
+    int toSpawn, spawnTimer;
+    int served, lost, earned;
+    long penalties, tips;
+    final Map<String, Integer> dayDishes = new HashMap<>();
+    private DaySummary lastSummary;
+    private UUID dayUser;
+
+    public DaySummary lastSummary() { return lastSummary; }
+
+    DaySummary daySummary() {
+        var best = dayDishes.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                .findFirst();
+        return new DaySummary(day, earned - tips, tips, penalties, served, lost,
+                best.map(Map.Entry::getKey).orElse(""), best.map(Map.Entry::getValue).orElse(0), register);
+    }
+
+    void recordDish(ItemStack stack) {
+        String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        if (id.length() <= 256) dayDishes.merge(id, 1, (a, b) -> a == Integer.MAX_VALUE ? a : a + b);
+        owner.setDirty();
+    }
     final Set<UUID> ready = new HashSet<>();
     private static final Map<Player, Integer> LAST_READY_CHANGE = new WeakHashMap<>();
     private boolean readyCheckActive;
@@ -1004,11 +1024,14 @@ public class Restaurant {
 
     /** Starts the service. The seats are scanned already. */
     private void startDay(ServerLevel level) {
+        dayUser = readyInitiator;
         resetReadyCheck();
         arriving.clear();
         open = true;
         served = lost = earned = 0;
-        penalties = 0;
+        penalties = tips = 0;
+        dayDishes.clear();
+        owner.setDirty();
         serviceLeft = Config.DAY_LENGTH.get();
         // With a day length the number of customers is open: they come until the service ends.
         toSpawn = serviceLeft > 0 ? Integer.MAX_VALUE
@@ -1110,9 +1133,17 @@ public class Restaurant {
                 else c.discard();
             }
         }
-        var message = Component.translatable(failed ? "onemorecore.day.failed" : "onemorecore.day.end", day, served, lost, earned);
-        if (penalties > 0) message.append(Component.translatable("onemorecore.day.penalty", penalties));
-        announce(level, Component.translatable(failed ? "onemorecore.day.failed.title" : "onemorecore.day.end.title", day), message);
+        lastSummary = daySummary();
+        if (Config.DAY_SUMMARY.get()) {
+            var payload = new DaySummary.Open(lastSummary);
+            for (ServerPlayer player : level.getServer().getPlayerList().getPlayers())
+                if (player.getUUID().equals(dayUser) || player.serverLevel() == level && area != null && area.isInside(player.blockPosition()))
+                    PacketDistributor.sendToPlayer(player, payload);
+        } else {
+            var message = Component.translatable(failed ? "onemorecore.day.failed" : "onemorecore.day.end", day, served, lost, earned);
+            if (penalties > 0) message.append(Component.translatable("onemorecore.day.penalty", penalties));
+            announce(level, Component.translatable(failed ? "onemorecore.day.failed.title" : "onemorecore.day.end.title", day), message);
+        }
         level.playSound(null, sign, failed ? SoundEvents.ANVIL_LAND : SoundEvents.PLAYER_LEVELUP, SoundSource.BLOCKS, failed ? 0.5f : 1, 1);
         if (!failed && day < Integer.MAX_VALUE) day++;
         owner.setDirty();
@@ -1682,6 +1713,16 @@ public class Restaurant {
         tag.put("steps", levelSteps);
         tag.putInt("day", day);
         tag.putInt("register", register);
+        tag.putInt("earned", earned);
+        tag.putInt("served", served);
+        tag.putInt("lost", lost);
+        tag.putLong("penalties", penalties);
+        tag.putLong("tips", tips);
+        CompoundTag counts = new CompoundTag();
+        dayDishes.forEach(counts::putInt);
+        tag.put("dayDishes", counts);
+        if (dayUser != null) tag.putUUID("dayUser", dayUser);
+        if (lastSummary != null) tag.put("lastSummary", lastSummary.save());
         ListTag list = new ListTag();
         unlockedIngredients.stream().sorted().forEach(id -> list.add(StringTag.valueOf(id.toString())));
         tag.put("unlockedIngredients", list);
@@ -1809,6 +1850,16 @@ public class Restaurant {
         r.level = Math.max(1, Math.min(r.steps.size() + 1, tag.getInt("level")));
         r.day = Math.max(1, tag.getInt("day"));
         r.register = Math.max(0, tag.getInt("register"));
+        r.earned = Math.max(0, tag.getInt("earned"));
+        r.served = Math.max(0, tag.getInt("served"));
+        r.lost = Math.max(0, tag.getInt("lost"));
+        r.penalties = Math.max(0, tag.getLong("penalties"));
+        r.tips = Math.max(0, Math.min(r.earned, tag.getLong("tips")));
+        CompoundTag counts = tag.getCompound("dayDishes");
+        for (String id : counts.getAllKeys())
+            if (id.length() <= 256 && ResourceLocation.tryParse(id) != null && counts.getInt(id) > 0) r.dayDishes.put(id, counts.getInt(id));
+        if (tag.hasUUID("dayUser")) r.dayUser = tag.getUUID("dayUser");
+        if (tag.contains("lastSummary", Tag.TAG_COMPOUND)) r.lastSummary = DaySummary.load(tag.getCompound("lastSummary"));
         for (Tag t : tag.getList("unlockedIngredients", Tag.TAG_STRING)) {
             ResourceLocation item = ResourceLocation.tryParse(t.getAsString());
             if (item != null) r.unlockedIngredients.add(item);

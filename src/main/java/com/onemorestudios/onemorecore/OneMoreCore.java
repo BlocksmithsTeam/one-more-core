@@ -245,6 +245,7 @@ public class OneMoreCore {
             if (server != null) server.execute(() -> server.getAllLevels().forEach(level -> Restaurants.get(level).invalidateLayouts()));
         });
         bus.addListener((RegisterPayloadHandlersEvent e) -> e.registrar("1").playToClient(Dirt.TYPE, Dirt.CODEC, (dirt, context) -> Dirt.receive(dirt))
+                .playToClient(DaySummary.Open.TYPE, DaySummary.Open.CODEC, (o, context) -> DaySummary.Open.handler.accept(o))
                 .playToClient(TableItems.TYPE, TableItems.CODEC, (t, context) -> TableItems.receive(t))
                 .playToClient(TableMarks.TYPE, TableMarks.CODEC, (t, context) -> TableMarks.receive(t))
                 .playToClient(ScreenData.TYPE, ScreenData.CODEC, (t, context) -> ScreenData.receive(t))
