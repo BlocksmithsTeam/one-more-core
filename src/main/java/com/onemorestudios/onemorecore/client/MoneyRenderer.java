@@ -48,33 +48,6 @@ final class MoneyRenderer {
         }
     }
 
-    // Drawer positions are model pixels; the painter origin is the tray centre at floor height.
-    private static final double[][] DRAWER_COINS = {
-            {2.5, 0.5, -1.5}, {6.2, 0.5, -1.5}, {10.3, 0.5, -1.5},
-            {6.7, 1.5, -1.5}, {10.8, 1.5, -1.5}, {10.3, 2.5, -1.0}
-    };
-
-    static void drawerCoins(PoseStack pose, MultiBufferSource buffers, int light, int count) {
-        for (int i = 0; i < Math.min(6, count); i++) {
-            double[] at = DRAWER_COINS[i];
-            pose.pushPose();
-            pose.translate((at[0] - 8) / 16, (at[1] - 0.5) / 16, at[2] / 16);
-            pose.translate(-6 / 16.0, 0, -6 / 16.0);
-            piece(pose, buffers, light, COIN);
-            pose.popPose();
-        }
-    }
-
-    static void drawerBanknotes(PoseStack pose, MultiBufferSource buffers, int light, int count) {
-        for (int i = 0; i < Math.min(2, count); i++) {
-            pose.pushPose();
-            pose.translate(0, i / 16.0, 0);
-            pose.translate(-0.5, 0, -0.5);
-            piece(pose, buffers, light, BANKNOTE);
-            pose.popPose();
-        }
-    }
-
     private static void piece(PoseStack pose, MultiBufferSource buffers, int light, ModelResourceLocation model) {
         Minecraft mc = Minecraft.getInstance();
         mc.getBlockRenderer().getModelRenderer().renderModel(pose.last(), buffers.getBuffer(Sheets.cutoutBlockSheet()), null,
