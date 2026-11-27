@@ -16,6 +16,16 @@ public class TicketItem extends Item {
         super(properties);
     }
 
+    /** Old tickets have no order identity; leave them for the player rather than guessing from table text. */
+    public static boolean finished(net.minecraft.server.level.ServerLevel level, ItemStack ticket) {
+        var data = ticket.getOrDefault(DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
+        if (!data.hasUUID("ticket_order")) return false;
+        var dimension = net.minecraft.resources.ResourceLocation.tryParse(data.getString("ticket_dimension"));
+        if (dimension == null) return false;
+        var source = level.getServer().getLevel(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, dimension));
+        return source != null && !Restaurants.get(source).hasOrder(data.getUUID("ticket_order"));
+    }
+
     @Override
     public Component getName(ItemStack stack) {
         String table = stack.getOrDefault(OneMoreCore.LABEL.get(), "");

@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "onemorecore:block/ticket_rail"
+    },
+    "facing=east": {
+      "model": "onemorecore:block/ticket_rail",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "onemorecore:block/ticket_rail",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "onemorecore:block/ticket_rail",
+      "y": 270
+    }
+  }
+}

@@ -1,0 +1,233 @@
+{
+  "camera": {
+    "position": [
+      8,
+      11,
+      -23
+    ],
+    "target": [
+      8,
+      8,
+      14
+    ],
+    "fov": 34,
+    "neighbors": {
+      "enabled": false
+    },
+    "keep_width": 1.7777778,
+    "interactive_at": 0.6
+  },
+  "work_plane": 1,
+  "idle_visible": false,
+  "interface": {
+    "hide_player": true,
+    "inventory_panel": false,
+    "hover_outline": true,
+    "outline_color": "#FFFFE8C0"
+  },
+  "inventory_drawer": {
+    "side": "bottom"
+  },
+  "clear_view": {
+    "blocks": false
+  },
+  "nodes": [
+    {
+      "id": "rail",
+      "takes_items": true,
+      "tooltip": "onemorecore.ticket_rail.hang",
+      "collider": {
+        "from": [
+          0,
+          3,
+          14.3
+        ],
+        "to": [
+          16,
+          14.5,
+          16
+        ]
+      }
+    },
+    {
+      "id": "ticket_0",
+      "pos": [
+        1.3333333333333333,
+        8,
+        14
+      ],
+      "takes_items": true,
+      "visual": {
+        "model": "onemorecore:block/rail_ticket",
+        "anchor": [
+          0,
+          0,
+          0
+        ]
+      },
+      "collider": {
+        "from": [
+          -1.1,
+          -4.5,
+          -0.15
+        ],
+        "to": [
+          1.1,
+          4.5,
+          0.15
+        ]
+      },
+      "hidden": true
+    },
+    {
+      "id": "ticket_1",
+      "pos": [
+        4.0,
+        8,
+        14
+      ],
+      "takes_items": true,
+      "visual": {
+        "model": "onemorecore:block/rail_ticket",
+        "anchor": [
+          0,
+          0,
+          0
+        ]
+      },
+      "collider": {
+        "from": [
+          -1.1,
+          -4.5,
+          -0.15
+        ],
+        "to": [
+          1.1,
+          4.5,
+          0.15
+        ]
+      },
+      "hidden": true
+    },
+    {
+      "id": "ticket_2",
+      "pos": [
+        6.666666666666667,
+        8,
+        14
+      ],
+      "takes_items": true,
+      "visual": {
+        "model": "onemorecore:block/rail_ticket",
+        "anchor": [
+          0,
+          0,
+          0
+        ]
+      },
+      "collider": {
+        "from": [
+          -1.1,
+          -4.5,
+          -0.15
+        ],
+        "to": [
+          1.1,
+          4.5,
+          0.15
+        ]
+      },
+      "hidden": true
+    },
+    {
+      "id": "ticket_3",
+      "pos": [
+        9.333333333333334,
+        8,
+        14
+      ],
+      "takes_items": true,
+      "visual": {
+        "model": "onemorecore:block/rail_ticket",
+        "anchor": [
+          0,
+          0,
+          0
+        ]
+      },
+      "collider": {
+        "from": [
+          -1.1,
+          -4.5,
+          -0.15
+        ],
+        "to": [
+          1.1,
+          4.5,
+          0.15
+        ]
+      },
+      "hidden": true
+    },
+    {
+      "id": "ticket_4",
+      "pos": [
+        12.0,
+        8,
+        14
+      ],
+      "takes_items": true,
+      "visual": {
+        "model": "onemorecore:block/rail_ticket",
+        "anchor": [
+          0,
+          0,
+          0
+        ]
+      },
+      "collider": {
+        "from": [
+          -1.1,
+          -4.5,
+          -0.15
+        ],
+        "to": [
+          1.1,
+          4.5,
+          0.15
+        ]
+      },
+      "hidden": true
+    },
+    {
+      "id": "ticket_5",
+      "pos": [
+        14.666666666666666,
+        8,
+        14
+      ],
+      "takes_items": true,
+      "visual": {
+        "model": "onemorecore:block/rail_ticket",
+        "anchor": [
+          0,
+          0,
+          0
+        ]
+      },
+      "collider": {
+        "from": [
+          -1.1,
+          -4.5,
+          -0.15
+        ],
+        "to": [
+          1.1,
+          4.5,
+          0.15
+        ]
+      },
+      "hidden": true
+    }
+  ]
+}

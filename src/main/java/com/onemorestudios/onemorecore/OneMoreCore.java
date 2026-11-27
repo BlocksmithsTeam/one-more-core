@@ -76,6 +76,9 @@ public class OneMoreCore {
     public static final DeferredBlock<CashRegisterBlock> CASH_REGISTER = BLOCKS.register("cash_register",
             () -> new CashRegisterBlock(BlockBehaviour.Properties.of().strength(1.5f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredItem<BlockItem> CASH_REGISTER_ITEM = ITEMS.registerSimpleBlockItem(CASH_REGISTER);
+    public static final DeferredBlock<TicketRailBlock> TICKET_RAIL = BLOCKS.register("ticket_rail",
+            () -> new TicketRailBlock(BlockBehaviour.Properties.of().strength(1f).sound(SoundType.METAL).noOcclusion().pushReaction(PushReaction.BLOCK)));
+    public static final DeferredItem<BlockItem> TICKET_RAIL_ITEM = ITEMS.registerSimpleBlockItem(TICKET_RAIL);
     public static final DeferredBlock<MenuBoardBlock> MENU_BOARD = BLOCKS.register("menu_board",
             () -> new ScreenBlock(BlockBehaviour.Properties.of().strength(1.5f).noOcclusion().sound(SoundType.METAL)));
     public static final DeferredItem<BlockItem> MENU_BOARD_ITEM = ITEMS.registerSimpleBlockItem(MENU_BOARD);
@@ -142,6 +145,8 @@ public class OneMoreCore {
                     .noSummon().clientTrackingRange(8).build("courier"));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CashRegisterBlockEntity>> CASH_REGISTER_ENTITY = BLOCK_ENTITIES.register("cash_register",
             () -> BlockEntityType.Builder.of(CashRegisterBlockEntity::new, CASH_REGISTER.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TicketRailBlockEntity>> TICKET_RAIL_ENTITY = BLOCK_ENTITIES.register("ticket_rail",
+            () -> BlockEntityType.Builder.of(TicketRailBlockEntity::new, TICKET_RAIL.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<OpenSignBlockEntity>> OPEN_SIGN_ENTITY = BLOCK_ENTITIES.register("open_sign",
             () -> BlockEntityType.Builder.of(OpenSignBlockEntity::new, OPEN_SIGN.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MenuBoardBlockEntity>> MENU_BOARD_ENTITY = BLOCK_ENTITIES.register("menu_board",
@@ -167,6 +172,7 @@ public class OneMoreCore {
             .displayItems((parameters, output) -> {
                 output.accept(OPEN_SIGN_ITEM);
                 output.accept(CASH_REGISTER_ITEM);
+                output.accept(TICKET_RAIL_ITEM);
                 output.accept(COMPUTER_ITEM);
                 output.accept(MENU_BOARD_ITEM);
                 output.accept(MENU_BOOK_ITEM);

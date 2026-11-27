@@ -98,6 +98,10 @@ public record ScreenClick(BlockPos pos, UUID orderId, float x, float y, int side
         ItemStack ticket = new ItemStack(OneMoreCore.TICKET.get());
         ticket.set(OneMoreCore.LABEL.get(), t.table().isEmpty() ? "?" : t.table());
         ticket.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(t.items()));
+        net.minecraft.nbt.CompoundTag identity = new net.minecraft.nbt.CompoundTag();
+        identity.putUUID("ticket_order", t.orderId());
+        identity.putString("ticket_dimension", level.dimension().location().toString());
+        ticket.set(DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(identity));
         TrayBlock.give(player, ticket);
         level.playSound(null, pos, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.8f, 1.4f);
     }

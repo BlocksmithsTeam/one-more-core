@@ -44,6 +44,7 @@ change how one of them works, change its lines here in the same commit.
   buffer mixed them with the text). Text and items are cut at the scrolled area's edges by `ClipBuffers` (quads along the
   canvas axes are cut with their texture), so a row coming in shows its part in view.
   A floor or ceiling Screen turns in 16 directions (`TURN`), like a sign; a turned one joins no other.
+- **Order ticket rail** (`TicketRailBlock`, `TicketRailBlockEntity`): a wall rail stores six existing ticket stacks. Non-ticket clicks consume the interaction without using or placing the held item. Normal clicks hang the next ticket or take the hit spot; the optional beta.15 API station sends the same actions, shows ticket tooltips and paper outlines, and slides newly hung paper for seven ticks. Screen-issued tickets keep their order UUID and source dimension in custom data. Fully served or departed orders mark the paper and drop it with a paper sound after 60 ticks. Legacy tickets without identity stay until taken. Breaking the rail or its support drops all tickets. Temporary models and sheets: `art/models/{ticket_rail,rail_ticket}.bbmodel`. Tests: `TicketRailGameTests`.
 - **Tray Rack**: holds up to six trays that players put in (`slot0..slot5` state); an empty rack gives nothing. A level keeps only
   the tray's kind, so a tray with dishes or a ticket is refused (`FixesGameTests.ticketSurvivesBreakAndRack`). Its hitbox is a
   shell 1 px thick, open at the front, the back and inside, so every level can be clicked. Tests:
