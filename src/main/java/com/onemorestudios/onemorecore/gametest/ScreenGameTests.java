@@ -351,8 +351,11 @@ public final class ScreenGameTests {
     @GameTest(template = "empty")
     public static void tagDishComboUsesRepresentativeStack(GameTestHelper helper) throws ReflectiveOperationException {
         var restaurant = placeRestaurant(helper);
+        // Raw fish is no dish: the tag dish is cooked fish, made from fish the restaurant has bought.
+        GameTestSupport.setRegister(restaurant, 1000);
+        GameTestSupport.unlock(helper, restaurant, "cod", "salmon");
         disableConfiguredDishes(restaurant);
-        var tag = new Menu.Entry("test:tag", null, ItemTags.FISHES, 4, false, "starter");
+        var tag = new Menu.Entry("test:tag", null, net.neoforged.neoforge.common.Tags.Items.FOODS_COOKED_FISH, 4, false, "starter");
         var custom = field(Restaurant.class, "custom", restaurant, List.class);
         custom.add(tag);
         try {
@@ -361,7 +364,7 @@ public final class ScreenGameTests {
             var lines = menu(helper, restaurant);
             var standalone = lines.stream().filter(line -> line.id().equals(tag.id())).findFirst().orElseThrow().items().getFirst();
             var combo = lines.stream().filter(line -> line.id().equals("combo:test")).findFirst().orElseThrow();
-            helper.assertTrue(!standalone.isEmpty() && standalone.is(ItemTags.FISHES), "The representative icon belongs to the tag");
+            helper.assertTrue(!standalone.isEmpty() && standalone.is(net.neoforged.neoforge.common.Tags.Items.FOODS_COOKED_FISH), "The representative icon belongs to the tag");
             helper.assertValueEqual(combo.items().size(), 2, "combo slot count");
             helper.assertTrue(combo.items().stream().allMatch(stack -> ItemStack.matches(stack, standalone)),
                     "Both combo slots have the same representative icon");
