@@ -259,7 +259,7 @@ public final class IngredientGameTests {
             helper.assertTrue(json.getAsJsonArray("food_tags").asList().stream()
                     .anyMatch(tag -> tag.getAsString().equals("c:flour")), "New files include singular flour");
             helper.assertValueEqual(json.get("minDishes").getAsInt(), 0, "New files keep every ingredient (minDishes off)");
-            helper.assertValueEqual(json.getAsJsonArray("groups").size(), 10, "New files contain ten default groups");
+            helper.assertValueEqual(json.getAsJsonArray("groups").size(), 12, "New files contain twelve default groups");
             json.addProperty("minDishes", 0);
             var recipes = List.of(recipe("dish", Items.BREAD, Ingredient.of(Items.CHORUS_FRUIT, Items.WHEAT)));
             helper.assertValueEqual(raw(ingredientIndex(helper, json.toString(), recipes)), List.of(WHEAT),
@@ -494,14 +494,14 @@ public final class IngredientGameTests {
         var recipes = List.of(
                 recipe("bread", Items.BREAD, Ingredient.of(Items.WHEAT, Items.CARROT)),
                 recipe("pie", Items.PUMPKIN_PIE, Ingredient.of(Items.WHEAT, Items.CARROT)));
-        String groups = "\"groups\":[{\"name\":\"test\",\"members\":[\"minecraft:wheat\",\"minecraft:carrot\"]}]";
+        String groups = "\"groups\":[{\"name\":\"test\",\"members\":[\"#c:crops/wheat\",\"#c:crops/carrot\"]}]";
         var rare = ingredientIndex(helper, "{\"minDishes\":3," + groups + "}", recipes);
         helper.assertTrue(raw(rare).isEmpty(), "Two shared dishes count twice, not four times");
         helper.assertFalse(dishAvailable(rare, "bread", Set.of(WHEAT)), "A saved member cannot bypass the group threshold");
         var enabled = ingredientIndex(helper, "{\"minDishes\":0," + groups + "}", recipes);
         helper.assertValueEqual(raw(enabled), List.of(id("carrot")), "Equal counts use stable item ID order");
         var reversed = ingredientIndex(helper,
-                "{\"minDishes\":0,\"groups\":[{\"name\":\"test\",\"members\":[\"minecraft:carrot\",\"minecraft:wheat\"]}]}", recipes);
+                "{\"minDishes\":0,\"groups\":[{\"name\":\"test\",\"members\":[\"#c:crops/carrot\",\"#c:crops/wheat\"]}]}", recipes);
         helper.assertValueEqual(raw(reversed), raw(enabled), "Member order does not change the representative");
         helper.assertTrue(dishAvailable(enabled, "pumpkin_pie", Set.of(WHEAT)), "Disabling the threshold keeps the shared unlock");
         helper.succeed();
@@ -853,6 +853,19 @@ public final class IngredientGameTests {
         var load = Restaurant.class.getDeclaredMethod("load", Restaurants.class, CompoundTag.class);
         load.setAccessible(true);
         return (Restaurant) load.invoke(null, Restaurants.get(helper.getLevel()), data);
+    }
+
+    @GameTest(template = "empty")
+    public static void groupShowsItsFirstListedId(GameTestHelper helper) throws ReflectiveOperationException {
+        var recipes = List.of(
+                recipe("bread", Items.BREAD, Ingredient.of(Items.WHEAT)),
+                recipe("cookie", Items.COOKIE, Ingredient.of(Items.WHEAT)),
+                recipe("pie", Items.PUMPKIN_PIE, Ingredient.of(Items.CARROT)));
+        var listedFirst = ingredientIndex(helper, "{\"minDishes\":0,\"groups\":[{\"name\":\"g\",\"members\":[\"minecraft:carrot\",\"minecraft:wheat\"]}]}", recipes);
+        helper.assertValueEqual(raw(listedFirst), List.of(id("carrot")), "A plain id listed first is the shown member");
+        var tagFirst = ingredientIndex(helper, "{\"minDishes\":0,\"groups\":[{\"name\":\"g\",\"members\":[\"#c:crops/carrot\",\"minecraft:wheat\"]}]}", recipes);
+        helper.assertValueEqual(raw(tagFirst), List.of(WHEAT), "A tag listed first lets the member with most dishes show");
+        helper.succeed();
     }
 
     /** A computer app switch from Config (package-private there). */

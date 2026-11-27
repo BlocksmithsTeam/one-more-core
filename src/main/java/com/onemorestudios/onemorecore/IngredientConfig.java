@@ -26,7 +26,10 @@ record IngredientConfig(Set<ResourceLocation> free, Set<ResourceLocation> ignore
     private static final int BASE = 4, PER_DISH = 2, MIN = 5, MAX = 40;
     private static final double VALUE_SHARE = 0.15;
     record Price(Integer unlock, Integer shop) {}
-    record Group(String name, Set<ResourceLocation> members) {}
+    /** show: the member whose card the Shop shows (a plain id listed first), or null for the one helping most dishes. */
+    record Group(String name, Set<ResourceLocation> members, ResourceLocation show) {
+        Group(String name, Set<ResourceLocation> members) { this(name, members, null); }
+    }
 
     private static final List<String> FOOD_TAGS = List.of("c:foods", "c:crops", "c:eggs", "c:milks",
             "c:drinks", "c:mushrooms", "c:flours", "c:flour", "c:dusts/salt");
@@ -38,14 +41,16 @@ record IngredientConfig(Set<ResourceLocation> free, Set<ResourceLocation> ignore
               "groups": [
                 {"name": "tomato", "members": ["#c:crops/tomato"]},
                 {"name": "onion", "members": ["#c:crops/onion"]},
-                {"name": "rice", "members": ["#c:crops/rice"]},
+                {"name": "rice", "members": ["farmersdelight:rice", "#c:crops/rice"]},
                 {"name": "flour", "members": ["#c:flour", "refurbished_furniture:wheat_flour"]},
                 {"name": "chili", "members": ["#c:crops/chilipepper"]},
                 {"name": "grape", "members": ["#c:foods/fruits/grape", "#c:fruits/grapes", "kaleidoscope_tavern:green_grape"]},
                 {"name": "milk", "members": ["#c:drinks/milk"]},
                 {"name": "cod", "members": ["#c:foods/raw_cod"]},
                 {"name": "chicken", "members": ["#c:foods/raw_chicken"]},
-                {"name": "beef", "members": ["#c:foods/raw_beef"]}
+                {"name": "beef", "members": ["#c:foods/raw_beef"]},
+                {"name": "pumpkin", "members": ["minecraft:pumpkin", "farmersdelight:pumpkin_slice"]},
+                {"name": "melon", "members": ["minecraft:melon_slice", "minecraft:melon"]}
               ],
               "prices": {},
               "free": ["minecraft:bowl", "minecraft:glass_bottle", "minecraft:bucket", "minecraft:water_bucket",
@@ -122,10 +127,16 @@ record IngredientConfig(Set<ResourceLocation> free, Set<ResourceLocation> ignore
                 String name = group.get("name").getAsString();
                 if (name.isBlank()) throw new IllegalArgumentException("group name is empty");
                 Set<ResourceLocation> members = new LinkedHashSet<>();
-                readList(group.get("members"), member -> members.addAll(items(member)));
+                List<String> listed = new ArrayList<>();
+                readList(group.get("members"), member -> {
+                    members.addAll(items(member));
+                    listed.add(member);
+                });
+                // A plain id listed first is the member the Shop shows; a tag first lets the most useful member show.
+                ResourceLocation show = listed.isEmpty() || listed.getFirst().startsWith("#") ? null : ResourceLocation.tryParse(listed.getFirst());
                 if (!java.util.Collections.disjoint(grouped, members))
                     throw new IllegalArgumentException("group members overlap an earlier group");
-                groups.add(new Group(name, Set.copyOf(members)));
+                groups.add(new Group(name, Set.copyOf(members), show));
                 grouped.addAll(members);
             } catch (RuntimeException e) {
                 OneMoreCore.LOGGER.warn("Skipped invalid ingredient group {}: {}", value, e.getMessage());
