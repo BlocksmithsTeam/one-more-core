@@ -10,10 +10,7 @@
       2.5,
       8
     ],
-    "fov": 30,
-    "neighbors": {
-      "enabled": false
-    }
+    "fov": 30
   },
   "work_plane": 1.5,
   "idle_visible": false,
