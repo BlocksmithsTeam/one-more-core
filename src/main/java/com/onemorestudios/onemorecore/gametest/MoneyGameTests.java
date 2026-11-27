@@ -660,6 +660,28 @@ public final class MoneyGameTests {
     }
 
     @SuppressWarnings("unchecked")
+    @GameTest(template = "empty")
+    public static void preferenceDroppedWhenNothingOrderableMatches(GameTestHelper helper) {
+        Restaurant r = placeRestaurant(helper);
+        GameTestSupport.setRegister(r, 10000);
+        GameTestSupport.unlock(helper, r, "wheat");
+        helper.assertTrue(((List<?>) call(Restaurant.class, r, "preferred", new Class<?>[] {List.class, String.class},
+                r.dishes().stream().filter(r::orderable).toList(), "test_sweet")).isEmpty(),
+                "The test_sweet tag matches no orderable variant");
+        call(Restaurant.class, r, "setSpawn", new Class<?>[] {BlockPos.class}, helper.absolutePos(SIGN.north()));
+        write(Restaurant.class, r, "toSpawn", 1);
+        withConfig("PREFERENCES", List.of("test_sweet=1"), () -> {
+            helper.assertValueEqual(call(Restaurant.class, r, "spawnParty", new Class<?>[] {ServerLevel.class, int.class},
+                    helper.getLevel(), 1), 1, "A party spawns with a normal order");
+            Customer member = ((List<Customer>) read(Restaurant.class, r, "customers")).getFirst();
+            Object party = call(Customer.class, member, "party", new Class<?>[0]);
+            helper.assertValueEqual(read(PARTY, party, "preference"), "", "An unavailable preference is cleared for the party");
+            helper.assertValueEqual(member.getPreference(), "", "The bubble has no unavailable preference");
+        });
+        helper.succeed();
+    }
+
+    @SuppressWarnings("unchecked")
     private static List<Customer.Line> preferenceOrder(Restaurant r, int seed, String preference) {
         return (List<Customer.Line>) call(Restaurant.class, r, "makeOrder",
                 new Class<?>[] {net.minecraft.util.RandomSource.class, Customer.Type.class, List.class, String.class},

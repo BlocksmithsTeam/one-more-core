@@ -1192,6 +1192,7 @@ public class Restaurant {
         else if (roll < Config.VIP_CHANCE.get()) party.type = Customer.Type.VIP;
         else if (!favourites.isEmpty() && roll < Config.VIP_CHANCE.get() + Config.REGULAR_CHANCE.get()) party.type = Customer.Type.REGULAR;
         party.preference = Customer.rollPreference(level.random);
+        if (preferred(dishes().stream().filter(this::orderable).toList(), party.preference).isEmpty()) party.preference = "";
         for (Seat seat : chosen) {
             List<String> ids = new ArrayList<>();
             List<Customer.Line> order = makeOrder(level.random, party.type, ids, party.preference);
@@ -1254,12 +1255,17 @@ public class Restaurant {
         return makeOrder(random, type, ids, "");
     }
 
+    private List<Menu.Entry> preferred(List<Menu.Entry> available, String preference) {
+        var access = ingredientAvailability();
+        return preference.isEmpty() ? List.of() : available.stream()
+                .filter(e -> Ingredients.variants(e).anyMatch(stack -> Customer.prefers(preference, stack)
+                        && access.dish(Ingredients.id(stack)))).toList();
+    }
+
     private List<Customer.Line> makeOrder(RandomSource random, Customer.Type type, List<String> ids, String preference) {
         List<Menu.Entry> available = dishes().stream().filter(this::orderable).toList();
         var access = ingredientAvailability();
-        List<Menu.Entry> preferred = preference.isEmpty() ? List.of() : available.stream()
-                .filter(e -> Ingredients.variants(e).anyMatch(stack -> Customer.prefers(preference, stack)
-                        && access.dish(Ingredients.id(stack)))).toList();
+        List<Menu.Entry> preferred = preferred(available, preference);
         List<Customer.Line> order = new ArrayList<>();
         if (available.isEmpty()) return order;
         // A combo: all its dishes; the combo price is split over the lines (the first line takes the rest of the division).
