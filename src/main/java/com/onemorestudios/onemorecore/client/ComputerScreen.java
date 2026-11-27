@@ -1531,7 +1531,7 @@ public class ComputerScreen extends Screen {
         if (managerYesterday && state.yesterday().isPresent()) {
             button(g, cx, cy + 2, cw, 20, Component.translatable("onemorecore.summary.back"),
                     AMBER, AMBER_HOVER, true, mouseX, mouseY, () -> managerYesterday = false);
-            float scale = Math.min(1f, Math.max(0, ch - 28) / 128f);
+            float scale = Math.min(1f, Math.max(0, ch - 28) / 156f);
             if (scale > 0) {
                 g.pose().pushPose();
                 g.pose().translate(cx + 6, cy + 28, 0);
@@ -1560,12 +1560,16 @@ public class ComputerScreen extends Screen {
         String count = (tables - off) + "/" + tables;
         g.drawString(font, count, cx + cw - 8 - font.width(count), y + 6, DIM, false);
         y += 27;
+        Component rating = state.info().size() > 8 ? state.info().get(8) : Component.empty();
         int editWidth = state.yesterday().isPresent() ? (cw - 4) / 2 : cw;
         button(g, cx, y, editWidth, 20, text("edit_places"), AMBER, AMBER_HOVER, pendingCheckout == 0, mouseX, mouseY, ComputerCamera::startFree);
         if (state.yesterday().isPresent()) {
-            button(g, cx + editWidth + 4, y, cw - editWidth - 4, 20, Component.translatable("onemorecore.summary.yesterday"),
+            button(g, cx + editWidth + 4, y, cw - editWidth - 4, 20, Component.translatable("onemorecore.summary.yesterday")
+                            .append("  ").append(rating),
                     AMBER, AMBER_HOVER, true, mouseX, mouseY,
                     () -> managerYesterday = true);
+        } else {
+            g.drawString(font, rating, cx, y + 26, TEXT, false);
         }
     }
 

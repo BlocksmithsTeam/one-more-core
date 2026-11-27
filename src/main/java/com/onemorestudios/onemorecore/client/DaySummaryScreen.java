@@ -20,8 +20,8 @@ final class DaySummaryScreen extends Screen {
     }
 
     @Override protected void init() {
-        int w = Math.min(300, width - 20), x = (width - w) / 2, y = (height - 210) / 2;
-        addRenderableWidget(new Button(x + 12, y + 182, w - 24, 18, text("close"), b -> onClose(), narration -> narration.get()) {
+        int w = Math.min(300, width - 20), x = (width - w) / 2, y = (height - 238) / 2;
+        addRenderableWidget(new Button(x + 12, y + 210, w - 24, 18, text("close"), b -> onClose(), narration -> narration.get()) {
             @Override protected void renderWidget(GuiGraphics g, int mx, int my, float tick) {
                 ui.pill(g, font, getX(), getY(), getWidth(), getHeight(), getMessage(),
                         isHoveredOrFocused(), Ui.CHIP_HOVER, mx, my, null);
@@ -42,6 +42,12 @@ final class DaySummaryScreen extends Screen {
             g.drawString(font, value, x + w - font.width(value), y + i * 12, Ui.TEXT, false);
         }
         y += keys.length * 12 + 4;
+        if (s.rating() > 0) {
+            g.drawString(font, text("reviews", s.reviewAverage() == 0 ? text("none").getString()
+                    : String.format(java.util.Locale.ROOT, "%.1f", s.reviewAverage())), x, y, Ui.TEXT, false);
+            g.drawString(font, text("rating", String.format(java.util.Locale.ROOT, "%.1f", s.rating())), x, y + 12, Ui.TEXT, false);
+            y += 28;
+        }
         g.drawString(font, text("best"), x, y, Ui.MUTED, false);
         ResourceLocation id = ResourceLocation.tryParse(s.bestDish());
         ItemStack dish = id == null ? ItemStack.EMPTY : new ItemStack(BuiltInRegistries.ITEM.get(id));
@@ -59,7 +65,7 @@ final class DaySummaryScreen extends Screen {
 
     @Override public void render(GuiGraphics g, int mx, int my, float tick) {
         ui.clear();
-        int w = Math.min(300, width - 20), h = 210, x = (width - w) / 2, y = (height - h) / 2;
+        int w = Math.min(300, width - 20), h = 238, x = (width - w) / 2, y = (height - h) / 2;
         Ui.panel(g, font, x, y, w, h, title);
         draw(g, font, summary, x + 12, y + 30, w - 24);
         super.render(g, mx, my, tick);

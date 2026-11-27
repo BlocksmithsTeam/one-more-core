@@ -32,6 +32,9 @@ public class Config {
     static final ModConfigSpec.IntValue READY_COUNTDOWN = B
             .comment("Ticks between the moment every player is ready and the start of the day. 0 starts the day at once.")
             .defineInRange("readyCountdownTicks", 60, 0, 600);
+    static final ModConfigSpec.BooleanValue REVIEWS = B
+            .comment("Parties leave reviews; the last 20 reviews affect customer arrival times.")
+            .define("reviews", true);
     static final ModConfigSpec.BooleanValue DAY_SUMMARY = B
             .comment("Show the day summary when restaurant service ends.")
             .define("daySummary", true);

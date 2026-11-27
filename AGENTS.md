@@ -69,6 +69,7 @@ change how one of them works, change its lines here in the same commit.
 - **Grilling skewers** (`compat/GrillingSkewers`): Kaleidoscope Grilling items in `onemorecore:lying_dishes` or with an ID
   ending in `_skewer` lie horizontally on trays and serving surfaces. `TrayPlacerMixin` sets the close-up hand turn before
   Diegesis measures the preview. Test: `GrillingSkewerGameTests.grillingSkewersUseOptionalTagsAndScopedIds`.
+- **Reviews** (`Customer.Party`, `Restaurant`, `reviews`, on by default): each departing party gives 1–5 stars from remaining service patience, wrong dish attempts, seat-surface dirt and decor. Unserved parties give one star. The saved last 20 reviews average to the rating (three before any review), scaling arrival intervals from 1.3 at one star to 0.7 at five. One party member shows stars for up to 60 ticks while leaving. DaySummary saves today’s average and the rating; Manager shows the rating beside Yesterday. Tests: review tests in `MoneyGameTests`.
 - **Customers**: `walkSpeed` 0.26; a customer whose path does not move it steps onto the next free node (`Customer.hopAlong`);
   stuck within 4 blocks of its seat with no free node (behind a sofa's back), it sits down at once.
 - **Stream chat**: the computer's Stream app sets `chatPlatform`, `chatChannel`, `chatCommand` (operators only) and connects

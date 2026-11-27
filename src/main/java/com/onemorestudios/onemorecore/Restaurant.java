@@ -284,8 +284,27 @@ public class Restaurant {
     int served, lost, earned;
     long penalties, tips;
     final Map<String, Integer> dayDishes = new HashMap<>();
+    private final List<Integer> reviews = new ArrayList<>();
+    private long dayReviewStars, dayReviewCount;
     private DaySummary lastSummary;
     private UUID dayUser;
+
+    public float rating() {
+        return reviews.isEmpty() ? 3 : (float) reviews.stream().mapToInt(Integer::intValue).average().orElse(3);
+    }
+
+    void recordReview(int stars) {
+        stars = Math.clamp(stars, 1, 5);
+        reviews.add(stars);
+        if (reviews.size() > 20) reviews.removeFirst();
+        dayReviewStars += stars;
+        dayReviewCount++;
+        owner.setDirty();
+    }
+
+    double reviewIntervalFactor() {
+        return Config.REVIEWS.get() ? Math.clamp(1.45 - 0.15 * rating(), 0.7, 1.3) : 1;
+    }
 
     public DaySummary lastSummary() { return lastSummary; }
 
@@ -294,7 +313,9 @@ public class Restaurant {
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
                 .findFirst();
         return new DaySummary(day, earned - tips, tips, penalties, served, lost,
-                best.map(Map.Entry::getKey).orElse(""), best.map(Map.Entry::getValue).orElse(0), register);
+                best.map(Map.Entry::getKey).orElse(""), best.map(Map.Entry::getValue).orElse(0), register,
+                Config.REVIEWS.get() && dayReviewCount > 0 ? dayReviewStars / (float) dayReviewCount : 0,
+                Config.REVIEWS.get() ? rating() : 0);
     }
 
     void recordDish(ItemStack stack) {
@@ -893,6 +914,11 @@ public class Restaurant {
     void restore(CompoundTag progress) {
         progress.putLong("sign", sign.asLong());
         Restaurant from = load(owner, progress);
+        reviews.clear();
+        reviews.addAll(from.reviews);
+        dayReviewStars = from.dayReviewStars;
+        dayReviewCount = from.dayReviewCount;
+        lastSummary = from.lastSummary;
         day = from.day;
         register = from.register;
         level = from.level;
@@ -1031,6 +1057,7 @@ public class Restaurant {
         served = lost = earned = 0;
         penalties = tips = 0;
         dayDishes.clear();
+        dayReviewStars = dayReviewCount = 0;
         owner.setDirty();
         serviceLeft = Config.DAY_LENGTH.get();
         // With a day length the number of customers is open: they come until the service ends.
@@ -1119,11 +1146,12 @@ public class Restaurant {
     /** The next pause between arrivals: spawnIntervalTicks, 6 percent shorter per day down to 40 percent, then 60 to 140 percent of that. */
     int nextInterval(ServerLevel level) {
         double base = Config.SPAWN_INTERVAL.get() * Math.max(0.4, 1 - 0.06 * (day - 1));
-        return Math.max(1, (int) Math.round(base * (0.6 + 0.8 * level.random.nextDouble())));
+        return Math.max(1, (int) Math.round(base * reviewIntervalFactor() * (0.6 + 0.8 * level.random.nextDouble())));
     }
 
     void endDay(ServerLevel level, boolean failed) {
         if (!open) return;
+        for (Customer c : List.copyOf(customers)) c.party().review(this, c.getState() == Customer.State.EATING);
         open = false;
         if (failed) {
             toSpawn = 0;
@@ -1718,6 +1746,9 @@ public class Restaurant {
         tag.putInt("lost", lost);
         tag.putLong("penalties", penalties);
         tag.putLong("tips", tips);
+        tag.putIntArray("reviews", reviews);
+        tag.putLong("dayReviewStars", dayReviewStars);
+        tag.putLong("dayReviewCount", dayReviewCount);
         CompoundTag counts = new CompoundTag();
         dayDishes.forEach(counts::putInt);
         tag.put("dayDishes", counts);
@@ -1855,6 +1886,11 @@ public class Restaurant {
         r.lost = Math.max(0, tag.getInt("lost"));
         r.penalties = Math.max(0, tag.getLong("penalties"));
         r.tips = Math.max(0, Math.min(r.earned, tag.getLong("tips")));
+        int[] reviews = tag.getIntArray("reviews");
+        for (int i = Math.max(0, reviews.length - 20); i < reviews.length; i++)
+            if (reviews[i] >= 1 && reviews[i] <= 5) r.reviews.add(reviews[i]);
+        r.dayReviewCount = Math.clamp(tag.getLong("dayReviewCount"), 0, Long.MAX_VALUE / 5);
+        r.dayReviewStars = Math.clamp(tag.getLong("dayReviewStars"), r.dayReviewCount, r.dayReviewCount * 5);
         CompoundTag counts = tag.getCompound("dayDishes");
         for (String id : counts.getAllKeys())
             if (id.length() <= 256 && ResourceLocation.tryParse(id) != null && counts.getInt(id) > 0) r.dayDishes.put(id, counts.getInt(id));

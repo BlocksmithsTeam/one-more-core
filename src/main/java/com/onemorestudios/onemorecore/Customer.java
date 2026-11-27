@@ -65,6 +65,7 @@ public class Customer extends PathfinderMob {
     private static final EntityDataAccessor<List<ItemStack>> SERVED = SynchedEntityData.defineId(Customer.class, OneMoreCore.STACKS.get());
     private static final EntityDataAccessor<Optional<BlockPos>> SURFACE = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.OPTIONAL_BLOCK_POS);
     private static final EntityDataAccessor<String> SKIN_NAME = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<Integer> REVIEW = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Byte> GUEST = SynchedEntityData.defineId(Customer.class, EntityDataSerializers.BYTE);
 
     // A customer that stands still this long, or walks longer than the timeout, is moved to its target.
@@ -117,13 +118,38 @@ public class Customer extends PathfinderMob {
         final List<Customer> members = new ArrayList<>();
         // patience 0: the party does not wait yet (a member still walks).
         int patience, patienceMax = 1, bill;
-        boolean settled;
+        boolean settled, reviewed;
+        int wrongDishes;
+        private static final double BASE_STARS = 1; // A served party starts with one star.
+        private static final double PATIENCE_WEIGHT = 4; // Remaining service patience supplies up to four stars.
+        private static final double WRONG_WEIGHT = 0.5; // Each wrong dish attempt costs half a star.
+        private static final double DIRT_WEIGHT = 1; // A fully dirty seat surface costs one star.
+        private static final double DECOR_WEIGHT = 0.15; // Each purchased decor level adds a small bonus.
+
+        static int stars(boolean served, float patienceLeft, int wrongDishes, double dirt, int decor) {
+            if (!served) return 1;
+            double score = BASE_STARS + PATIENCE_WEIGHT * Math.clamp(patienceLeft, 0, 1)
+                    - WRONG_WEIGHT * wrongDishes - DIRT_WEIGHT * dirt + DECOR_WEIGHT * decor;
+            return (int) Math.clamp(Math.round(score), 1, 5);
+        }
+
+        void review(Restaurant restaurant, boolean served) {
+            if (reviewed) return;
+            reviewed = true;
+            if (!Config.REVIEWS.get()) return;
+            double dirt = members.stream().mapToInt(m -> Long.bitCount(restaurant.dirt.getOrDefault(m.getSurface(), 0L)))
+                    .average().orElse(0) / 64;
+            int stars = stars(served, patience / (float) patienceMax, wrongDishes, dirt, restaurant.upgrade("decor"));
+            restaurant.recordReview(stars);
+            if (!members.isEmpty()) members.getFirst().entityData.set(REVIEW, stars);
+        }
         /** What kind of guests the party is; it changes the patience and the tip. */
         Type type = Type.NORMAL;
 
         void settle(Restaurant restaurant, boolean paid) {
             if (settled) return;
             settled = true;
+            review(restaurant, paid);
             restaurant.finishService(this);
             if (paid) {
                 restaurant.served += members.size();
@@ -267,6 +293,7 @@ public class Customer extends PathfinderMob {
         builder.define(SURFACE, Optional.empty());
         builder.define(SKIN_NAME, "");
         builder.define(GUEST, (byte) 0);
+        builder.define(REVIEW, 0);
     }
 
     @Override
@@ -288,6 +315,8 @@ public class Customer extends PathfinderMob {
     public BlockPos getSurface() { return entityData.get(SURFACE).orElse(null); }
     /** The Minecraft account whose skin the customer wears. Empty: a default skin. */
     public String getSkinName() { return entityData.get(SKIN_NAME); }
+
+    public int getReview() { return entityData.get(REVIEW); }
 
     public boolean isSeated() {
         State s = getState();
@@ -319,6 +348,7 @@ public class Customer extends PathfinderMob {
                 if (timer % 16 == 0) eatEffect();
             }
             case LEAVING -> {
+                if (timer >= 60) entityData.set(REVIEW, 0);
                 if (walkTo(restaurant.spawn)) discard();
             }
         }
@@ -420,6 +450,7 @@ public class Customer extends PathfinderMob {
         } else {
             ItemStack held = player.getItemInHand(hand);
             if (!deliver(player, held) && !held.isEmpty()) {
+                if (!wants(held)) party.wrongDishes++;
                 party.patience = Math.max(1, party.patience - Config.WRONG_PENALTY.get());
                 party.members.forEach(m -> m.entityData.set(PATIENCE, party.patience / (float) party.patienceMax));
                 effect(SoundEvents.VILLAGER_NO, null);
