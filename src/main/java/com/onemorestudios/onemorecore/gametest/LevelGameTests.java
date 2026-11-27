@@ -66,18 +66,19 @@ public final class LevelGameTests {
     }
 
     @GameTest(template = "empty")
-    public static void wallContainingOnlySignPartPreservesSign(GameTestHelper helper) throws ReflectiveOperationException {
+    public static void wallAboveSignPreservesSign(GameTestHelper helper) throws ReflectiveOperationException {
         try (Fixture f = new Fixture(helper)) {
             var signState = OneMoreCore.OPEN_SIGN.get().defaultBlockState().setValue(OpenSignBlock.FACE, AttachFace.WALL);
             helper.setBlock(SIGN, signState);
             signState.getBlock().setPlacedBy(helper.getLevel(), helper.absolutePos(SIGN), signState,
                     f.player, OneMoreCore.OPEN_SIGN_ITEM.get().getDefaultInstance());
-            helper.assertTrue(helper.getBlockState(SIGN.above()).is(OneMoreCore.SCREEN_PART.get()), "Blade has an upper part");
+            helper.assertTrue(helper.getBlockState(SIGN.above()).isAir(), "Wall sign leaves the block above free");
+            helper.setBlock(SIGN.above(), Blocks.STONE);
             step(f, 7);
             send(f, Computer.LEVEL_WALL, "0\n" + corners(helper, SIGN.above(), SIGN.above()));
             key(helper, send(f, Computer.LEVEL_BUY, ""), "onemorecore.level.bought");
             helper.assertTrue(helper.getBlockState(SIGN).equals(signState), "Sign outside wall box survives");
-            helper.assertTrue(helper.getBlockState(SIGN.above()).is(OneMoreCore.SCREEN_PART.get()), "Upper part survives");
+            helper.assertTrue(helper.getBlockState(SIGN.above()).isAir(), "Wall above the sign is removed");
             helper.assertTrue(helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
                     net.minecraft.world.phys.AABB.encapsulatingFullBlocks(helper.absolutePos(SIGN), helper.absolutePos(SIGN.above()))).isEmpty(),
                     "Preserved sign drops no items");
@@ -146,9 +147,9 @@ public final class LevelGameTests {
             day.setAccessible(true);
             day.setInt(f.restaurant, 5);
             step(f, 7);
-            send(f, Computer.LEVEL_MOVE, "0\n" + coordinates(helper.absolutePos(targetSign.above())));
+            send(f, Computer.LEVEL_MOVE, "0\n" + coordinates(helper.absolutePos(targetSign)));
             helper.assertValueEqual(f.restaurant.steps().getFirst().moveTo(), helper.absolutePos(targetSign),
-                    "Upper sign part stores the sign position");
+                    "Move target stores the sign position");
             BoundingBox oldArea = f.restaurant.area();
             key(helper, send(f, Computer.LEVEL_BUY, ""), "onemorecore.level.moved");
             helper.assertValueEqual(target.day(), 5, "Target receives day");

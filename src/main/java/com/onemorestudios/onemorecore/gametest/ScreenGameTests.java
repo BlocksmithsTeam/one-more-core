@@ -16,6 +16,8 @@ import com.onemorestudios.onemorecore.MenuBoardBlock;
 import com.onemorestudios.onemorecore.MenuBoardBlockEntity;
 import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.OpenSignBlockEntity;
+import com.onemorestudios.onemorecore.OpenSignBlock;
+import com.onemorestudios.onemorecore.ScreenPartBlock;
 import com.onemorestudios.onemorecore.Tickets;
 import com.onemorestudios.onemorecore.Restaurant;
 import com.onemorestudios.onemorecore.Restaurants;
@@ -63,6 +65,91 @@ public final class ScreenGameTests {
     private static final BlockPos POS = new BlockPos(1, 1, 1);
     private static final BlockPos SIGN = POS.east();
     private static final float CARD_Y = 60;
+
+    @GameTest(template = "empty")
+    public static void wallSignUsesOneBlock(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(SIGN);
+        var block = OneMoreCore.OPEN_SIGN.get();
+        var player = GameTestSupport.player(helper);
+        for (Direction facing : Direction.Plane.HORIZONTAL) {
+            level.setBlockAndUpdate(pos.above(), Blocks.STONE.defaultBlockState());
+            var hit = new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(pos), facing, pos, false);
+            var placement = new net.minecraft.world.item.context.BlockPlaceContext(level, player,
+                    net.minecraft.world.InteractionHand.MAIN_HAND, block.asItem().getDefaultInstance(), hit);
+            var state = block.getStateForPlacement(placement);
+            helper.assertTrue(state.getValue(OpenSignBlock.FACE) == net.minecraft.world.level.block.state.properties.AttachFace.WALL
+                    && OpenSignBlock.wallFacing(state) == facing, "Wall placement preserves facing with an occupied block above");
+            level.setBlockAndUpdate(pos, state);
+            block.setPlacedBy(level, pos, state, player, ItemStack.EMPTY);
+            helper.assertTrue(level.getBlockState(pos.above()).is(Blocks.STONE), "Placement preserves the block above");
+            var shape = state.getShape(level, pos).bounds();
+            helper.assertTrue(shape.minY == 2 / 16.0 && shape.maxY == 1, "Wall frame has one-block height");
+            helper.assertTrue(facing.getAxis() == Direction.Axis.Z
+                    ? shape.maxZ - shape.minZ == 6 / 16.0 : shape.maxX - shape.minX == 6 / 16.0,
+                    "Wall frame and bracket have six-pixel depth");
+            state.useItemOn(OneMoreCore.SCREWDRIVER.get().getDefaultInstance(), level, player,
+                    net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(level.getBlockState(pos).equals(state), "Screwdriver does not change the sign");
+            level.removeBlock(pos.above(), false);
+            block.setPlacedBy(level, pos, state, player, ItemStack.EMPTY);
+            helper.assertTrue(level.isEmptyBlock(pos.above()), "Wall sign reserves no upper block");
+        }
+        for (var face : List.of(net.minecraft.world.level.block.state.properties.AttachFace.FLOOR,
+                net.minecraft.world.level.block.state.properties.AttachFace.CEILING)) {
+            for (int rotation = 0; rotation < 16; rotation++) {
+                var state = block.defaultBlockState().setValue(OpenSignBlock.FACE, face).setValue(OpenSignBlock.ROTATION, rotation);
+                var bounds = state.getShape(level, pos).bounds();
+                helper.assertTrue(bounds.minY == 0 && bounds.maxY == 1, "Floor and ceiling shapes include the mount height");
+                double angle = Math.toRadians(rotation * 22.5);
+                for (double x : new double[] {-0.5, 0.5}) for (double z : new double[] {-0.125, 0.125}) {
+                    double worldX = 0.5 + x * Math.cos(angle) - z * Math.sin(angle);
+                    double worldZ = 0.5 + x * Math.sin(angle) + z * Math.cos(angle);
+                    helper.assertTrue(worldX >= bounds.minX - 1e-9 && worldX <= bounds.maxX + 1e-9
+                            && worldZ >= bounds.minZ - 1e-9 && worldZ <= bounds.maxZ + 1e-9,
+                            "Shape contains every rotated frame corner");
+                }
+                helper.assertTrue(state.getCollisionShape(level, pos).isEmpty(), "Players still walk through signs");
+            }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void oldWallSignPartIsRemovedOnLoad(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(SIGN), above = pos.above();
+        for (String chalk : List.of("false", "true")) {
+            CompoundTag saved = new CompoundTag(), properties = new CompoundTag();
+            saved.putString("Name", "onemorecore:open_sign");
+            properties.putString("face", "wall");
+            properties.putString("rotation", "4");
+            properties.putString("open", "true");
+            properties.putString("chalk", chalk);
+            saved.put("Properties", properties);
+            var state = net.minecraft.world.level.block.state.BlockState.CODEC.parse(net.minecraft.nbt.NbtOps.INSTANCE, saved).getOrThrow();
+            helper.assertTrue(state.is(OneMoreCore.OPEN_SIGN.get()) && state.getValue(OpenSignBlock.OPEN)
+                    && state.getValue(OpenSignBlock.ROTATION) == 4
+                    && state.getValue(OpenSignBlock.FACE) == net.minecraft.world.level.block.state.properties.AttachFace.WALL,
+                    "Legacy chalk property does not change the saved sign state");
+            level.setBlockAndUpdate(pos, state);
+            var sign = (OpenSignBlockEntity) level.getBlockEntity(pos);
+            var restaurant = Restaurants.get(level).at(pos);
+            var part = OneMoreCore.SCREEN_PART.get().defaultBlockState().setValue(ScreenPartBlock.OY, 0);
+            level.setBlockAndUpdate(above, part.setValue(ScreenPartBlock.OX, 0));
+            sign.onLoad();
+            helper.assertTrue(level.getBlockState(above).is(OneMoreCore.SCREEN_PART.get()), "Loading preserves another screen's part");
+            level.setBlockAndUpdate(above, part);
+            sign.onLoad();
+            sign.onLoad();
+            helper.assertTrue(level.isEmptyBlock(above), "Loading removes the legacy upper part repeatedly without errors");
+            helper.assertTrue(level.getBlockState(pos).equals(state) && level.getBlockEntity(pos) == sign
+                    && Restaurants.get(level).at(pos) == restaurant, "Cleanup preserves the sign and its restaurant");
+            helper.assertTrue(level.getEntitiesOfClass(ItemEntity.class, new AABB(pos).expandTowards(0, 1, 0)).isEmpty(),
+                    "Cleanup drops no sign or restaurant progress");
+        }
+        helper.succeed();
+    }
 
     /** CLIENT-4: a wall and excessive reach block ticket requests, and a visible overhang remains clickable. */
     @GameTest(template = "empty")

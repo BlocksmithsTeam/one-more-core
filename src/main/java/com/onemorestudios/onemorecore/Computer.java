@@ -417,9 +417,6 @@ public class Computer extends Block {
                             catch (NumberFormatException e) { return null; }
                             point = new BlockPos(n[0], n[1], n[2]);
                             BlockPos end = count == 3 ? point : new BlockPos(n[3], n[4], n[5]);
-                            if (count == 3 && level.isLoaded(point) && level.isLoaded(point.below())
-                                    && level.getBlockState(point).is(OneMoreCore.SCREEN_PART.get())
-                                    && level.getBlockState(point.below()).is(OneMoreCore.OPEN_SIGN.get())) point = point.below();
                             if (!near(request.pos, point) || !near(request.pos, end) || !level.isLoaded(point) || !level.isLoaded(end))
                                 return state(level, request.pos, r, false, false, false,
                                         Component.translatable("onemorecore.tool.too_far", PLACE_RANGE), editor(player));
