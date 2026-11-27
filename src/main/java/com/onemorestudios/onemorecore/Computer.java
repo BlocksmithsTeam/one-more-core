@@ -752,7 +752,7 @@ public class Computer extends Block {
         }
         List<IngredientLine> ingredients = new ArrayList<>();
         for (ResourceLocation item : index.raw) {
-            boolean bought = unlocked.contains(item);
+            boolean bought = index.purchased(item, unlocked);
             if (!bought && availability.item(item)) continue;
             int newlyOrderable = 0;
             if (!bought) {

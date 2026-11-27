@@ -31,7 +31,7 @@ public final class DishBlacklistGameTests {
         current.setAccessible(true);
         Object before = current.get(null);
         try {
-            current.set(null, IngredientGameTests.ingredientIndex(helper, "{}", List.of()));
+            current.set(null, IngredientGameTests.ingredientIndex(helper, "{\"minDishes\":0}", List.of()));
             DishBlacklist.set(List.of("minecraft:splash_potion"));
             helper.assertTrue(DishBlacklist.isDish(new ItemStack(Items.MILK_BUCKET)), "a drink without a food component is a dish");
             helper.assertTrue(DishBlacklist.isDish(new ItemStack(Items.COOKED_COD)), "food is a dish");
@@ -94,7 +94,7 @@ public final class DishBlacklistGameTests {
     public static void blacklistedIntermediatesRemainIngredients(GameTestHelper helper) throws ReflectiveOperationException {
         try {
             DishBlacklist.set(List.of("minecraft:potato", "minecraft:baked_*", "minecraft:pumpkin_*"));
-            var index = IngredientGameTests.ingredientIndex(helper, "{}", List.of(
+            var index = IngredientGameTests.ingredientIndex(helper, "{\"minDishes\":0}", List.of(
                     recipe("cook", Items.BAKED_POTATO, Items.POTATO),
                     recipe("dish", Items.BREAD, Items.BAKED_POTATO)));
             assertIngredientChain(helper, index, "potato", "baked_potato");
@@ -105,7 +105,7 @@ public final class DishBlacklistGameTests {
                     return net.minecraft.world.item.crafting.RecipeType.simple(ResourceLocation.parse("onemorecore:test_cutting"));
                 }
             };
-            index = IngredientGameTests.ingredientIndex(helper, "{}", List.of(
+            index = IngredientGameTests.ingredientIndex(helper, "{\"minDishes\":0}", List.of(
                     new RecipeHolder<>(ResourceLocation.parse("onemorecore:portion"), portion),
                     recipe("whole", Items.PUMPKIN_PIE, Items.WHEAT),
                     recipe("first", Items.COOKED_BEEF, Items.COOKIE),

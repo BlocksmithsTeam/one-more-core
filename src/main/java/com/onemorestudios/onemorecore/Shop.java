@@ -52,13 +52,18 @@ public class Shop {
             itemId = itemId.substring(INGREDIENT_PREFIX.length());
         } while (itemId.startsWith(INGREDIENT_PREFIX));
         ResourceLocation item = ResourceLocation.tryParse(itemId);
-        if (item == null || !restaurant.unlockedIngredients().contains(item) || !ingredientListingId(item).equals(id)) return null;
+        Ingredients index = Ingredients.current();
+        if (item == null || !index.raw.contains(item) || !index.purchased(item, restaurant.unlockedIngredients())
+                || !ingredientListingId(item).equals(id)) return null;
         return ingredientEntry(item);
     }
 
     public static List<Entry> catalog(Restaurant restaurant) {
         List<Entry> catalog = new ArrayList<>(entries);
-        restaurant.unlockedIngredients().stream().sorted().map(Shop::ingredientEntry)
+        Ingredients index = Ingredients.current();
+        var unlocked = restaurant.unlockedIngredients();
+        index.raw.stream().filter(item -> index.purchased(item, unlocked))
+                .map(Shop::ingredientEntry)
                 .filter(java.util.Objects::nonNull).forEach(catalog::add);
         return catalog;
     }

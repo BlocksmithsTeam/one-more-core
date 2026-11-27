@@ -69,7 +69,7 @@ public final class IngredientGameTests {
         var availability = ingredients.getDeclaredMethod("availability", Set.class);
         availability.setAccessible(true);
         var rules = parse.invoke(null, """
-                {"free":["minecraft:bowl"],"ignore":["minecraft:egg"]}
+                {"minDishes":0,"free":["minecraft:bowl"],"ignore":["minecraft:egg"]}
                 """);
         var index = constructor.newInstance(recipes, rules, List.of(), helper.getLevel().registryAccess());
         var access = availability.invoke(index, Set.of(id("egg"), id("pumpkin")));
@@ -84,7 +84,7 @@ public final class IngredientGameTests {
                 "A readable alternative can still unlock the dish");
 
         var corrected = parse.invoke(null, """
-                {"dishes":{"minecraft:cooked_cod":["minecraft:cod"],"minecraft:bread":["#onemorecore:missing"]}}
+                {"minDishes":0,"dishes":{"minecraft:cooked_cod":["minecraft:cod"],"minecraft:bread":["#onemorecore:missing"]}}
                 """);
         var correctedIndex = constructor.newInstance(recipes, corrected, List.of(), helper.getLevel().registryAccess());
         var correctedAccess = availability.invoke(correctedIndex, Set.of(id("cod")));
@@ -119,7 +119,7 @@ public final class IngredientGameTests {
         constructor.setAccessible(true);
         var configured = List.of(new Menu.Entry("stew", new ItemStack(Items.MUSHROOM_STEW), null, 4, false),
                 new Menu.Entry("bread", new ItemStack(Items.BREAD), null, 2, false));
-        var index = constructor.newInstance(recipes, parse.invoke(null, "{\"food_tags\":[\"c:foods\",\"c:crops\",\"c:gems\"]}"), configured, helper.getLevel().registryAccess());
+        var index = constructor.newInstance(recipes, parse.invoke(null, "{\"minDishes\":0,\"food_tags\":[\"c:foods\",\"c:crops\",\"c:gems\"]}"), configured, helper.getLevel().registryAccess());
         var rawField = ingredients.getDeclaredField("raw");
         rawField.setAccessible(true);
         helper.assertValueEqual(rawField.get(index), List.of(WHEAT),
@@ -136,7 +136,7 @@ public final class IngredientGameTests {
 
     @GameTest(template = "empty")
     public static void nonFoodChainsAreFreeAndNeverRaw(GameTestHelper helper) throws ReflectiveOperationException {
-        var index = ingredientIndex(helper, "{}", List.of(
+        var index = ingredientIndex(helper, "{\"minDishes\":0}", List.of(
                 recipe("wood", Items.OAK_PLANKS, Ingredient.of(Items.OAK_LOG)),
                 recipe("wood_cycle", Items.OAK_LOG, Ingredient.of(Items.OAK_PLANKS)),
                 recipe("metal", Items.IRON_INGOT, Ingredient.of(Items.IRON_ORE)),
@@ -155,11 +155,11 @@ public final class IngredientGameTests {
                 recipe("non_food", Items.PAPER, Ingredient.of(Items.OAK_LOG)),
                 recipe("food", Items.APPLE, Ingredient.of(Items.PAPER)),
                 recipe("dish", Items.BREAD, Ingredient.of(Items.APPLE)));
-        var index = ingredientIndex(helper, "{}", recipes);
+        var index = ingredientIndex(helper, "{\"minDishes\":0}", recipes);
         helper.assertValueEqual(raw(index), List.of(id("apple")), "Food made only from non-food stays raw");
         helper.assertFalse(dishAvailable(index, "bread", Set.of()), "The raw food locks its dish");
         helper.assertTrue(dishAvailable(index, "bread", Set.of(id("apple"))), "Buying the raw food unlocks its dish");
-        var free = ingredientIndex(helper, "{\"free\":[\"minecraft:paper\"]}", recipes);
+        var free = ingredientIndex(helper, "{\"minDishes\":0,\"free\":[\"minecraft:paper\"]}", recipes);
         helper.assertTrue(raw(free).isEmpty(), "An explicit free input still makes the food free");
         helper.assertTrue(dishAvailable(free, "bread", Set.of()), "An explicit free input still unlocks the dish");
         helper.succeed();
@@ -167,7 +167,7 @@ public final class IngredientGameTests {
 
     @GameTest(template = "empty")
     public static void foodFromFoodResolvesToTheRawFood(GameTestHelper helper) throws ReflectiveOperationException {
-        var index = ingredientIndex(helper, "{}", List.of(
+        var index = ingredientIndex(helper, "{\"minDishes\":0}", List.of(
                 recipe("non_food", Items.PAPER, Ingredient.of(Items.OAK_LOG)),
                 recipe("raw_food", Items.APPLE, Ingredient.of(Items.PAPER)),
                 recipe("processed_food", Items.COOKED_COD, Ingredient.of(Items.APPLE)),
@@ -180,7 +180,7 @@ public final class IngredientGameTests {
 
     @GameTest(template = "empty")
     public static void storageContentsRemainBuyable(GameTestHelper helper) throws ReflectiveOperationException {
-        var index = ingredientIndex(helper, "{}", List.of(
+        var index = ingredientIndex(helper, "{\"minDishes\":0}", List.of(
                 recipe("unpack", Items.WHEAT, Ingredient.of(Items.HAY_BLOCK)),
                 recipe("pack", Items.HAY_BLOCK, Ingredient.of(Items.WHEAT)),
                 recipe("first", Items.COOKED_COD, Ingredient.of(Items.HAY_BLOCK), Ingredient.of(Items.WHEAT)),
@@ -197,13 +197,13 @@ public final class IngredientGameTests {
     public static void foodTagsReplaceDefaultsButNotExclusions(GameTestHelper helper) throws ReflectiveOperationException {
         var recipes = List.of(recipe("dish", Items.BREAD, Ingredient.of(Items.IRON_INGOT),
                 Ingredient.of(Items.WHEAT_SEEDS), Ingredient.of(Items.HAY_BLOCK), Ingredient.of(Items.OAK_SAPLING)));
-        var defaults = ingredientIndex(helper, "{}", recipes);
+        var defaults = ingredientIndex(helper, "{\"minDishes\":0}", recipes);
         helper.assertTrue(raw(defaults).isEmpty(), "Metal, seeds, storage and wild crops are not default food");
-        var custom = ingredientIndex(helper, "{\"food_tags\":[\"onemorecore:ingredient_test_foods\"]}", recipes);
+        var custom = ingredientIndex(helper, "{\"minDishes\":0,\"food_tags\":[\"onemorecore:ingredient_test_foods\"]}", recipes);
         helper.assertValueEqual(raw(custom), List.of(id("iron_ingot")), "Config reads food tags but excludes seeds, storage and wild crops");
         helper.assertFalse(dishAvailable(custom, "bread", Set.of()), "The configured food tag changes availability");
         helper.assertTrue(dishAvailable(custom, "bread", Set.of(id("iron_ingot"))), "The configured ingredient unlocks the dish");
-        var noTags = ingredientIndex(helper, "{\"food_tags\":[]}", List.of(recipe("dish", Items.BREAD, Ingredient.of(Items.WHEAT))));
+        var noTags = ingredientIndex(helper, "{\"minDishes\":0,\"food_tags\":[]}", List.of(recipe("dish", Items.BREAD, Ingredient.of(Items.WHEAT))));
         helper.assertTrue(raw(noTags).isEmpty(), "An empty tag list replaces default crop tags");
         helper.succeed();
     }
@@ -212,7 +212,7 @@ public final class IngredientGameTests {
     public static void seedsWithFoodEvidenceRemainBuyable(GameTestHelper helper) throws ReflectiveOperationException {
         var recipes = List.of(recipe("dish", Items.BREAD, Ingredient.of(Items.WHEAT_SEEDS),
                 Ingredient.of(Items.APPLE), Ingredient.of(Items.BEETROOT_SEEDS)));
-        var index = ingredientIndex(helper, "{\"food_tags\":[\"onemorecore:ingredient_test_seed_foods\",\"c:seeds\",\"c:seeds/beetroot\"]}", recipes);
+        var index = ingredientIndex(helper, "{\"minDishes\":0,\"food_tags\":[\"onemorecore:ingredient_test_seed_foods\",\"c:seeds\",\"c:seeds/beetroot\"]}", recipes);
         helper.assertValueEqual(raw(index), List.of(id("apple"), id("wheat_seeds")),
                 "Edible seeds and seeds in another food tag remain raw; seed tags alone do not qualify");
         helper.assertFalse(dishAvailable(index, "bread", Set.of()), "Food seeds lock their dish");
@@ -224,16 +224,16 @@ public final class IngredientGameTests {
     @GameTest(template = "empty")
     public static void singularFlourIsDefaultFood(GameTestHelper helper) throws ReflectiveOperationException {
         var recipes = List.of(recipe("dish", Items.BREAD, Ingredient.of(Items.QUARTZ)));
-        helper.assertValueEqual(raw(ingredientIndex(helper, "{}", recipes)), List.of(id("quartz")),
+        helper.assertValueEqual(raw(ingredientIndex(helper, "{\"minDishes\":0}", recipes)), List.of(id("quartz")),
                 "The singular c:flour tag qualifies without a food component");
-        helper.assertTrue(raw(ingredientIndex(helper, "{\"food_tags\":[]}", recipes)).isEmpty(),
+        helper.assertTrue(raw(ingredientIndex(helper, "{\"minDishes\":0,\"food_tags\":[]}", recipes)).isEmpty(),
                 "Explicit food tags still replace defaults");
         helper.succeed();
     }
 
     @GameTest(template = "empty")
     public static void likelyHarmfulFoodEffectsExcludeRawPurchases(GameTestHelper helper) throws ReflectiveOperationException {
-        var index = ingredientIndex(helper, "{}", List.of(recipe("dish", Items.BREAD,
+        var index = ingredientIndex(helper, "{\"minDishes\":0}", List.of(recipe("dish", Items.BREAD,
                 Ingredient.of(Items.ROTTEN_FLESH), Ingredient.of(Items.SPIDER_EYE), Ingredient.of(Items.PUFFERFISH),
                 Ingredient.of(Items.POISONOUS_POTATO), Ingredient.of(Items.CHICKEN), Ingredient.of(Items.GOLDEN_APPLE), Ingredient.of(Items.POTATO))));
         helper.assertTrue(raw(index).contains(id("chicken")), "A 0.3 hunger food remains raw");
@@ -258,14 +258,23 @@ public final class IngredientGameTests {
                             "minecraft:chorus_fruit", "minecraft:turtle_egg"), "New files contain the five default ignores");
             helper.assertTrue(json.getAsJsonArray("food_tags").asList().stream()
                     .anyMatch(tag -> tag.getAsString().equals("c:flour")), "New files include singular flour");
+            helper.assertValueEqual(json.get("minDishes").getAsInt(), 0, "New files keep every ingredient (minDishes off)");
+            helper.assertValueEqual(json.getAsJsonArray("groups").size(), 10, "New files contain ten default groups");
+            json.addProperty("minDishes", 0);
             var recipes = List.of(recipe("dish", Items.BREAD, Ingredient.of(Items.CHORUS_FRUIT, Items.WHEAT)));
             helper.assertValueEqual(raw(ingredientIndex(helper, json.toString(), recipes)), List.of(WHEAT),
                     "Generated ignores exclude otherwise edible ingredients");
             String existing = "{\"ignore\":[],\"food_tags\":[]}";
             java.nio.file.Files.writeString(path, existing);
-            load.invoke(null, path);
+            var existingRules = load.invoke(null, path);
+            var groups = config.getDeclaredMethod("groups");
+            var minimum = config.getDeclaredMethod("minDishes");
+            groups.setAccessible(true);
+            minimum.setAccessible(true);
+            helper.assertTrue(((List<?>) groups.invoke(existingRules)).isEmpty(), "Existing files do not inherit default groups");
+            helper.assertValueEqual(minimum.invoke(existingRules), 0, "An omitted threshold is off");
             helper.assertValueEqual(java.nio.file.Files.readString(path), existing, "Existing files remain byte-for-byte unchanged");
-            helper.assertValueEqual(raw(ingredientIndex(helper, "{}", recipes)), List.of(id("chorus_fruit"), WHEAT),
+            helper.assertValueEqual(raw(ingredientIndex(helper, "{\"minDishes\":0}", recipes)), List.of(id("chorus_fruit"), WHEAT),
                     "Existing files without ignores do not inherit new default ignores");
         } finally {
             java.nio.file.Files.deleteIfExists(path);
@@ -283,7 +292,7 @@ public final class IngredientGameTests {
                 return net.minecraft.world.item.crafting.RecipeType.simple(ResourceLocation.parse("onemorecore:test_cutting"));
             }
         };
-        var index = ingredientIndex(helper, "{}", List.of(
+        var index = ingredientIndex(helper, "{\"minDishes\":0}", List.of(
                 new RecipeHolder<>(ResourceLocation.parse("onemorecore:portion"), portion),
                 recipe("whole", Items.PUMPKIN_PIE, Ingredient.of(Items.WHEAT)),
                 recipe("reassemble", Items.PUMPKIN_PIE, Ingredient.of(Items.COOKIE)),
@@ -319,7 +328,7 @@ public final class IngredientGameTests {
                     recipe("baked_potato", Items.BAKED_POTATO, Ingredient.of(Items.POTATO)),
                     recipe("ignored_apple", Items.APPLE, Ingredient.of(Items.WHEAT)),
                     recipe("harmful_food", Items.ROTTEN_FLESH, Ingredient.of(Items.WHEAT)));
-            Object index = ingredientIndex(helper, "{\"ignore\":[\"minecraft:apple\"]}", recipes);
+            Object index = ingredientIndex(helper, "{\"minDishes\":0,\"ignore\":[\"minecraft:apple\"]}", recipes);
             current.set(null, index);
             helper.assertTrue(raw(index).contains(id("potato")), "The fixture indexes potato as a buyable raw ingredient");
             for (var item : List.of(Items.POTATO, Items.ROTTEN_FLESH, Items.APPLE)) {
@@ -347,7 +356,7 @@ public final class IngredientGameTests {
                     .noneMatch(stack -> stack.is(Items.POTATO) || stack.is(Items.ROTTEN_FLESH) || stack.is(Items.APPLE)),
                     "Saved custom and configured dishes cannot bypass the catalogue filter");
 
-            Object rebuilt = ingredientIndex(helper, "{\"free\":[\"minecraft:potato\"]}", recipes);
+            Object rebuilt = ingredientIndex(helper, "{\"minDishes\":0,\"free\":[\"minecraft:potato\"]}", recipes);
             current.set(null, rebuilt);
             helper.assertTrue(Restaurant.isFood(new ItemStack(Items.POTATO)), "The rebuilt index releases a former raw ingredient");
             helper.assertTrue(((List<?>) automatic.get(rebuilt)).stream().anyMatch(entry -> ((Menu.Entry) entry).stack().is(Items.APPLE)),
@@ -359,6 +368,142 @@ public final class IngredientGameTests {
             current.set(null, before);
             DishBlacklist.reload();
         }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void groupedIngredientsShareUnlockCardAndShop(GameTestHelper helper) throws ReflectiveOperationException {
+        var current = Class.forName("com.onemorestudios.onemorecore.Ingredients").getDeclaredField("current");
+        current.setAccessible(true);
+        Object before = current.get(null);
+        var menuBefore = Menu.entries;
+        var shopBefore = Shop.entries;
+        try {
+            Menu.entries = List.of();
+            Shop.entries = List.of();
+            DishBlacklist.set(List.of());
+            var index = ingredientIndex(helper, """
+                    {"minDishes":4,"groups":[{"name":"test","members":["minecraft:wheat","#c:crops/carrot"]}],
+                     "prices":{"minecraft:wheat":{"unlock":13,"shop":7},"minecraft:carrot":{"unlock":31,"shop":9}}}
+                    """, List.of(
+                            recipe("bread", Items.BREAD, Ingredient.of(Items.WHEAT)),
+                            recipe("cookie", Items.COOKIE, Ingredient.of(Items.WHEAT)),
+                            recipe("pie", Items.PUMPKIN_PIE, Ingredient.of(Items.CARROT)),
+                            recipe("stew", Items.RABBIT_STEW, Ingredient.of(Items.WHEAT, Items.CARROT))));
+            current.set(null, index);
+            helper.assertValueEqual(raw(index), List.of(WHEAT), "The union has four dishes; wheat helps three and carrot two");
+            for (var member : List.of(WHEAT, id("carrot"))) {
+                for (var dish : List.of("bread", "cookie", "pumpkin_pie", "rabbit_stew")) {
+                    helper.assertFalse(dishAvailable(index, dish, Set.of()), "Grouped dishes start locked");
+                    helper.assertTrue(dishAvailable(index, dish, Set.of(member)), "Either saved member unlocks every group dish");
+                }
+            }
+            var restaurant = place(helper);
+            helper.setBlock(COMPUTER, OneMoreCore.COMPUTER.get());
+            var player = GameTestSupport.player(helper);
+            helper.assertTrue(GameTestSupport.click(helper, player, COMPUTER).consumesAction(), "The computer opens");
+            try {
+                var data = request(helper, player, Computer.REFRESH_MENU).ingredientData().orElseThrow();
+                helper.assertValueEqual(data.ingredients().size(), 1, "The group has one card");
+                var card = data.ingredients().getFirst();
+                helper.assertValueEqual(card.id(), WHEAT, "The card uses the member with most dishes");
+                helper.assertValueEqual(card.unlockCost(), 13, "The representative supplies the single unlock price");
+                helper.assertValueEqual(card.newlyOrderable(), 4, "The preview counts the union without duplicate dishes");
+                helper.assertTrue(Shop.catalog(restaurant).isEmpty(), "A locked group has no Shop listing");
+                GameTestSupport.setRegister(restaurant, 13);
+                helper.assertValueEqual(restaurant.unlockIngredient(id("carrot")), Restaurant.Unlock.OK, "Buying either member buys the group");
+                helper.assertValueEqual(restaurant.register(), 0, "The group charges only the representative price");
+                helper.assertValueEqual(restaurant.unlockIngredient(WHEAT), Restaurant.Unlock.ALREADY, "The group cannot be charged twice");
+                var updated = request(helper, player, Computer.REFRESH_MENU).ingredientData().orElseThrow();
+                helper.assertTrue(updated.ingredients().size() == 1 && updated.ingredients().getFirst().unlocked(),
+                        "A saved non-representative purchase marks the single card bought");
+                var restored = load(helper, saved(restaurant));
+                helper.assertTrue(restored.unlockedIngredients().contains(id("carrot")), "Saving preserves the original member ID");
+                var shop = Shop.catalog(restored);
+                helper.assertValueEqual(shop.size(), 1, "A saved member gives one Shop listing");
+                helper.assertTrue(shop.getFirst().stack().is(Items.WHEAT), "The Shop delivers the representative");
+                helper.assertValueEqual(shop.getFirst().price(), 7, "The Shop uses the representative price");
+                var byId = Shop.class.getDeclaredMethod("byId", Restaurant.class, String.class);
+                byId.setAccessible(true);
+                helper.assertTrue(byId.invoke(null, restored, shop.getFirst().id()) != null, "Checkout accepts the representative listing");
+                helper.assertTrue(byId.invoke(null, restored, "ingredient/minecraft:carrot") == null, "Checkout rejects a second member listing");
+            } finally {
+                request(helper, player, Computer.CLOSE);
+            }
+        } finally {
+            current.set(null, before);
+            Menu.entries = menuBefore;
+            Shop.entries = shopBefore;
+            DishBlacklist.reload();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void rareIngredientsAndTheirOnlyDishesLeaveTheCatalog(GameTestHelper helper) throws ReflectiveOperationException {
+        var current = Class.forName("com.onemorestudios.onemorecore.Ingredients").getDeclaredField("current");
+        current.setAccessible(true);
+        Object before = current.get(null);
+        var menuBefore = Menu.entries;
+        try {
+            DishBlacklist.set(List.of());
+            // Include configured dishes too, so discovery cannot hide a catalogue regression.
+            Menu.entries = List.of(new Menu.Entry("rare", new ItemStack(Items.MUSHROOM_STEW), null, 4, false));
+            var recipes = List.of(
+                    recipe("bread", Items.BREAD, Ingredient.of(Items.WHEAT)),
+                    recipe("cookie", Items.COOKIE, Ingredient.of(Items.WHEAT)),
+                    recipe("pie", Items.PUMPKIN_PIE, Ingredient.of(Items.WHEAT, Items.CARROT)),
+                    recipe("rare", Items.MUSHROOM_STEW, Ingredient.of(Items.CARROT)));
+            var index = ingredientIndex(helper, "{\"minDishes\":3}", recipes);
+            current.set(null, index);
+            helper.assertValueEqual(raw(index), List.of(WHEAT), "Three distinct dishes keep wheat; two remove carrot");
+            helper.assertFalse(dishAvailable(index, "mushroom_stew", Set.of(id("carrot"))), "A saved rare purchase cannot restore the dish");
+            helper.assertTrue(dishAvailable(index, "pumpkin_pie", Set.of(WHEAT)), "An alternative candidate keeps a dish available");
+            var restaurant = place(helper);
+            helper.assertTrue(restaurant.dishes().stream().noneMatch(entry -> entry.stack().is(Items.MUSHROOM_STEW)), "Configured and discovered rare dishes leave the catalog");
+            helper.setBlock(COMPUTER, OneMoreCore.COMPUTER.get());
+            var player = GameTestSupport.player(helper);
+            helper.assertTrue(GameTestSupport.click(helper, player, COMPUTER).consumesAction(), "The computer opens");
+            try {
+                var state = request(helper, player, Computer.REFRESH_MENU);
+                helper.assertTrue(state.menu().stream().noneMatch(line -> line.icon().is(Items.MUSHROOM_STEW)), "Rare dishes leave the Menu app list");
+                var data = state.ingredientData().orElseThrow();
+                helper.assertTrue(data.ingredients().stream().noneMatch(line -> line.id().equals(id("carrot"))), "Rare ingredients have no card");
+                helper.assertTrue(data.lockedDishes().stream().noneMatch(line -> line.dishId().equals("rare") || line.dishId().equals("minecraft:mushroom_stew")), "Rare dishes do not stay locked forever");
+            } finally {
+                request(helper, player, Computer.CLOSE);
+            }
+            var disabled = ingredientIndex(helper, "{\"minDishes\":0,\"groups\":[]}", recipes);
+            helper.assertValueEqual(raw(disabled), List.of(id("carrot"), WHEAT), "Disabling both rules preserves separate purchases");
+            helper.assertTrue(dishAvailable(disabled, "mushroom_stew", Set.of(id("carrot"))), "Disabling the threshold restores the rare dish");
+            helper.assertFalse(dishAvailable(disabled, "bread", Set.of(id("carrot"))), "Separate ingredients do not unlock each other");
+            var ignored = ingredientIndex(helper, "{\"minDishes\":0,\"ignore\":[\"minecraft:carrot\"]}", recipes);
+            current.set(null, ignored);
+            helper.assertFalse(Restaurant.isFood(new ItemStack(Items.MUSHROOM_STEW)), "Explicit ignores use the same catalog rule");
+            helper.assertTrue(Restaurant.isFood(new ItemStack(Items.PUMPKIN_PIE)), "Explicit ignores preserve an alternative candidate");
+        } finally {
+            current.set(null, before);
+            Menu.entries = menuBefore;
+            DishBlacklist.reload();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void groupCountsAreDistinctAndTiesAreStable(GameTestHelper helper) throws ReflectiveOperationException {
+        var recipes = List.of(
+                recipe("bread", Items.BREAD, Ingredient.of(Items.WHEAT, Items.CARROT)),
+                recipe("pie", Items.PUMPKIN_PIE, Ingredient.of(Items.WHEAT, Items.CARROT)));
+        String groups = "\"groups\":[{\"name\":\"test\",\"members\":[\"minecraft:wheat\",\"minecraft:carrot\"]}]";
+        var rare = ingredientIndex(helper, "{\"minDishes\":3," + groups + "}", recipes);
+        helper.assertTrue(raw(rare).isEmpty(), "Two shared dishes count twice, not four times");
+        helper.assertFalse(dishAvailable(rare, "bread", Set.of(WHEAT)), "A saved member cannot bypass the group threshold");
+        var enabled = ingredientIndex(helper, "{\"minDishes\":0," + groups + "}", recipes);
+        helper.assertValueEqual(raw(enabled), List.of(id("carrot")), "Equal counts use stable item ID order");
+        var reversed = ingredientIndex(helper,
+                "{\"minDishes\":0,\"groups\":[{\"name\":\"test\",\"members\":[\"minecraft:carrot\",\"minecraft:wheat\"]}]}", recipes);
+        helper.assertValueEqual(raw(reversed), raw(enabled), "Member order does not change the representative");
+        helper.assertTrue(dishAvailable(enabled, "pumpkin_pie", Set.of(WHEAT)), "Disabling the threshold keeps the shared unlock");
         helper.succeed();
     }
 

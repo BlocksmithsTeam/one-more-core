@@ -2,6 +2,7 @@ package com.onemorestudios.onemorecore;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -21,10 +22,11 @@ import net.neoforged.fml.loading.FMLPaths;
 /** Ingredient overrides and prices from config/onemorecore/ingredients.json. */
 record IngredientConfig(Set<ResourceLocation> free, Set<ResourceLocation> ignore,
         Map<ResourceLocation, List<Set<ResourceLocation>>> dishes, Map<ResourceLocation, Price> prices,
-        Set<ResourceLocation> foodTags) {
+        Set<ResourceLocation> foodTags, List<Group> groups, int minDishes) {
     private static final int BASE = 4, PER_DISH = 2, MIN = 5, MAX = 40;
     private static final double VALUE_SHARE = 0.15;
     record Price(Integer unlock, Integer shop) {}
+    record Group(String name, Set<ResourceLocation> members) {}
 
     private static final List<String> FOOD_TAGS = List.of("c:foods", "c:crops", "c:eggs", "c:milks",
             "c:drinks", "c:mushrooms", "c:flours", "c:flour", "c:dusts/salt");
@@ -32,6 +34,19 @@ record IngredientConfig(Set<ResourceLocation> free, Set<ResourceLocation> ignore
     private static final String DEFAULT = """
             {
               "food_tags": ["c:foods", "c:crops", "c:eggs", "c:milks", "c:drinks", "c:mushrooms", "c:flours", "c:flour", "c:dusts/salt"],
+              "minDishes": 0,
+              "groups": [
+                {"name": "tomato", "members": ["#c:crops/tomato"]},
+                {"name": "onion", "members": ["#c:crops/onion"]},
+                {"name": "rice", "members": ["#c:crops/rice"]},
+                {"name": "flour", "members": ["#c:flour", "refurbished_furniture:wheat_flour"]},
+                {"name": "chili", "members": ["#c:crops/chilipepper"]},
+                {"name": "grape", "members": ["#c:foods/fruits/grape", "#c:fruits/grapes", "kaleidoscope_tavern:green_grape"]},
+                {"name": "milk", "members": ["#c:drinks/milk"]},
+                {"name": "cod", "members": ["#c:foods/raw_cod"]},
+                {"name": "chicken", "members": ["#c:foods/raw_chicken"]},
+                {"name": "beef", "members": ["#c:foods/raw_beef"]}
+              ],
               "prices": {},
               "free": ["minecraft:bowl", "minecraft:glass_bottle", "minecraft:bucket", "minecraft:water_bucket",
                 "minecraft:stick", "#c:tools/knife", "#c:tools/knives", "#farmersdelight:tools/knives",
@@ -97,6 +112,26 @@ record IngredientConfig(Set<ResourceLocation> free, Set<ResourceLocation> ignore
                 foodTags.add(ResourceLocation.parse(name.startsWith("#") ? name.substring(1) : name)));
         else FOOD_TAGS.stream().map(ResourceLocation::parse).forEach(foodTags::add);
 
+        int minDishes = root.has("minDishes") ? root.get("minDishes").getAsBigDecimal().intValueExact() : 0;
+        if (minDishes < 0) throw new IllegalArgumentException("minDishes must be non-negative");
+        List<Group> groups = new ArrayList<>();
+        Set<ResourceLocation> grouped = new LinkedHashSet<>();
+        if (root.has("groups")) for (JsonElement value : root.getAsJsonArray("groups")) {
+            try {
+                JsonObject group = value.getAsJsonObject();
+                String name = group.get("name").getAsString();
+                if (name.isBlank()) throw new IllegalArgumentException("group name is empty");
+                Set<ResourceLocation> members = new LinkedHashSet<>();
+                readList(group.get("members"), member -> members.addAll(items(member)));
+                if (!java.util.Collections.disjoint(grouped, members))
+                    throw new IllegalArgumentException("group members overlap an earlier group");
+                groups.add(new Group(name, Set.copyOf(members)));
+                grouped.addAll(members);
+            } catch (RuntimeException e) {
+                OneMoreCore.LOGGER.warn("Skipped invalid ingredient group {}: {}", value, e.getMessage());
+            }
+        }
+
         Map<ResourceLocation, Price> prices = new HashMap<>();
         JsonObject rules = object(root, "prices");
         // Apply tag prices first so exact item overrides win.
@@ -131,7 +166,8 @@ record IngredientConfig(Set<ResourceLocation> free, Set<ResourceLocation> ignore
                 OneMoreCore.LOGGER.warn("Skipped invalid dish ingredient override {}: {}", entry.getKey(), e.getMessage());
             }
         });
-        return new IngredientConfig(Set.copyOf(free), Set.copyOf(ignore), Map.copyOf(dishes), Map.copyOf(prices), Set.copyOf(foodTags));
+        return new IngredientConfig(Set.copyOf(free), Set.copyOf(ignore), Map.copyOf(dishes), Map.copyOf(prices),
+                Set.copyOf(foodTags), List.copyOf(groups), minDishes);
     }
 
     int unlockCost(ResourceLocation id, int dishes, long totalWorth) {
