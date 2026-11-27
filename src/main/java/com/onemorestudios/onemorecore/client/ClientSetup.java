@@ -27,6 +27,8 @@ public class ClientSetup {
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerEntityRenderer(OneMoreCore.COURIER.get(), CourierRenderer::new));
         bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.OPEN_SIGN_ENTITY.get(), OpenSignRenderer::new));
         bus.addListener(OpenSignRenderer::registerModels);
+        bus.addListener((EntityRenderersEvent.RegisterRenderers e) -> e.registerBlockEntityRenderer(OneMoreCore.TICKET_RAIL_ENTITY.get(), TicketRailRenderer::new));
+        bus.addListener(TicketRailRenderer::registerModels);
         bus.addListener((RegisterClientExtensionsEvent e) -> e.registerItem(new IClientItemExtensions() {
             private OpenSignRenderer.Item renderer;
 
@@ -85,6 +87,7 @@ public class ClientSetup {
         if (net.neoforged.fml.ModList.get().isLoaded("diegesis")) {
             WipingBehavior.register();
             RegisterBehavior.register();
+            TicketRailBehavior.register();
             TrayDiegesis.register();
             ScreenStationBehavior.register();
             DiegesisHook.register();

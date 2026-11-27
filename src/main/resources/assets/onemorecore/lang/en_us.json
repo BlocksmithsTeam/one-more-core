@@ -334,5 +334,7 @@
   "onemorecore.summary.none": "None",
   "onemorecore.summary.close": "Close",
   "onemorecore.summary.back": "Back",
-  "onemorecore.configuration.daySummary": "Day summary"
+  "onemorecore.configuration.daySummary": "Day summary",
+  "block.onemorecore.ticket_rail": "Order Ticket Rail",
+  "onemorecore.ticket_rail.hang": "Hang an order ticket"
 }

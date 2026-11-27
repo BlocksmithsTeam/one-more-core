@@ -25,7 +25,7 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * Loaded only when Diegesis is present. The tray up close: drag dishes from the inventory onto it and back (its three
- * slots hold the tray's own dishes and their poses). The order rail up close: click a ticket to take a copy of it.
+ * slots hold the tray's own dishes and their poses). The ticket rail uses its own optional adapter.
  */
 public final class KitchenStations {
     private KitchenStations() {}
@@ -225,6 +225,7 @@ public final class KitchenStations {
             .build();
 
     public static void register() {
+        TicketRailStation.register();
         Diegesis.register(BOOK);
         Diegesis.register(REGISTER);
         Diegesis.register(TRAY);

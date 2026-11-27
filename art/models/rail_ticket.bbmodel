@@ -1,0 +1,111 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "java_block",
+    "box_uv": false
+  },
+  "name": "rail_ticket",
+  "resolution": {
+    "width": 16,
+    "height": 16
+  },
+  "elements": [
+    {
+      "name": "hanging_paper",
+      "from": [
+        -1.1,
+        -4.5,
+        -0.125
+      ],
+      "to": [
+        1.1,
+        4.5,
+        0.125
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "0e7a14c3-4a88-4bc0-8f9c-3b3a73d56ed8",
+      "type": "cube",
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "outliner": [
+    "0e7a14c3-4a88-4bc0-8f9c-3b3a73d56ed8"
+  ],
+  "textures": [
+    {
+      "path": "src/main/resources/assets/onemorecore/textures/block/rail_ticket.png",
+      "name": "rail_ticket.png",
+      "id": "0",
+      "uuid": "5ae02f30-d4fa-4661-a626-4d96115c923c",
+      "width": 16,
+      "height": 16,
+      "uv_width": 16,
+      "uv_height": 16,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAfklEQVR4nGP88OLit69fGFABFzcPpiAEsECkGZDA44f3uLh50AThgIkBA8jKK6GJfEOyDUUDVmc8BluIRQOaBC4LmYh0CYoGYlyCogFT4tvXL7gsZCLebC6w4HAJ1scP72FKYA09qAYizYaYy/js7lE0ibdvXgmLiGHaBjEFAOhJShV16kwSAAAAAElFTkSuQmCC"
+    }
+  ]
+}

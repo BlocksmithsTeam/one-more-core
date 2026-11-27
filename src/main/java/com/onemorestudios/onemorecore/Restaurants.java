@@ -35,6 +35,13 @@ public class Restaurants extends SavedData {
         return data;
     }
 
+    boolean hasOrder(java.util.UUID id) {
+        for (Restaurant restaurant : bySign.values())
+            for (Tickets.Ticket ticket : Tickets.tickets(restaurant))
+                if (id.equals(ticket.orderId())) return true;
+        return false;
+    }
+
     public Restaurant at(BlockPos sign) {
         return bySign.get(sign);
     }
