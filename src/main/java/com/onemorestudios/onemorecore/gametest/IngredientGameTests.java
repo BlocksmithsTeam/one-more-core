@@ -149,6 +149,35 @@ public final class IngredientGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void foodFromOnlyNonFoodRemainsRaw(GameTestHelper helper) throws ReflectiveOperationException {
+        var recipes = List.of(
+                recipe("non_food", Items.PAPER, Ingredient.of(Items.OAK_LOG)),
+                recipe("food", Items.APPLE, Ingredient.of(Items.PAPER)),
+                recipe("dish", Items.BREAD, Ingredient.of(Items.APPLE)));
+        var index = ingredientIndex(helper, "{}", recipes);
+        helper.assertValueEqual(raw(index), List.of(id("apple")), "Food made only from non-food stays raw");
+        helper.assertFalse(dishAvailable(index, "bread", Set.of()), "The raw food locks its dish");
+        helper.assertTrue(dishAvailable(index, "bread", Set.of(id("apple"))), "Buying the raw food unlocks its dish");
+        var free = ingredientIndex(helper, "{\"free\":[\"minecraft:paper\"]}", recipes);
+        helper.assertTrue(raw(free).isEmpty(), "An explicit free input still makes the food free");
+        helper.assertTrue(dishAvailable(free, "bread", Set.of()), "An explicit free input still unlocks the dish");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void foodFromFoodResolvesToTheRawFood(GameTestHelper helper) throws ReflectiveOperationException {
+        var index = ingredientIndex(helper, "{}", List.of(
+                recipe("non_food", Items.PAPER, Ingredient.of(Items.OAK_LOG)),
+                recipe("raw_food", Items.APPLE, Ingredient.of(Items.PAPER)),
+                recipe("processed_food", Items.COOKED_COD, Ingredient.of(Items.APPLE)),
+                recipe("dish", Items.BREAD, Ingredient.of(Items.COOKED_COD))));
+        helper.assertValueEqual(raw(index), List.of(id("apple")), "A food chain resolves to its raw food, not its processed food");
+        helper.assertFalse(dishAvailable(index, "bread", Set.of()), "The food chain starts locked");
+        helper.assertTrue(dishAvailable(index, "bread", Set.of(id("apple"))), "Buying the raw food unlocks the food chain");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void storageContentsRemainBuyable(GameTestHelper helper) throws ReflectiveOperationException {
         var index = ingredientIndex(helper, "{}", List.of(
                 recipe("unpack", Items.WHEAT, Ingredient.of(Items.HAY_BLOCK)),
