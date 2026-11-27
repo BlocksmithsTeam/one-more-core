@@ -36,6 +36,10 @@ final class Ingredients {
     private static Ingredients current = new Ingredients(List.of(), IngredientConfig.parse("{}"), List.of(), null);
 
     private final IngredientConfig config;
+    private final Set<ResourceLocation> ignored;
+    private final Set<ResourceLocation> blocked = new HashSet<>();
+    private final Set<ResourceLocation> rawIngredients = new HashSet<>();
+    private final Map<ResourceLocation, ResourceLocation> representatives = new HashMap<>();
     private final Set<ResourceLocation> foodDependencies = new HashSet<>();
     private final Map<ResourceLocation, List<Recipe>> recipes = new HashMap<>();
     private final Map<ResourceLocation, Set<ResourceLocation>> dishesByIngredient = new HashMap<>();
@@ -59,6 +63,7 @@ final class Ingredients {
     private Ingredients(Collection<RecipeHolder<?>> holders, IngredientConfig config, List<Menu.Entry> configured,
             HolderLookup.Provider registries) {
         this.config = config;
+        ignored = new HashSet<>(config.ignore());
         int skipped = 0;
         Map<ResourceLocation, ItemStack> foodResults = new HashMap<>();
         for (RecipeHolder<?> holder : holders.stream().sorted(Comparator.comparing(RecipeHolder::id)).toList()) {
@@ -117,6 +122,7 @@ final class Ingredients {
                 recipes.put(portion, List.of(new Recipe(List.of(Set.copyOf(parents)), Set.of())));
         });
         portions.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        blockIgnoredRecipes();
         // Unpacking storage or processing only non-food must not make its food result free.
         recipes.entrySet().removeIf(entry -> {
             if ((!food(entry.getKey()) && !dishWorth.containsKey(entry.getKey())) || entry.getValue().isEmpty()) return false;
@@ -157,10 +163,10 @@ final class Ingredients {
             for (var recipe : alternatives) {
                 for (var slot : recipe.slots()) {
                     for (ResourceLocation item : slot) {
-                        if (config.free().contains(item) || config.ignore().contains(item)) continue;
+                        if (config.free().contains(item) || ignored.contains(item)) continue;
                         Set<ResourceLocation> sources = sources(item, DEPTH, new HashSet<>());
                         if (sources == null) {
-                            if (food(item) && !portions.containsKey(item)) rawIds.add(item);
+                            if (food(item) && !portions.containsKey(item) && !blocked.contains(item)) rawIds.add(item);
                         }
                         else rawIds.addAll(sources);
                         indexDependencies(item, dish, DEPTH, seen);
@@ -168,14 +174,57 @@ final class Ingredients {
                 }
             }
         }
-        rawIds.removeIf(item -> !food(item) || config.free().contains(item) || config.ignore().contains(item));
-        raw = List.copyOf(rawIds);
+        rawIds.removeIf(item -> !food(item) || config.free().contains(item) || blocked.contains(item));
+        rawIngredients.addAll(rawIds);
+        for (var group : config.groups()) {
+            List<ResourceLocation> members = rawIds.stream().filter(group.members()::contains).toList();
+            if (members.isEmpty()) continue;
+            ResourceLocation representative = members.stream().min(Comparator
+                    .<ResourceLocation>comparingInt(item -> dishesHelped(item).size()).reversed()
+                    .thenComparing(Comparator.naturalOrder())).orElseThrow();
+            Set<ResourceLocation> dishes = new HashSet<>();
+            members.forEach(member -> dishes.addAll(dishesHelped(member)));
+            members.forEach(member -> {
+                representatives.put(member, representative);
+                dishesByIngredient.put(member, Set.copyOf(dishes));
+            });
+        }
+        rawIds.removeIf(item -> {
+            if (dishesHelped(item).size() >= config.minDishes()) return false;
+            ignored.add(item);
+            return true;
+        });
+        blockIgnoredRecipes();
+        rawIds.removeAll(blocked);
+        raw = rawIds.stream().map(this::representative).distinct().sorted().toList();
         automatic = discovered.stream().filter(entry -> DishBlacklist.isDishCandidate(entry.stack())
                 && !excludesDish(id(entry.stack()))).toList();
         raw.forEach(id -> unlockCosts.put(id, automaticCost(id)));
         if (registries != null) OneMoreCore.LOGGER.info(
                 "Ingredient index: {} dishes with readable recipes, {} locked without a readable recipe, {} without a recipe; {} recipes could not be read",
                 withIngredients, unreadable, dishWorth.size() - withIngredients - unreadable, skipped);
+    }
+
+    /** Propagate ignored inputs through every recipe, but keep dishes with another usable alternative. */
+    private void blockIgnoredRecipes() {
+        blocked.addAll(ignored);
+        blocked.removeAll(config.free());
+        int count;
+        do {
+            count = blocked.size();
+            recipes.forEach((result, alternatives) -> {
+                if (!config.free().contains(result) && !alternatives.isEmpty() && alternatives.stream().allMatch(recipe ->
+                        recipe.slots().stream().anyMatch(slot -> slot.stream().allMatch(blocked::contains))))
+                    blocked.add(result);
+            });
+        } while (count != blocked.size());
+    }
+
+    ResourceLocation representative(ResourceLocation item) { return representatives.getOrDefault(item, item); }
+
+    boolean purchased(ResourceLocation item, Set<ResourceLocation> unlocked) {
+        ResourceLocation representative = representative(item);
+        return unlocked.stream().anyMatch(member -> representative(member).equals(representative));
     }
 
     private static boolean excluded(ItemStack stack) {
@@ -201,24 +250,19 @@ final class Ingredients {
     }
 
     boolean excludesDish(ResourceLocation id) {
-        return raw.contains(id) || config.ignore().contains(id);
+        return rawIngredients.contains(id) || ignored.contains(id) || blocked.contains(id);
     }
 
     private boolean free(ResourceLocation item) {
-        return config.free().contains(item) || (!config.ignore().contains(item) && !isFluidKey(item)
+        return config.free().contains(item) || (!blocked.contains(item) && !isFluidKey(item)
                 && !food(item) && !dishWorth.containsKey(item) && !foodDependencies.contains(item));
     }
 
     // An empty recipe list marks a known result with no usable alternative. An absent result has no indexed recipe.
     private boolean addRecipe(List<Recipe> alternatives, List<Set<ResourceLocation>> slots, Set<ResourceLocation> machines) {
         if (slots.isEmpty()) return false;
-        var candidates = slots.stream().map(slot -> {
-            Set<ResourceLocation> usable = new TreeSet<>(slot);
-            usable.removeIf(item -> config.ignore().contains(item) && !config.free().contains(item));
-            return usable;
-        }).toList();
-        if (candidates.stream().anyMatch(Set::isEmpty)) return false;
-        alternatives.add(new Recipe(candidates, machines));
+        if (slots.stream().anyMatch(Set::isEmpty)) return false;
+        alternatives.add(new Recipe(slots, machines));
         return true;
     }
 
@@ -352,7 +396,7 @@ final class Ingredients {
         if (seen.getOrDefault(item, -1) >= depth) return;
         seen.put(item, depth);
         dishesByIngredient.computeIfAbsent(item, key -> new HashSet<>()).add(dish);
-        if (config.free().contains(item) || config.ignore().contains(item)) return;
+        if (config.free().contains(item) || ignored.contains(item)) return;
         if (portions.containsKey(item)) {
             for (var parent : portions.get(item)) indexDependencies(parent, dish, DEPTH, seen);
             return;
@@ -384,7 +428,7 @@ final class Ingredients {
     /** Null means no path to a source. An empty set means the item can be made for free. */
     private Set<ResourceLocation> sources(ResourceLocation item, int depth, Set<ResourceLocation> path) {
         if (free(item)) return Set.of();
-        if (config.ignore().contains(item) || path.contains(item)) return null;
+        if (blocked.contains(item) || path.contains(item)) return null;
         if (portions.containsKey(item)) {
             path.add(item);
             Set<ResourceLocation> result = new TreeSet<>();
@@ -439,9 +483,10 @@ final class Ingredients {
 
     Set<ResourceLocation> dishesHelped(ResourceLocation item) { return dishesByIngredient.getOrDefault(item, Set.of()); }
 
-    int unlockCost(ResourceLocation item) { return item == null ? -1 : unlockCosts.getOrDefault(item, -1); }
+    int unlockCost(ResourceLocation item) { return item == null ? -1 : unlockCosts.getOrDefault(representative(item), -1); }
 
     int shopPrice(ResourceLocation item) {
+        item = representative(item);
         return config.shopPrice(item, unlockCosts.containsKey(item) ? unlockCosts.get(item) : automaticCost(item));
     }
 
@@ -468,7 +513,7 @@ final class Ingredients {
             var alternatives = recipes.getOrDefault(id(stack), List.of());
             for (var recipe : alternatives) {
                 for (var slot : recipe.slots()) {
-                    for (var item : slot) if (!config.free().contains(item) && !config.ignore().contains(item)) unlocked.add(item);
+                    for (var item : slot) if (!config.free().contains(item) && !ignored.contains(item)) unlocked.add(item);
                 }
             }
         });
@@ -486,7 +531,7 @@ final class Ingredients {
         private final Map<AtDepth, Boolean> available = new HashMap<>();
 
         private Availability(Set<ResourceLocation> unlocked, Set<ResourceLocation> present) {
-            this.unlocked = unlocked;
+            this.unlocked = unlocked.stream().map(Ingredients.this::representative).collect(java.util.stream.Collectors.toSet());
             this.present = present;
         }
 
@@ -503,8 +548,9 @@ final class Ingredients {
         boolean item(ResourceLocation id) { return item(id, DEPTH); }
 
         private boolean item(ResourceLocation item, int depth) {
-            if (free(item) || unlocked.contains(item)) return true;
-            if (config.ignore().contains(item)) return false;
+            if (free(item)) return true;
+            if (blocked.contains(item)) return false;
+            if (unlocked.contains(representative(item))) return true;
             AtDepth key = new AtDepth(item, depth);
             Boolean known = available.get(key);
             if (known != null) return known;
@@ -548,8 +594,8 @@ final class Ingredients {
                         int candidateDepth = portions.containsKey(candidate) ? DEPTH
                                 : !food(candidate) && !isFluidKey(candidate) ? Math.max(0, nextDepth) : nextDepth;
                         Set<ResourceLocation> needed = item(candidate, depth) ? Set.of()
-                                : unlockCosts.containsKey(candidate) ? Set.of(candidate)
-                                : candidateDepth >= 0 && !config.ignore().contains(candidate) ? missing(candidate, candidateDepth, path) : null;
+                                : unlockCosts.containsKey(representative(candidate)) ? Set.of(representative(candidate))
+                                : candidateDepth >= 0 && !ignored.contains(candidate) ? missing(candidate, candidateDepth, path) : null;
                         if (needed != null && (fewest == null || needed.size() < fewest.size())) fewest = needed;
                     }
                     if (fewest == null) {
