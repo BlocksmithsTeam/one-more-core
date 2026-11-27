@@ -12,13 +12,17 @@ import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
-/** Everything eaten or drunk can be a dish, except what the dish blacklist names by id or tag. */
+/** Dish blacklist rules with an empty ingredient index, so no test food is a raw purchase. */
 @GameTestHolder(OneMoreCore.MODID)
 @PrefixGameTestTemplate(false)
 public final class DishBlacklistGameTests {
     @GameTest(template = "empty")
-    public static void eatenOrDrunkUnlessBlacklisted(GameTestHelper helper) {
+    public static void eatenOrDrunkUnlessBlacklisted(GameTestHelper helper) throws ReflectiveOperationException {
+        var current = Class.forName("com.onemorestudios.onemorecore.Ingredients").getDeclaredField("current");
+        current.setAccessible(true);
+        Object before = current.get(null);
         try {
+            current.set(null, IngredientGameTests.ingredientIndex(helper, "{}", List.of()));
             DishBlacklist.set(List.of("minecraft:splash_potion"));
             helper.assertTrue(DishBlacklist.isDish(new ItemStack(Items.MILK_BUCKET)), "a drink without a food component is a dish");
             helper.assertTrue(DishBlacklist.isDish(new ItemStack(Items.COOKED_COD)), "food is a dish");
@@ -36,6 +40,7 @@ public final class DishBlacklistGameTests {
             helper.assertValueEqual(DishBlacklist.parse("[\"minecraft:stone\", null, {}, 3, \"#minecraft:fishes\"]"),
                     List.of("minecraft:stone", "#minecraft:fishes"), "entries kept around broken ones");
         } finally {
+            current.set(null, before);
             DishBlacklist.reload();
         }
         helper.succeed();

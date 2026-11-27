@@ -45,7 +45,7 @@ public final class TrayCapacityGameTests {
     private static final List<Item> LEGACY_DISHES = List.of(Items.BREAD, Items.APPLE, Items.COOKIE,
             Items.CARROT, Items.MELON_SLICE, Items.BAKED_POTATO);
     private static final List<String> COMBO_DISHES = List.of(
-            "custom:minecraft:bread", "custom:minecraft:potion", "custom:minecraft:carrot", "custom:minecraft:cookie");
+            "custom:minecraft:bread", "custom:minecraft:potion", "custom:minecraft:baked_potato", "custom:minecraft:cookie");
 
     @GameTest(template = "empty")
     public static void trayRefusesFourthDish(GameTestHelper helper) {
@@ -227,7 +227,7 @@ public final class TrayCapacityGameTests {
 
         Restaurant restaurant = (Restaurant) load.invoke(null, restaurants, data);
         GameTestSupport.setRegister(restaurant, 100);
-        GameTestSupport.unlock(helper, restaurant, "wheat", "cocoa_beans");
+        GameTestSupport.unlock(helper, restaurant, "wheat", "cocoa_beans", "potato");
         return restaurant;
     }
 

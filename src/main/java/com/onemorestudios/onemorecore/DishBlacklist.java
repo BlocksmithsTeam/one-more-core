@@ -29,7 +29,8 @@ import net.neoforged.neoforge.event.TagsUpdatedEvent;
 
 /**
  * What can be a dish: everything that is eaten or drunk (a food component, the eat or drink use, #c:foods, #c:drinks),
- * except the items in config/onemorecore/dish_blacklist.json. That file is a list like JEI's blacklist: item ids
+ * except raw purchases, ignored ingredients, harmful foods and the items in config/onemorecore/dish_blacklist.json.
+ * That file is a list like JEI's blacklist: item ids
  * ("youkaisfeasts:soy_sauce_bottle") and item tags ("#c:buckets"); add to it at any time, it is read again on /reload and
  * when a world loads. A missing file is written with the sauces, buckets and thrown potions of the pack.
  */
@@ -55,7 +56,12 @@ public final class DishBlacklist {
 
     /** Whether an item can be a dish on the menu. */
     public static boolean isDish(ItemStack stack) {
-        if (stack.isEmpty() || blocked(stack)) return false;
+        return isDishCandidate(stack) && !Ingredients.current().excludesDish(Ingredients.id(stack));
+    }
+
+    /** Recipe discovery must not consult the previous ingredient index while rebuilding it. */
+    static boolean isDishCandidate(ItemStack stack) {
+        if (stack.isEmpty() || blocked(stack) || Ingredients.harmful(stack)) return false;
         UseAnim use = stack.getUseAnimation();
         return stack.has(DataComponents.FOOD) || use == UseAnim.EAT || use == UseAnim.DRINK || stack.is(FOODS) || stack.is(DRINKS);
     }

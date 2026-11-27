@@ -9,6 +9,7 @@ import java.util.Set;
 import com.onemorestudios.onemorecore.Computer;
 import com.onemorestudios.onemorecore.Config;
 import com.onemorestudios.onemorecore.Customer;
+import com.onemorestudios.onemorecore.DishBlacklist;
 import com.onemorestudios.onemorecore.Menu;
 import com.onemorestudios.onemorecore.OneMoreCore;
 import com.onemorestudios.onemorecore.OpenSignBlockEntity;
@@ -306,7 +307,62 @@ public final class IngredientGameTests {
         helper.succeed();
     }
 
-    private static Object ingredientIndex(GameTestHelper helper, String rules, Collection<? extends RecipeHolder<?>> recipes)
+    @GameTest(template = "empty")
+    public static void rawIgnoredAndHarmfulFoodsAreNotDishes(GameTestHelper helper) throws ReflectiveOperationException {
+        var current = Class.forName("com.onemorestudios.onemorecore.Ingredients").getDeclaredField("current");
+        current.setAccessible(true);
+        Object before = current.get(null);
+        try {
+            DishBlacklist.set(List.of());
+            var recipes = List.of(
+                    recipe("raw_potato", Items.POTATO, Ingredient.of(Items.DIRT)),
+                    recipe("baked_potato", Items.BAKED_POTATO, Ingredient.of(Items.POTATO)),
+                    recipe("ignored_apple", Items.APPLE, Ingredient.of(Items.WHEAT)),
+                    recipe("harmful_food", Items.ROTTEN_FLESH, Ingredient.of(Items.WHEAT)));
+            Object index = ingredientIndex(helper, "{\"ignore\":[\"minecraft:apple\"]}", recipes);
+            current.set(null, index);
+            helper.assertTrue(raw(index).contains(id("potato")), "The fixture indexes potato as a buyable raw ingredient");
+            for (var item : List.of(Items.POTATO, Items.ROTTEN_FLESH, Items.APPLE)) {
+                helper.assertFalse(DishBlacklist.isDish(new ItemStack(item)), "Raw, harmful and ignored foods cannot be dishes: " + item);
+                helper.assertFalse(Restaurant.isFood(new ItemStack(item)), "The restaurant uses the same dish rule: " + item);
+                helper.assertFalse(dishAvailable(index, net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item).getPath(),
+                        Set.of(id("potato"), WHEAT)), "Purchases cannot make excluded foods orderable: " + item);
+            }
+            helper.assertTrue(Restaurant.isFood(new ItemStack(Items.BAKED_POTATO)), "Baked potato remains a dish");
+            helper.assertFalse(dishAvailable(index, "baked_potato", Set.of()), "Baked potato still needs its ingredient");
+            helper.assertTrue(dishAvailable(index, "baked_potato", Set.of(id("potato"))), "Buying potato unlocks baked potato");
+            var automatic = index.getClass().getDeclaredField("automatic");
+            automatic.setAccessible(true);
+            helper.assertValueEqual(((List<?>) automatic.get(index)).stream().map(entry -> ((Menu.Entry) entry).stack().getItem()).toList(),
+                    List.of(Items.BAKED_POTATO), "Discovery omits excluded foods");
+
+            var restaurant = place(helper);
+            var custom = Restaurant.class.getDeclaredField("custom");
+            custom.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            var entries = (List<Menu.Entry>) custom.get(restaurant);
+            for (var item : List.of(Items.POTATO, Items.ROTTEN_FLESH, Items.APPLE))
+                entries.add(new Menu.Entry("excluded:" + item, new ItemStack(item), null, 1, false));
+            helper.assertTrue(restaurant.dishes().stream().filter(entry -> entry.tag() == null).map(Menu.Entry::stack)
+                    .noneMatch(stack -> stack.is(Items.POTATO) || stack.is(Items.ROTTEN_FLESH) || stack.is(Items.APPLE)),
+                    "Saved custom and configured dishes cannot bypass the catalogue filter");
+
+            Object rebuilt = ingredientIndex(helper, "{\"free\":[\"minecraft:potato\"]}", recipes);
+            current.set(null, rebuilt);
+            helper.assertTrue(Restaurant.isFood(new ItemStack(Items.POTATO)), "The rebuilt index releases a former raw ingredient");
+            helper.assertTrue(((List<?>) automatic.get(rebuilt)).stream().anyMatch(entry -> ((Menu.Entry) entry).stack().is(Items.APPLE)),
+                    "Discovery does not inherit the previous index's ignores");
+            DishBlacklist.set(List.of("minecraft:baked_potato"));
+            helper.assertFalse(Restaurant.isFood(new ItemStack(Items.BAKED_POTATO)), "The blacklist still excludes cooked dishes");
+            helper.assertFalse(dishAvailable(rebuilt, "baked_potato", Set.of()), "The blacklist also excludes order variants");
+        } finally {
+            current.set(null, before);
+            DishBlacklist.reload();
+        }
+        helper.succeed();
+    }
+
+    static Object ingredientIndex(GameTestHelper helper, String rules, Collection<? extends RecipeHolder<?>> recipes)
             throws ReflectiveOperationException {
         var ingredients = Class.forName("com.onemorestudios.onemorecore.Ingredients");
         var config = Class.forName("com.onemorestudios.onemorecore.IngredientConfig");

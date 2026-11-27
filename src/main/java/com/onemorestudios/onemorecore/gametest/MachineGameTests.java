@@ -1,5 +1,8 @@
 package com.onemorestudios.onemorecore.gametest;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -94,6 +97,41 @@ public final class MachineGameTests {
                 .contains(ResourceLocation.parse("kaleidoscope_tavern:barrel")), "The built-in list knows the pack's mods without JEI");
         helper.assertValueEqual(Machines.kind(new ShapelessRecipe("", CraftingBookCategory.MISC, new ItemStack(Items.BREAD),
                 NonNullList.of(Ingredient.EMPTY, Ingredient.of(Items.WHEAT)))), id("crafting"), "A registered type is its own id");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void oldMachineFilesMigrateOnlyOnce(GameTestHelper helper) throws IOException, ReflectiveOperationException {
+        Path path = Files.createTempFile("onemorecore-machines-", ".json");
+        var load = Machines.class.getDeclaredMethod("load", Path.class);
+        load.setAccessible(true);
+        try {
+            Files.writeString(path, """
+                    {"minecraft:crafting":["minecraft:crafter"],"minecraft:smelting":["minecraft:stone"]}
+                    """);
+            var migrated = (Map<?, ?>) load.invoke(null, path);
+            helper.assertValueEqual(migrated.get(id("crafting")), Set.of(), "Old crafting overrides give way to the empty default");
+            helper.assertValueEqual(migrated.get(id("smelting")), Set.of(id("stone")), "Other old overrides survive");
+            String saved = Files.readString(path);
+            var json = com.google.gson.JsonParser.parseString(saved).getAsJsonObject();
+            helper.assertValueEqual(json.get("version").getAsInt(), 1, "Migration writes the version");
+            helper.assertFalse(json.has("minecraft:crafting"), "Migration removes the obsolete override");
+            helper.assertValueEqual(load.invoke(null, path), migrated, "A second load keeps the migrated values");
+            helper.assertValueEqual(Files.readString(path), saved, "A second load does not write the file");
+
+            String versioned = "{\"version\":1,\"minecraft:crafting\":[\"minecraft:crafting_table\"]}";
+            Files.writeString(path, versioned);
+            var kept = (Map<?, ?>) load.invoke(null, path);
+            helper.assertValueEqual(kept.get(id("crafting")), Set.of(id("crafting_table")), "Versioned overrides remain intentional");
+            helper.assertValueEqual(Files.readString(path), versioned, "Versioned files stay byte for byte unchanged");
+
+            var toJson = Machines.class.getDeclaredMethod("toJson", Map.class);
+            toJson.setAccessible(true);
+            var written = com.google.gson.JsonParser.parseString((String) toJson.invoke(null, Map.of())).getAsJsonObject();
+            helper.assertValueEqual(written.get("version").getAsInt(), 1, "New files also have the version");
+        } finally {
+            Files.deleteIfExists(path);
+        }
         helper.succeed();
     }
 

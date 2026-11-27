@@ -85,12 +85,25 @@ public final class Machines {
         Path path = path();
         Map<ResourceLocation, Set<ResourceLocation>> map = new HashMap<>(defaults());
         try {
-            if (Files.exists(path)) map.putAll(parse(Files.readString(path)));
+            if (Files.exists(path)) map = load(path);
             else if (write) save(map);
         } catch (IOException | RuntimeException e) {
             OneMoreCore.LOGGER.warn("{}: {}; the built-in machines are used", path, e.toString());
         }
         byType = Map.copyOf(map);
+    }
+
+    private static Map<ResourceLocation, Set<ResourceLocation>> load(Path path) throws IOException {
+        JsonObject json = JsonParser.parseString(Files.readString(path)).getAsJsonObject();
+        if (!json.has("version")) {
+            // Old JEI lists could override types that deliberately need no machine.
+            defaults().forEach((type, blocks) -> { if (blocks.isEmpty()) json.remove(type.toString()); });
+            json.addProperty("version", 1);
+            Files.writeString(path, new GsonBuilder().setPrettyPrinting().create().toJson(json));
+        }
+        Map<ResourceLocation, Set<ResourceLocation>> map = new HashMap<>(defaults());
+        map.putAll(parse(json.toString()));
+        return map;
     }
 
     /** {"type": ["block", ...]}. An entry that is no id or no list of ids is left out. */
@@ -180,6 +193,7 @@ public final class Machines {
 
     private static String toJson(Map<String, List<String>> map) {
         JsonObject json = new JsonObject();
+        json.addProperty("version", 1);
         map.forEach((type, blocks) -> {
             JsonArray array = new JsonArray();
             blocks.forEach(array::add);
