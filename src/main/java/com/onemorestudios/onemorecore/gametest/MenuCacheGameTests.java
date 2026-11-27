@@ -22,18 +22,18 @@ public final class MenuCacheGameTests {
     private static final ResourceLocation WHEAT = ResourceLocation.withDefaultNamespace("wheat");
 
     @GameTest(template = "empty")
-    public static void menuRequestsReuseIngredientData(GameTestHelper helper) throws ReflectiveOperationException {
+    public static void shopRequestsReuseIngredientData(GameTestHelper helper) throws ReflectiveOperationException {
         var computations = Computer.class.getDeclaredField("ingredientMenuComputations");
         computations.setAccessible(true);
         var player = open(helper);
         BlockPos pos = helper.absolutePos(COMPUTER);
         var restaurant = Restaurants.get(helper.getLevel()).at(helper.absolutePos(SIGN));
-        var refresh = new Computer.Request(pos, Computer.REFRESH_MENU, "");
+        var refresh = new Computer.Request(pos, Computer.REFRESH, "");
         var unlock = new Computer.Request(pos, Computer.UNLOCK_INGREDIENT, WHEAT.toString());
         try {
             long before = computations.getLong(null);
             var first = menu(player, refresh);
-            helper.assertValueEqual(menu(player, refresh), first, "Both Menu replies carry the same ingredient data");
+            helper.assertValueEqual(menu(player, refresh), first, "Both Shop replies carry the same ingredient data");
             helper.assertValueEqual(computations.getLong(null) - before, 1L, "Two unchanged requests compute once");
 
             var wheat = wheat(first);
