@@ -249,6 +249,53 @@ public final class SeatingGameTests {
         helper.succeed();
     }
 
+    @GameTest(template = "empty", timeoutTicks = 20)
+    public static void foreignStationAllowsPaymentAndWiping(GameTestHelper helper) throws ReflectiveOperationException {
+        if (!net.neoforged.fml.ModList.get().isLoaded("diegesis")) { helper.succeed(); return; }
+        Restaurant r = setup(helper);
+        helper.assertTrue(WipingStation.handles(helper.getBlockState(TABLE)), "Ordinary surfaces retain our station");
+        helper.setBlock(TABLE, Blocks.PETRIFIED_OAK_SLAB);
+        var registry = Class.forName("com.pockyl.diegesis.impl.StationRegistry");
+        var byId = registry.getDeclaredField("BY_ID");
+        var byBlock = registry.getDeclaredField("BY_BLOCK");
+        byId.setAccessible(true);
+        byBlock.setAccessible(true);
+        var station = com.pockyl.diegesis.api.Diegesis.station(
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("audit_fixture", "drawer"))
+                .blocks(Blocks.PETRIFIED_OAK_SLAB).build();
+        com.pockyl.diegesis.api.Diegesis.register(station);
+        try {
+            BlockPos pos = helper.absolutePos(TABLE);
+            TestPlayer player = GameTestSupport.player(helper);
+            helper.assertFalse(WipingStation.handles(helper.getBlockState(TABLE)), "Direct foreign station wins over our tag");
+            invoke(r, "addCoins", new Class<?>[] {BlockPos.class, int.class}, pos, 5);
+            int balance = r.register();
+            helper.assertTrue(GameTestSupport.click(helper, player, TABLE).consumesAction(), "Payment consumes the click");
+            helper.assertValueEqual(r.register(), balance + 5, "Click collects payment through the ordinary path");
+            helper.assertFalse((boolean) invoke(r, "hasTableItems", new Class<?>[] {BlockPos.class}, pos), "Payment is removed once");
+            invoke(r, "setDirt", new Class<?>[] {ServerLevel.class, BlockPos.class, long.class}, helper.getLevel(), pos, com.onemorestudios.onemorecore.Dirt.FULL);
+            helper.assertTrue(GameTestSupport.click(helper, player, TABLE).consumesAction(), "Dirty foreign surface consumes the click");
+            @SuppressWarnings("unchecked")
+            var dirt = (java.util.Map<BlockPos, Long>) field(r, "dirt");
+            helper.assertTrue(dirt.getOrDefault(pos, 0L) != com.onemorestudios.onemorecore.Dirt.FULL, "Click removes dirty cells");
+            invoke(r, "setDirt", new Class<?>[] {ServerLevel.class, BlockPos.class, long.class}, helper.getLevel(), pos, 0L);
+            var hit = new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(pos), net.minecraft.core.Direction.UP, pos, false);
+            var event = new net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock(
+                    player, net.minecraft.world.InteractionHand.MAIN_HAND, pos, hit);
+            invoke(OneMoreCore.class, null, "onRightClickBlock", new Class<?>[] {event.getClass()}, event);
+            helper.assertFalse(event.isCanceled(), "Clean surface leaves the drawer click available");
+            helper.assertTrue(com.pockyl.diegesis.api.Diegesis.stationFor(helper.getBlockState(TABLE)).orElseThrow() == station,
+                    "The drawer keeps its station");
+        } finally {
+            ((java.util.Map<?, ?>) byId.get(null)).remove(station.id());
+            var blocks = (java.util.Map<?, ?>) byBlock.get(null);
+            var stations = (java.util.List<?>) blocks.get(Blocks.PETRIFIED_OAK_SLAB);
+            stations.remove(station);
+            if (stations.isEmpty()) blocks.remove(Blocks.PETRIFIED_OAK_SLAB);
+        }
+        helper.succeed();
+    }
+
     /** CORE-12 / CLIENT-8: A sign click from outside reports an active check to an unready player inside. */
     @GameTest(template = "empty", timeoutTicks = 20)
     public static void outsideSignClickSendsActiveRoster(GameTestHelper helper) throws ReflectiveOperationException {

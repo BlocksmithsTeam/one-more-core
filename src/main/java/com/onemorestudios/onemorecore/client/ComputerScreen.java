@@ -853,11 +853,11 @@ public class ComputerScreen extends Screen {
         g.pose().popPose();
     }
 
-    /** Dish cards keep the server order within the available and blocked groups. */
+    /** Dish cards keep the server order within the enabled-and-orderable group and the rest. */
     private ItemStack drawMenu(GuiGraphics g, int mouseX, int mouseY) {
         List<Computer.MenuLine> lines = state.menu().stream()
                 .filter(l -> matches(l.icon()) && (filter.equals("all") || filter.equals(l.kind())))
-                .sorted(Comparator.comparingInt(Computer.MenuLine::state)).toList();
+                .sorted(Comparator.comparingInt((Computer.MenuLine l) -> l.on() && l.state() == Computer.AVAILABLE ? 0 : 1)).toList();
         int columns = columns(), w = cardWidth(columns), height = CARD_H + MISSING_STEP;
         int rows = (lines.size() + 1 + columns - 1) / columns;
         scroll = Mth.clamp(scroll, 0, Math.max(0, rows * (height + GAP) - GAP - ch));

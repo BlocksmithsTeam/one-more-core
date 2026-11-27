@@ -102,7 +102,7 @@ public class CashRegisterBlock extends Block implements EntityBlock {
 
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState replacement, boolean moving) {
-        if (!replacement.is(this) && level instanceof ServerLevel sl && Restaurants.get(sl).containing(pos) == null
+        if (!replacement.is(this) && level instanceof ServerLevel
                 && level.getBlockEntity(pos) instanceof CashRegisterBlockEntity cash) {
             Money.items(cash.take(Integer.MAX_VALUE), money -> popResource(level, pos, money));
         }
